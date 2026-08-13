@@ -1,0 +1,17 @@
+# P1 — High ERRORLOG / signal warnings
+groups:
+  - name: sql_exporter.p1.signals
+    interval: 60s
+    rules:
+      - alert: SqlErrorlogSignalDetected
+        expr: mssql_errorlog_signal_count > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: signals
+          collector: mssql_errorlog_signals
+        annotations:
+          summary: "SQL Server ERRORLOG signal detected"
+          description: "Signal {{ $labels.signal }} occurred {{ $value }} times in the collector window."
+          runbook: "Open ERRORLOG for the signal type; escalate if corruption, I/O, or login floods."

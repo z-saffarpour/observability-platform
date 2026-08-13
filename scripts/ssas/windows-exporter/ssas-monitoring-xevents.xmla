@@ -1,0 +1,27 @@
+<!-- Review the path and create this trace from an SSAS connection in SSMS. Event/action
+     availability varies by SSAS version; script the equivalent session from the SSMS
+     Extended Events UI when an older build rejects an event. -->
+<Execute xmlns="urn:schemas-microsoft-com:xml-analysis">
+  <Command><Batch xmlns="http://schemas.microsoft.com/analysisservices/2003/engine">
+    <Create><ObjectDefinition><Trace>
+      <ID>DBA_Monitoring_SSAS</ID><Name>DBA_Monitoring_SSAS</Name>
+      <ddl300_300:XEvent xmlns:ddl300_300="http://schemas.microsoft.com/analysisservices/2011/engine/300/300">
+        <event_session name="DBA_Monitoring_SSAS" dispatchLatency="5" maxEventSize="4" maxMemory="16" memoryPartitionMode="none" eventRetentionMode="allowSingleEventLoss" trackCausality="true">
+          <event package="AS" name="AuditLogin"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="AuditLogout"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="AuditServerStartsAndStops"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="AuditObjectPermissionEvent"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="AuditAdminOperationsEvent"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="ProgressReportEnd"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="CommandEnd"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="QueryEnd"><action package="PACKAGE0" name="event_sequence"/></event>
+          <event package="AS" name="Error"><action package="PACKAGE0" name="event_sequence"/></event>
+          <target package="PACKAGE0" name="asynchronous_file_target">
+            <parameter name="filename" value="C:\ProgramData\DBA Monitoring\SSAS XEvents\ssas-monitoring.xel"/>
+            <parameter name="metadatafile" value="C:\ProgramData\DBA Monitoring\SSAS XEvents\ssas-monitoring.xem"/>
+          </target>
+        </event_session>
+      </ddl300_300:XEvent>
+    </Trace></ObjectDefinition></Create>
+  </Batch></Command><Properties/>
+</Execute>

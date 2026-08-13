@@ -1,0 +1,17 @@
+# Role pack — Security posture
+groups:
+  - name: sql_exporter.role.security
+    interval: 60s
+    rules:
+      - alert: SqlSecurityRiskDetected
+        expr: mssql_sa_login_enabled == 1 or mssql_xp_cmdshell_enabled == 1 or mssql_database_owner_is_sysadmin == 1
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: security
+          collector: mssql_security
+        annotations:
+          summary: "SQL Server security posture requires review"
+          description: "A monitored security control is in a risky state{{ with $labels.db }} for {{ . }}{{ end }}."
+          runbook: "Review sa login, xp_cmdshell, and database owners; mute only with security approval."

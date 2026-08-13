@@ -1,0 +1,50 @@
+groups:
+  - name: windows_exporter.p0.mssql
+    rules:
+      - alert: MssqlLogUsedCritical
+        expr: windows_mssql_databases_log_used_percent > 90
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "SQL log nearly full on {{ $labels.instance }} database {{ $labels.database }}"
+          description: "Transaction log used percent is {{ $value | humanize }}% (critical > 90)."
+          runbook: "Check log reuse wait, long transactions, AG/replication lag, and free disk for log growth."
+
+      - alert: MssqlAgSendQueueGrowing
+        expr: windows_mssql_dbreplica_log_send_queue > 1e8
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "AG log send queue high on {{ $labels.instance }}"
+          description: "Log send queue is {{ $value | humanize }}B for ten minutes (default threshold 100MB). Tune per AG RPO."
+          runbook: "Inspect network to secondary, AG health DMVs, and disk on secondary."
+
+      - alert: MssqlAgRedoLagHigh
+        expr: windows_mssql_dbreplica_redo_remaining_bytes > 1e8
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "AG redo lag high on {{ $labels.instance }}"
+          description: "Redo remaining is {{ $value | humanize }}B for ten minutes (default threshold 100MB)."
+          runbook: "Check secondary CPU/IO, redo thread waits, and blocking on secondary."
+
+      - alert: MssqlAgTransactionDelayHigh
+        expr: windows_mssql_dbreplica_transaction_delay_seconds > 5
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "AG commit delay high on {{ $labels.instance }}"
+          description: "Synchronous AG transaction delay is {{ $value | humanize }}s."
+          runbook: "Review sync replica latency, network RTT, and secondary disk latency."

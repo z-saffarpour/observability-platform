@@ -1,0 +1,214 @@
+# Stale / heavily modified statistics (TOP N across online user databases).
+#
+# It is required that the SQL Server user has the following permissions:
+#
+#   GRANT VIEW SERVER STATE TO
+#   Access to user databases required
+#
+# Auto-loaded via collectors: [mssql_*] and collector_files: ["collector/*.collector.yml"]
+#
+collector_name: mssql_stats
+
+# dm_db_stats_properties across many DBs is relatively heavy; 10m is enough for DBA review.
+min_interval: 600s
+
+metrics:
+  - metric_name: mssql_stats_age_seconds
+    type: gauge
+    help: 'TOP statistics by age (seconds since last update).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - stats_name
+    values: [age_seconds]
+    query_ref: mssql_stats_stale
+
+  - metric_name: mssql_stats_modification_counter
+    type: gauge
+    help: 'modification_counter for TOP stale/changed statistics.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - stats_name
+    values: [modification_counter]
+    query_ref: mssql_stats_stale
+
+  - metric_name: mssql_stats_rows
+    type: gauge
+    help: 'Row count snapshot for TOP stale/changed statistics.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - stats_name
+    values: [rows]
+    query_ref: mssql_stats_stale
+
+  - metric_name: mssql_stats_rows_sampled
+    type: gauge
+    help: 'rows_sampled for TOP stale/changed statistics.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - stats_name
+    values: [rows_sampled]
+    query_ref: mssql_stats_stale
+
+  - metric_name: mssql_stats_sample_percent
+    type: gauge
+    help: 'Sample percent (rows_sampled/rows*100) for TOP stale/changed statistics.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - stats_name
+    values: [sample_percent]
+    query_ref: mssql_stats_stale
+
+  - metric_name: mssql_stats_stale_count
+    type: gauge
+    help: 'Count of stale/heavily-modified statistics per database (matching collector thresholds).'
+    key_labels:
+      - db
+    values: [stale_count]
+    query_ref: mssql_stats_stale_count
+
+queries:
+  - query_name: mssql_stats_stale
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_stats') IS NOT NULL DROP TABLE #mssql_stats;
+      CREATE TABLE #mssql_stats (
+          db sysname NOT NULL,
+          schema_name sysname NOT NULL,
+          table_name sysname NOT NULL,
+          stats_name sysname NOT NULL,
+          age_seconds float NULL,
+          modification_counter float NULL,
+          rows float NULL,
+          rows_sampled float NULL,
+          sample_percent float NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model', N'msdb')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #mssql_stats (db, schema_name, table_name, stats_name, age_seconds, modification_counter, rows, rows_sampled, sample_percent)
+            SELECT TOP (40)
+                DB_NAME(),
+                OBJECT_SCHEMA_NAME(s.object_id),
+                OBJECT_NAME(s.object_id),
+                s.name,
+                CAST(DATEDIFF(SECOND, ISNULL(sp.last_updated, ''19000101''), GETDATE()) AS float),
+                CAST(ISNULL(sp.modification_counter, 0) AS float),
+                CAST(ISNULL(sp.rows, 0) AS float),
+                CAST(ISNULL(sp.rows_sampled, 0) AS float),
+                CAST(
+                    CASE
+                        WHEN ISNULL(sp.rows, 0) <= 0 THEN 0
+                        ELSE 100.0 * ISNULL(sp.rows_sampled, 0) / sp.rows
+                    END AS float
+                )
+            FROM sys.stats AS s WITH (NOLOCK)
+            CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp
+            INNER JOIN sys.objects AS o WITH (NOLOCK)
+                ON o.object_id = s.object_id
+            WHERE o.is_ms_shipped = 0
+              AND o.type IN (''U'', ''V'')
+              AND (
+                    sp.modification_counter >= 1000
+                 OR sp.last_updated < DATEADD(DAY, -7, GETDATE())
+                 OR sp.last_updated IS NULL
+              )
+            ORDER BY
+                ISNULL(sp.modification_counter, 0) DESC,
+                ISNULL(sp.last_updated, ''19000101'') ASC;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT TOP (80)
+          db,
+          schema_name,
+          table_name,
+          stats_name,
+          age_seconds,
+          modification_counter,
+          rows,
+          rows_sampled,
+          sample_percent
+      FROM #mssql_stats
+      ORDER BY modification_counter DESC, age_seconds DESC;
+
+  - query_name: mssql_stats_stale_count
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_stats_cnt') IS NOT NULL DROP TABLE #mssql_stats_cnt;
+      CREATE TABLE #mssql_stats_cnt (
+          db sysname NOT NULL,
+          stale_count float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model', N'msdb')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #mssql_stats_cnt (db, stale_count)
+            SELECT
+                DB_NAME(),
+                CAST(COUNT_BIG(*) AS float)
+            FROM sys.stats AS s WITH (NOLOCK)
+            CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp
+            INNER JOIN sys.objects AS o WITH (NOLOCK)
+                ON o.object_id = s.object_id
+            WHERE o.is_ms_shipped = 0
+              AND o.type IN (''U'', ''V'')
+              AND (
+                    sp.modification_counter >= 1000
+                 OR sp.last_updated < DATEADD(DAY, -7, GETDATE())
+                 OR sp.last_updated IS NULL
+              );';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, stale_count
+      FROM #mssql_stats_cnt
+      WHERE stale_count > 0
+      ORDER BY stale_count DESC;

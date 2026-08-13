@@ -1,0 +1,87 @@
+# ERRORLOG signal counters for selected SQL errors (last N hours).
+# Uses xp_readerrorlog — keep interval high on busy hosts.
+#
+#   VIEW SERVER STATE; xp_readerrorlog permission (sysadmin or secured equivalent)
+#
+collector_name: mssql_errorlog_signals
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_errorlog_signal_count
+    type: gauge
+    help: 'Count of selected ERRORLOG signals in the last 6 hours.'
+    key_labels:
+      - signal
+    values: [event_count]
+    query_ref: mssql_errorlog_signals
+
+queries:
+  - query_name: mssql_errorlog_signals
+    query: |
+      DECLARE @start datetime = DATEADD(HOUR, -6, GETDATE());
+      DECLARE @end datetime = GETDATE();
+
+      IF OBJECT_ID('tempdb..#el') IS NOT NULL DROP TABLE #el;
+      CREATE TABLE #el (
+          LogDate datetime,
+          ProcessInfo nvarchar(128),
+          Text nvarchar(max)
+      );
+
+      BEGIN TRY
+          INSERT INTO #el EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, @end, N'asc';
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      BEGIN TRY
+          INSERT INTO #el EXEC xp_readerrorlog 1, 1, NULL, NULL, @start, @end, N'asc';
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      ;WITH classified AS (
+          SELECT
+              CASE
+                WHEN Text LIKE N'%Error: 8645%' OR Text LIKE N'%memory grant%' THEN N'8645_memory_grant'
+                WHEN Text LIKE N'%Error: 4014%' OR Text LIKE N'%client was unable to reuse a session%' THEN N'4014_client_disconnect'
+                WHEN Text LIKE N'%Error: 845%'
+                  OR Text LIKE N'%waiting for buffer latch%'
+                  THEN N'buffer_latch_timeout_845'
+                WHEN Text LIKE N'%timeout occurred while waiting for latch%'
+                  OR Text LIKE N'%time-out occurred while waiting for latch%'
+                  THEN N'latch_timeout'
+                WHEN Text LIKE N'%I/O requests taking longer than%' OR Text LIKE N'%IO requests taking longer than%' THEN N'slow_io'
+                WHEN Text LIKE N'%Error: 1205%' OR Text LIKE N'%deadlock%' THEN N'deadlock_1205'
+                WHEN Text LIKE N'%Error: 17828%' OR Text LIKE N'%Error: 17830%' THEN N'network_178xx'
+                WHEN Text LIKE N'%BackupIoRequest::ReportIoError%'
+                  OR Text LIKE N'%Operating system error 112%'
+                  THEN N'backup_disk_full_112'
+                WHEN Text LIKE N'%Could not allocate a new page for database%'
+                  AND Text LIKE N'%filegroup is full%'
+                  THEN N'filegroup_full_1105'
+                WHEN Text LIKE N'%Error: 9002%'
+                  OR Text LIKE N'%The transaction log for database%is full due to%'
+                  THEN N'transaction_log_full_9002'
+                WHEN Text LIKE N'%Always On data movement%'
+                  AND Text LIKE N'%SUSPENDED%'
+                  THEN N'ag_suspend_from_redo'
+                WHEN Text LIKE N'%SUSPEND_FROM_REDO%'
+                  THEN N'ag_suspend_from_redo'
+                WHEN Text LIKE N'%Error: 3313%'
+                  OR Text LIKE N'%During redoing of a logged operation%'
+                  THEN N'redo_error_3313'
+                WHEN Text LIKE N'%Failed to start redo worker%'
+                  OR Text LIKE N'%redo reports failure%'
+                  THEN N'redo_worker_failure'
+                ELSE NULL
+              END AS signal
+          FROM #el
+      )
+      SELECT
+          signal,
+          CAST(COUNT(*) AS float) AS event_count
+      FROM classified
+      WHERE signal IS NOT NULL
+      GROUP BY signal;

@@ -1,0 +1,341 @@
+# Change Data Capture (CDC) and Change Tracking health/configuration.
+#
+# Permissions:
+#   GRANT VIEW ANY DATABASE TO
+#   Per-database CONNECT is required. VIEW DATABASE STATE and SELECT access to
+#   CDC metadata are recommended. CDC job metrics require SELECT on
+#   msdb.dbo.cdc_jobs, sysjobs and sysjobactivity.
+#
+collector_name: mssql_cdc_change_tracking
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_cdc_enabled
+    type: gauge
+    help: '1 when Change Data Capture is enabled for the database.'
+    key_labels: [db]
+    values: [cdc_enabled]
+    query_ref: mssql_change_features
+
+  - metric_name: mssql_change_tracking_enabled
+    type: gauge
+    help: '1 when Change Tracking is enabled for the database.'
+    key_labels: [db]
+    values: [change_tracking_enabled]
+    query_ref: mssql_change_features
+
+  - metric_name: mssql_change_tracking_retention_seconds
+    type: gauge
+    help: 'Configured Change Tracking retention normalized to seconds; -1 when disabled.'
+    key_labels: [db]
+    values: [change_tracking_retention_seconds]
+    query_ref: mssql_change_features
+
+  - metric_name: mssql_change_tracking_auto_cleanup_enabled
+    type: gauge
+    help: '1 when Change Tracking automatic cleanup is enabled; -1 when Change Tracking is disabled.'
+    key_labels: [db]
+    values: [change_tracking_auto_cleanup_enabled]
+    query_ref: mssql_change_features
+
+  - metric_name: mssql_cdc_change_table_count
+    type: gauge
+    help: 'Number of CDC capture instances/change tables in the database.'
+    key_labels: [db]
+    values: [change_table_count]
+    query_ref: mssql_cdc_database_state
+
+  - metric_name: mssql_cdc_capture_lag_seconds
+    type: gauge
+    help: 'Seconds since the CDC high endpoint was processed; -1 when no LSN timestamp is available.'
+    key_labels: [db]
+    values: [capture_lag_seconds]
+    query_ref: mssql_cdc_database_state
+
+  - metric_name: mssql_cdc_retained_lsn_age_seconds
+    type: gauge
+    help: 'Age in seconds of the oldest retained capture-instance LSN; -1 when unavailable.'
+    key_labels: [db]
+    values: [retained_lsn_age_seconds]
+    query_ref: mssql_cdc_database_state
+
+  - metric_name: mssql_cdc_job_enabled
+    type: gauge
+    help: 'SQL Agent enabled state for the CDC capture or cleanup job.'
+    key_labels:
+      - db
+      - job_type
+    values: [job_enabled]
+    query_ref: mssql_cdc_jobs
+
+  - metric_name: mssql_cdc_job_running
+    type: gauge
+    help: '1 when the CDC capture or cleanup SQL Agent job is currently running.'
+    key_labels:
+      - db
+      - job_type
+    values: [job_running]
+    query_ref: mssql_cdc_jobs
+
+  - metric_name: mssql_cdc_capture_polling_interval_seconds
+    type: gauge
+    help: 'Configured delay between CDC log scan cycles; -1 for non-capture jobs.'
+    key_labels:
+      - db
+      - job_type
+    values: [polling_interval_seconds]
+    query_ref: mssql_cdc_jobs
+
+  - metric_name: mssql_cdc_capture_continuous_enabled
+    type: gauge
+    help: '1 when the CDC capture job runs continuously, 0 for one-shot mode, -1 for non-capture jobs.'
+    key_labels:
+      - db
+      - job_type
+    values: [continuous_enabled]
+    query_ref: mssql_cdc_jobs
+
+  - metric_name: mssql_cdc_cleanup_retention_minutes
+    type: gauge
+    help: 'Configured CDC change-row retention in minutes; -1 for non-cleanup jobs.'
+    key_labels:
+      - db
+      - job_type
+    values: [retention_minutes]
+    query_ref: mssql_cdc_jobs
+
+  - metric_name: mssql_cdc_cleanup_threshold
+    type: gauge
+    help: 'Maximum CDC rows deleted per cleanup statement; -1 for non-cleanup jobs.'
+    key_labels:
+      - db
+      - job_type
+    values: [cleanup_threshold]
+    query_ref: mssql_cdc_jobs
+
+  - metric_name: mssql_change_tracking_table_count
+    type: gauge
+    help: 'Number of tables enabled for Change Tracking.'
+    key_labels: [db]
+    values: [tracked_table_count]
+    query_ref: mssql_change_tracking_database_state
+
+  - metric_name: mssql_change_tracking_current_version
+    type: gauge
+    help: 'Current Change Tracking version for the database.'
+    key_labels: [db]
+    values: [current_version]
+    query_ref: mssql_change_tracking_database_state
+
+  - metric_name: mssql_change_tracking_min_valid_version
+    type: gauge
+    help: 'Oldest minimum valid version across tracked tables; -1 when no visible tracked table exists.'
+    key_labels: [db]
+    values: [min_valid_version]
+    query_ref: mssql_change_tracking_database_state
+
+  - metric_name: mssql_change_tracking_version_window
+    type: gauge
+    help: 'Difference between current version and the oldest minimum valid table version; -1 when unavailable.'
+    key_labels: [db]
+    values: [version_window]
+    query_ref: mssql_change_tracking_database_state
+
+queries:
+  - query_name: mssql_change_features
+    query: |
+      SELECT
+          d.name AS db,
+          CAST(d.is_cdc_enabled AS float) AS cdc_enabled,
+          CAST(CASE WHEN ct.database_id IS NULL THEN 0 ELSE 1 END AS float) AS change_tracking_enabled,
+          CAST(CASE ct.retention_period_units
+              WHEN 1 THEN ct.retention_period * 60.0
+              WHEN 2 THEN ct.retention_period * 3600.0
+              WHEN 3 THEN ct.retention_period * 86400.0
+              ELSE -1.0
+          END AS float) AS change_tracking_retention_seconds,
+          CAST(CASE WHEN ct.database_id IS NULL THEN -1
+                    ELSE ct.is_auto_cleanup_on END AS float) AS change_tracking_auto_cleanup_enabled
+      FROM sys.databases AS d WITH (NOLOCK)
+      LEFT JOIN sys.change_tracking_databases AS ct WITH (NOLOCK)
+        ON ct.database_id = d.database_id
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL;
+
+  - query_name: mssql_cdc_database_state
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#mssql_cdc_state') IS NOT NULL
+          DROP TABLE #mssql_cdc_state;
+      CREATE TABLE #mssql_cdc_state (
+          db sysname NOT NULL,
+          change_table_count float NOT NULL,
+          capture_lag_seconds float NOT NULL,
+          retained_lsn_age_seconds float NOT NULL
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND is_cdc_enabled = 1
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          DECLARE @max_lsn binary(10) = sys.fn_cdc_get_max_lsn();
+          DECLARE @min_lsn binary(10);
+          DECLARE @max_time datetime = sys.fn_cdc_map_lsn_to_time(@max_lsn);
+          DECLARE @min_time datetime;
+
+          SELECT TOP (1) @min_lsn = sys.fn_cdc_get_min_lsn(capture_instance)
+          FROM cdc.change_tables
+          WHERE sys.fn_cdc_get_min_lsn(capture_instance) IS NOT NULL
+          ORDER BY sys.fn_cdc_get_min_lsn(capture_instance);
+
+          SET @min_time = sys.fn_cdc_map_lsn_to_time(@min_lsn);
+
+          INSERT INTO #mssql_cdc_state
+              (db, change_table_count, capture_lag_seconds, retained_lsn_age_seconds)
+          SELECT
+              @db_in,
+              CAST(COUNT(*) AS float),
+              CAST(CASE WHEN @max_time IS NULL THEN -1
+                        WHEN DATEDIFF(second, @max_time, GETDATE()) < 0 THEN 0
+                        ELSE DATEDIFF(second, @max_time, GETDATE()) END AS float),
+              CAST(CASE WHEN @min_time IS NULL THEN -1
+                        WHEN DATEDIFF(second, @min_time, GETDATE()) < 0 THEN 0
+                        ELSE DATEDIFF(second, @min_time, GETDATE()) END AS float)
+          FROM cdc.change_tables;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+              INSERT INTO #mssql_cdc_state VALUES (@db, -1, -1, -1);
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT db, change_table_count, capture_lag_seconds, retained_lsn_age_seconds
+      FROM #mssql_cdc_state;
+
+  - query_name: mssql_cdc_jobs
+    query: |
+      IF OBJECT_ID(N'tempdb..#mssql_cdc_jobs') IS NOT NULL
+          DROP TABLE #mssql_cdc_jobs;
+      CREATE TABLE #mssql_cdc_jobs (
+          db sysname NOT NULL,
+          job_type nvarchar(20) NOT NULL,
+          job_enabled float NOT NULL,
+          job_running float NOT NULL,
+          polling_interval_seconds float NOT NULL,
+          continuous_enabled float NOT NULL,
+          retention_minutes float NOT NULL,
+          cleanup_threshold float NOT NULL
+      );
+
+      BEGIN TRY
+          INSERT INTO #mssql_cdc_jobs
+          SELECT
+              d.name AS db,
+              cj.job_type,
+              CAST(ISNULL(j.enabled, 0) AS float) AS job_enabled,
+              CAST(CASE WHEN EXISTS (
+                  SELECT 1
+                  FROM msdb.dbo.sysjobactivity AS ja
+                  WHERE ja.job_id = cj.job_id
+                    AND ja.session_id = (SELECT MAX(session_id) FROM msdb.dbo.syssessions)
+                    AND ja.start_execution_date IS NOT NULL
+                    AND ja.stop_execution_date IS NULL
+              ) THEN 1 ELSE 0 END AS float) AS job_running,
+              CAST(CASE WHEN cj.job_type = N'capture' THEN cj.pollinginterval ELSE -1 END AS float),
+              CAST(CASE WHEN cj.job_type = N'capture' THEN cj.continuous ELSE -1 END AS float),
+              CAST(CASE WHEN cj.job_type = N'cleanup' THEN cj.retention ELSE -1 END AS float),
+              CAST(CASE WHEN cj.job_type = N'cleanup' THEN cj.threshold ELSE -1 END AS float)
+          FROM msdb.dbo.cdc_jobs AS cj WITH (NOLOCK)
+          INNER JOIN sys.databases AS d WITH (NOLOCK)
+            ON d.database_id = cj.database_id
+          LEFT JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+            ON j.job_id = cj.job_id;
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      SELECT db, job_type, job_enabled, job_running,
+             polling_interval_seconds, continuous_enabled, retention_minutes, cleanup_threshold
+      FROM #mssql_cdc_jobs;
+
+  - query_name: mssql_change_tracking_database_state
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#mssql_ct_state') IS NOT NULL
+          DROP TABLE #mssql_ct_state;
+      CREATE TABLE #mssql_ct_state (
+          db sysname NOT NULL,
+          tracked_table_count float NOT NULL,
+          current_version float NOT NULL,
+          min_valid_version float NOT NULL,
+          version_window float NOT NULL
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT d.name
+          FROM sys.databases AS d WITH (NOLOCK)
+          INNER JOIN sys.change_tracking_databases AS ct WITH (NOLOCK)
+            ON ct.database_id = d.database_id
+          WHERE d.state = 0
+            AND d.source_database_id IS NULL
+            AND HAS_DBACCESS(d.name) = 1;
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          DECLARE @current bigint = CHANGE_TRACKING_CURRENT_VERSION();
+          DECLARE @minimum bigint;
+
+          SELECT @minimum = MIN(minimum_version)
+          FROM (
+              SELECT CHANGE_TRACKING_MIN_VALID_VERSION(object_id) AS minimum_version
+              FROM sys.change_tracking_tables
+          ) AS versions;
+
+          INSERT INTO #mssql_ct_state
+              (db, tracked_table_count, current_version, min_valid_version, version_window)
+          SELECT
+              @db_in,
+              CAST(COUNT(*) AS float),
+              CAST(ISNULL(@current, -1) AS float),
+              CAST(ISNULL(@minimum, -1) AS float),
+              CAST(CASE WHEN @current IS NULL OR @minimum IS NULL THEN -1
+                        ELSE @current - @minimum END AS float)
+          FROM sys.change_tracking_tables;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+              INSERT INTO #mssql_ct_state VALUES (@db, -1, -1, -1, -1);
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT db, tracked_table_count, current_version, min_valid_version, version_window
+      FROM #mssql_ct_state;

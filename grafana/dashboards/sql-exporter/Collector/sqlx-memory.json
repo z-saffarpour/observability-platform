@@ -1,0 +1,4842 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Ops-first SQL memory: pending grants, live large-grant sessions (table), fleet triage, workspace pressure, breakdowns. Start at Investigate Now, then Fleet Triage. Collector: mssql_memory (60s).",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "Buffer Pool",
+      "type": "link",
+      "url": "/d/sqlx-buffer-pool?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Plan Cache",
+      "type": "link",
+      "url": "/d/sqlx-plan-cache?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Resource Governor",
+      "type": "link",
+      "url": "/d/sqlx-resource-governor?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Heavy Queries",
+      "type": "link",
+      "url": "/d/sqlx-heavy-queries?${__url_time_range}&${instance:queryparam}&${db:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Waits",
+      "type": "link",
+      "url": "/d/sqlx-waits?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "CPU",
+      "type": "link",
+      "url": "/d/sqlx-cpu?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "TempDB",
+      "type": "link",
+      "url": "/d/sqlx-tempdb?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Parallelism",
+      "type": "link",
+      "url": "/d/sqlx-parallelism?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Health / KPI",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Non-zero = queries blocked waiting for memory (RESOURCE_SEMAPHORE).",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Pending Grants",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Pending Grants",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Pending Grants",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Fleet count with grant backlog.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Servers w/ Pending",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"} > 0) or vector(0)",
+          "instant": true,
+          "legendFormat": "Servers w/ Pending",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Fleet count with grant backlog.",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Sessions with grant >= Min Grant MB threshold.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Large Grants",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Large Grants",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Sessions with grant >= Min Grant MB threshold.",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Largest live query memory grant right now.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "displayName": "Max Grant",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 8192
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Grant",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Largest live query memory grant right now.",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Servers where Total >= 99% of Target (max server memory).",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "At Memory Cap",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100 >= 99) or vector(0)",
+          "instant": true,
+          "legendFormat": "At Memory Cap",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "At Memory Cap",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Active large grants on RESOURCE_SEMAPHORE / memory wait classes.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Memory Waits",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\", wait_type=~\"RESOURCE_SEMAPHORE|RESOURCE_SEMAPHORE_QUERY_COMPILE|CMEMTHREAD|MEMORY_ALLOCATION_EXT\"} >= $min_grant_mb)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Memory Waits",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Waits",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Granted / Maximum workspace pool.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "displayName": "Max Workspace %",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Workspace %",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Granted / Maximum workspace pool.",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Queries currently holding a memory grant.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Outstanding",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(mssql_memory_grants_outstanding{job=\"sql_exporter\", instance=~\"$instance\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Outstanding",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Queries currently holding a memory grant.",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "panels": [],
+      "title": "Investigate Now - who holds memory?",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Start here when users report slowness - sorted by grant size.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4096
+              },
+              {
+                "color": "red",
+                "value": 32768
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, max by (instance, session_id, db, login_name, wait_type, statement_snip) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)))",
+          "instant": true,
+          "legendFormat": "{{instance}} SPID {{session_id}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Largest Grants (top 15)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Live sessions (grant >= Min Grant MB). Click Server/Database for related reports; Statement to inspect SQL.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grant MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Wait"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Statement"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "string"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Database"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries (DB)",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__data.fields.Server}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 8,
+        "y": 5
+      },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(50, max by (instance, session_id, db, login_name, wait_type, statement_snip) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Large Memory Grants",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 6,
+              "db": 2,
+              "instance": 0,
+              "login_name": 3,
+              "session_id": 1,
+              "statement_snip": 5,
+              "wait_type": 4
+            },
+            "renameByName": {
+              "Value": "Grant MB",
+              "Value #A": "Grant MB",
+              "db": "Database",
+              "instance": "Server",
+              "login_name": "Login",
+              "session_id": "SPID",
+              "statement_snip": "Statement",
+              "wait_type": "Wait"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 2,
+              "Grant MB": 6,
+              "Login": 3,
+              "SPID": 1,
+              "Server": 0,
+              "Statement": 5,
+              "Wait": 4
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Grant MB"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "One row per Server + Database (grant >= Min Grant MB): session count, largest grant, and total grant MB.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Grant MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sessions"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Grant MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Database"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries (DB)",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__data.fields.Server}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 14,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(40, sum by (instance, db) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance, db) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "Large Grants by Server / Database",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 4,
+              "Value #B": 2,
+              "Value #C": 3,
+              "db": 1,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value": "Total Grant MB",
+              "Value #A": "Total Grant MB",
+              "Value #B": "Sessions",
+              "Value #C": "Max Grant MB",
+              "db": "Database",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Max Grant MB": 3,
+              "Server": 0,
+              "Sessions": 2,
+              "Total Grant MB": 4
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Total Grant MB"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Sessions waiting on memory. Click Server for Heavy Queries / Waits / Buffer Pool.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grant MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Statement"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "string"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Database"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries (DB)",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__data.fields.Server}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 13,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(30, max by (instance, session_id, db, login_name, wait_type, statement_snip) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\", wait_type=~\"RESOURCE_SEMAPHORE|RESOURCE_SEMAPHORE_QUERY_COMPILE|CMEMTHREAD|MEMORY_ALLOCATION_EXT\"} >= $min_grant_mb)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Wait Sessions (RESOURCE_SEMAPHORE / CMEMTHREAD)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 6,
+              "db": 2,
+              "instance": 0,
+              "login_name": 3,
+              "session_id": 1,
+              "statement_snip": 5,
+              "wait_type": 4
+            },
+            "renameByName": {
+              "Value": "Grant MB",
+              "Value #A": "Grant MB",
+              "db": "Database",
+              "instance": "Server",
+              "login_name": "Login",
+              "session_id": "SPID",
+              "statement_snip": "Statement",
+              "wait_type": "Wait"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 2,
+              "Grant MB": 6,
+              "Login": 3,
+              "SPID": 1,
+              "Server": 0,
+              "Statement": 5,
+              "Wait": 4
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Grant MB"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 20,
+      "panels": [],
+      "title": "Fleet Triage - which servers?",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Servers closest to max server memory setting.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "red",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "id": 21,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100))",
+          "instant": true,
+          "legendFormat": "{{instance}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Highest Memory Util % (top 15 servers)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Count of sessions above Min Grant MB per server.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "id": 22,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)))",
+          "instant": true,
+          "legendFormat": "{{instance}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Most Large Grants by Server",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Click Server name for related reports (Heavy Queries, Waits, Buffer Pool, ...).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Util %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 90
+                    },
+                    {
+                      "color": "red",
+                      "value": 99
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pending"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outstanding"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Workspace %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Grant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Large Grants"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 23,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_memory_grants_outstanding{job=\"sql_exporter\", instance=~\"$instance\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "H"
+        }
+      ],
+      "title": "Memory Health by Server",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 5,
+              "Value #B": 6,
+              "Value #C": 1,
+              "Value #D": 2,
+              "Value #E": 7,
+              "Value #F": 8,
+              "Value #G": 3,
+              "Value #H": 4,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value #A": "Total",
+              "Value #B": "Target",
+              "Value #C": "Util %",
+              "Value #D": "Pending",
+              "Value #E": "Outstanding",
+              "Value #F": "Workspace %",
+              "Value #G": "Max Grant",
+              "Value #H": "Large Grants",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Large Grants": 4,
+              "Max Grant": 3,
+              "Outstanding": 7,
+              "Pending": 2,
+              "Server": 0,
+              "Target": 6,
+              "Total": 5,
+              "Util %": 1,
+              "Workspace %": 8
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Util %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Filtered hotspots. Click Server for related reports.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Util %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 90
+                    },
+                    {
+                      "color": "red",
+                      "value": 99
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pending"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Workspace %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Grant"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Large Grants"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 24,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100) and on(instance) ((max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100) >= 99) or (max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) > 0) or (max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) >= 85) or (count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) > 0))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) and on(instance) ((max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100) >= 99) or (max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) > 0) or (max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) >= 85) or (count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) > 0))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) and on(instance) ((max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100) >= 99) or (max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) > 0) or (max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) >= 85) or (count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) > 0))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) and on(instance) ((max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100) >= 99) or (max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) > 0) or (max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) >= 85) or (count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) > 0))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) and on(instance) ((max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100) >= 99) or (max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"}) > 0) or (max by (instance) ((mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"} / mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"}) * 100) >= 85) or (count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)) > 0))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        }
+      ],
+      "title": "Servers Needing Attention",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 5,
+              "Value #D": 3,
+              "Value #E": 4,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value #A": "Util %",
+              "Value #B": "Pending",
+              "Value #C": "Workspace %",
+              "Value #D": "Max Grant",
+              "Value #E": "Large Grants",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Large Grants": 4,
+              "Max Grant": 3,
+              "Pending": 2,
+              "Server": 0,
+              "Util %": 1,
+              "Workspace %": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Util %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
+      "id": 30,
+      "panels": [],
+      "title": "Trends (server aggregates)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Only top 10 by util - avoids chart noise.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "red",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(10, max by (instance) ((mssql_memory_total_server_mb{job=\"sql_exporter\", instance=~\"$instance\"} / mssql_memory_target_server_mb{job=\"sql_exporter\", instance=~\"$instance\"}) * 100))",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Util % - worst servers",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Spikes here precede RESOURCE_SEMAPHORE user complaints.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_memory_grants_pending{job=\"sql_exporter\", instance=~\"$instance\"})",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Grants Pending",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Sort/hash grant pool. When Granted approaches Maximum, pending grants rise.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 71
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(8, mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Granted Workspace Memory\"})",
+          "legendFormat": "{{instance}} Granted",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(8, mssql_memory_manager_mb{job=\"sql_exporter\", instance=~\"$instance\", counter=\"Maximum Workspace Memory\"})",
+          "legendFormat": "{{instance}} Max",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Workspace Memory - Granted vs Max",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "How many big-grant sessions per server over time.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 71
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb))",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Large Grant Sessions (count)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 79
+      },
+      "id": 40,
+      "panels": [],
+      "title": "Breakdowns",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Click Server/Database for related reports.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grant MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Database"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries (DB)",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__data.fields.Server}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__data.fields.Server}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 80
+      },
+      "id": 41,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(25, sum by (instance, db) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Grant Total by Database",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 2,
+              "db": 1,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value": "Grant MB",
+              "Value #A": "Grant MB",
+              "db": "Database",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Grant MB": 2,
+              "Server": 0
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Grant MB"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Click Server for related reports.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grant MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 8192
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 80
+      },
+      "id": 42,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(25, sum by (instance, login_name) ((mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"} >= $min_grant_mb)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Grant Total by Login",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 2,
+              "instance": 0,
+              "login_name": 1
+            },
+            "renameByName": {
+              "Value": "Grant MB",
+              "Value #A": "Grant MB",
+              "instance": "Server",
+              "login_name": "Login"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Grant MB": 2,
+              "Login": 1,
+              "Server": 0
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Grant MB"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 89
+      },
+      "id": 50,
+      "panels": [],
+      "title": "Deep Dive - Memory Clerks",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Which SQL memory clerk types dominate RAM (buffer pool, QE reservations, etc.).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4096
+              },
+              {
+                "color": "red",
+                "value": 32768
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 90
+      },
+      "id": 51,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(12, sum by (clerk_type) (mssql_memory_clerk_size_kb{job=\"sql_exporter\", instance=~\"$instance\"} / 1024))",
+          "instant": true,
+          "legendFormat": "{{clerk_type}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top Clerk Types (MB, fleet aggregate)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Click Server for related reports.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 4096
+                    },
+                    {
+                      "color": "red",
+                      "value": 32768
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Buffer Pool",
+                    "url": "/d/sqlx-buffer-pool?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Plan Cache",
+                    "url": "/d/sqlx-plan-cache?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Resource Governor",
+                    "url": "/d/sqlx-resource-governor?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Waits",
+                    "url": "/d/sqlx-waits?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CPU",
+                    "url": "/d/sqlx-cpu?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "TempDB",
+                    "url": "/d/sqlx-tempdb?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Parallelism",
+                    "url": "/d/sqlx-parallelism?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 90
+      },
+      "id": 52,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(40, max by (instance, clerk_type, clerk_name) (mssql_memory_clerk_size_kb{job=\"sql_exporter\", instance=~\"$instance\"} / 1024))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top Clerks by Server",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "counter": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 3,
+              "clerk_name": 2,
+              "clerk_type": 1,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value": "MB",
+              "Value #A": "MB",
+              "clerk_name": "Name",
+              "clerk_type": "Type",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "MB": 3,
+              "Name": 2,
+              "Server": 0,
+              "Type": 1
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "MB"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 99
+      },
+      "id": 60,
+      "panels": [],
+      "title": "Deep Dive - Semaphore & Stolen",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Empty = metric not scraped on this fleet yet.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 100
+      },
+      "id": 61,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_resource_semaphore_waiter_count{job=\"sql_exporter\", instance=~\"$instance\"}",
+          "legendFormat": "{{instance}} sem {{resource_semaphore_id}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Semaphore Waiters",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 8192
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 100
+      },
+      "id": 62,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_resource_semaphore_granted_mb{job=\"sql_exporter\", instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Semaphore Granted MB",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 100
+      },
+      "id": 63,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_resource_semaphore_available_mb{job=\"sql_exporter\", instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Semaphore Available MB",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Non-buffer-pool memory (plans, locks, clerks).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 108
+      },
+      "id": 64,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_memory_stolen_mb{job=\"sql_exporter\", instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Stolen Server Memory",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "collector",
+    "memory"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\"}, db)",
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "db",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_memory_active_grant_mb{job=\"sql_exporter\", instance=~\"$instance\"}, db)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "512",
+          "value": "512"
+        },
+        "includeAll": false,
+        "label": "Min Grant MB",
+        "multi": false,
+        "name": "min_grant_mb",
+        "options": [
+          {
+            "selected": false,
+            "text": "100",
+            "value": "100"
+          },
+          {
+            "selected": true,
+            "text": "512",
+            "value": "512"
+          },
+          {
+            "selected": false,
+            "text": "1024",
+            "value": "1024"
+          },
+          {
+            "selected": false,
+            "text": "4096",
+            "value": "4096"
+          },
+          {
+            "selected": false,
+            "text": "8192",
+            "value": "8192"
+          }
+        ],
+        "query": "100,512,1024,4096,8192",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Collector memory",
+  "uid": "sqlx-memory",
+  "version": 19
+}

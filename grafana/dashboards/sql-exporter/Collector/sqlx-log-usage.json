@@ -1,0 +1,3668 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Transaction log ops view: used%/MB pressure, reuse-wait root cause, FULL+LOG_BACKUP action queue, growth companion metrics, per-server rollup. Collector mssql_log_usage @ 60s.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "Database Space",
+      "type": "link",
+      "url": "/d/sqlx-database-space?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Backup",
+      "type": "link",
+      "url": "/d/sqlx-backup?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Transactions Long",
+      "type": "link",
+      "url": "/d/sqlx-transactions-long?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Autogrowth",
+      "type": "link",
+      "url": "/d/sqlx-autogrowth?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "File I/O",
+      "type": "link",
+      "url": "/d/sqlx-file-io?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "AlwaysOn",
+      "type": "link",
+      "url": "/d/sqlx-alwayson?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Health / KPI",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "DBs >= Warn%",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= ${warn_pct})) or vector(0)",
+          "instant": true,
+          "legendFormat": "DBs >= Warn%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "DBs >= Warn%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "DBs >= 85%",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= 85)) or vector(0)",
+          "instant": true,
+          "legendFormat": "DBs >= 85%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "DBs >= 85%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "DBs >= 95%",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= 95)) or vector(0)",
+          "instant": true,
+          "legendFormat": "DBs >= 95%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "DBs >= 95%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "displayName": "Max Used %",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Used %",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Used %",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Reuse Blocked",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc!~\"NOTHING|\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Reuse Blocked",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Reuse Blocked",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Wait LOG_BACKUP",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=\"LOG_BACKUP\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Wait LOG_BACKUP",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Wait LOG_BACKUP",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Wait ACTIVE_TXN",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=\"ACTIVE_TRANSACTION\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Wait ACTIVE_TXN",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Wait ACTIVE_TXN",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "displayName": "Total Log Size",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum(mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Total Log Size",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Log Size",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "panels": [],
+      "title": "Hotspots",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top 15 DBs by Used %",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 5
+      },
+      "id": 12,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top 15 DBs by Used MB",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 5
+      },
+      "id": 13,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, count by (instance) ((mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= 85)))",
+          "instant": true,
+          "legendFormat": "{{instance}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Servers - DBs >= 85%",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 14,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (log_reuse_wait_desc) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc!~\"NOTHING|\"})",
+          "instant": true,
+          "legendFormat": "{{log_reuse_wait_desc}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Reuse Wait Reasons (count)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 15,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", recovery_model_desc=\"FULL\"} >= ${warn_pct})",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}} {{recovery_model_desc}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "FULL recovery >= Warn%",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 20,
+      "panels": [],
+      "title": "Pressure / Action Queue",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 85
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 10240
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 64
+                    },
+                    {
+                      "color": "green",
+                      "value": 512
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Database Space",
+                    "url": "/d/sqlx-database-space?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Backup",
+                    "url": "/d/sqlx-backup?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Transactions Long",
+                    "url": "/d/sqlx-transactions-long?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Autogrowth",
+                    "url": "/d/sqlx-autogrowth?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "File I/O",
+                    "url": "/d/sqlx-file-io?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "AlwaysOn",
+                    "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= ${warn_pct})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} and on(instance, db, log_reuse_wait_desc, recovery_model_desc) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= ${warn_pct})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} and on(instance, db, log_reuse_wait_desc, recovery_model_desc) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= ${warn_pct})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} - mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}) and on(instance, db, log_reuse_wait_desc, recovery_model_desc) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= ${warn_pct})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        }
+      ],
+      "title": "High Used % (>= Warn) - size + recovery + reuse wait",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "db": 1,
+              "instance": 0,
+              "log_reuse_wait_desc": 3,
+              "recovery_model_desc": 2
+            },
+            "renameByName": {
+              "Value #A": "Used %",
+              "Value #B": "Used MB",
+              "Value #C": "Total MB",
+              "Value #D": "Free MB",
+              "db": "Database",
+              "instance": "Server",
+              "log_reuse_wait_desc": "Reuse Wait",
+              "mssql_log_total_mb": "Total MB",
+              "mssql_log_used_mb": "Used MB",
+              "mssql_log_used_percent": "Used %",
+              "recovery_model_desc": "Recovery"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Free MB": 7,
+              "Recovery": 2,
+              "Reuse Wait": 3,
+              "Server": 0,
+              "Total MB": 6,
+              "Used %": 4,
+              "Used MB": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Used %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 85
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 10240
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Database Space",
+                    "url": "/d/sqlx-database-space?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Backup",
+                    "url": "/d/sqlx-backup?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Transactions Long",
+                    "url": "/d/sqlx-transactions-long?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Autogrowth",
+                    "url": "/d/sqlx-autogrowth?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "File I/O",
+                    "url": "/d/sqlx-file-io?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "AlwaysOn",
+                    "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 22,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc!~\"NOTHING|\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc!~\"NOTHING|\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc!~\"NOTHING|\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "Reuse Blocked (wait != NOTHING) - why log cannot truncate",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "db": 1,
+              "instance": 0,
+              "log_reuse_wait_desc": 3,
+              "recovery_model_desc": 2
+            },
+            "renameByName": {
+              "Value #A": "Used %",
+              "Value #B": "Used MB",
+              "Value #C": "Total MB",
+              "db": "Database",
+              "instance": "Server",
+              "log_reuse_wait_desc": "Reuse Wait",
+              "mssql_log_total_mb": "Total MB",
+              "mssql_log_used_mb": "Used MB",
+              "mssql_log_used_percent": "Used %",
+              "recovery_model_desc": "Recovery"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Recovery": 2,
+              "Reuse Wait": 3,
+              "Server": 0,
+              "Total MB": 6,
+              "Used %": 4,
+              "Used MB": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Used %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 85
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 10240
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Database Space",
+                    "url": "/d/sqlx-database-space?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Backup",
+                    "url": "/d/sqlx-backup?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Transactions Long",
+                    "url": "/d/sqlx-transactions-long?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Autogrowth",
+                    "url": "/d/sqlx-autogrowth?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "File I/O",
+                    "url": "/d/sqlx-file-io?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "AlwaysOn",
+                    "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "id": 23,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(40, mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(40, mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(40, mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "Inventory (topk 40 by Used %) - filtered by Server/DB/Wait",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "db": 1,
+              "instance": 0,
+              "log_reuse_wait_desc": 3,
+              "recovery_model_desc": 2
+            },
+            "renameByName": {
+              "Value #A": "Used %",
+              "Value #B": "Used MB",
+              "Value #C": "Total MB",
+              "db": "Database",
+              "instance": "Server",
+              "log_reuse_wait_desc": "Reuse Wait",
+              "mssql_log_total_mb": "Total MB",
+              "mssql_log_used_mb": "Used MB",
+              "mssql_log_used_percent": "Used %",
+              "recovery_model_desc": "Recovery"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Recovery": 2,
+              "Reuse Wait": 3,
+              "Server": 0,
+              "Total MB": 6,
+              "Used %": 4,
+              "Used MB": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Used %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      },
+      "id": 30,
+      "panels": [],
+      "title": "Trends (topk - avoids 600+ series)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 58
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "legendFormat": "{{instance}} {{db}} {{log_reuse_wait_desc}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Used % - Top 15",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 58
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "legendFormat": "{{instance}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Used MB - Top 15",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 66
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "legendFormat": "{{instance}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total MB - Top 15 (growth / autogrow signal)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 64
+              },
+              {
+                "color": "green",
+                "value": 512
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 66
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "bottomk(15, (mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} - mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}))",
+          "legendFormat": "{{instance}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Free MB - Lowest 15",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
+      "id": 40,
+      "panels": [],
+      "title": "Log Growth (from mssql_standard - companion)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, rate(mssql_log_growths{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\"}[15m]))",
+          "legendFormat": "{{instance}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Log Growths rate - Top 15",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      },
+      "id": 42,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, rate(mssql_log_growths{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\"}[15m]))",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Log Growths rate now - Top 15",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Growth /s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ops"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.01
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Database Space",
+                    "url": "/d/sqlx-database-space?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Backup",
+                    "url": "/d/sqlx-backup?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Transactions Long",
+                    "url": "/d/sqlx-transactions-long?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Autogrowth",
+                    "url": "/d/sqlx-autogrowth?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "File I/O",
+                    "url": "/d/sqlx-file-io?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "AlwaysOn",
+                    "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "id": 43,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "rate(mssql_log_growths{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\"}[15m]) > 0",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Growing logs (rate > 0)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "db": 1,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value": "Growth /s",
+              "Value #A": "Growth /s",
+              "db": "Database",
+              "instance": "Server",
+              "mssql_log_growths": "Growth /s"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Growth /s": 2,
+              "Server": 0
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Growth /s"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 91
+      },
+      "id": 50,
+      "panels": [],
+      "title": "Per-Server Rollup",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": ">= Warn"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": ">= 85%"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 70
+                    },
+                    {
+                      "color": "red",
+                      "value": 85
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 10240
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total MB"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reuse Blocked"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Database Space",
+                    "url": "/d/sqlx-database-space?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Backup",
+                    "url": "/d/sqlx-backup?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Transactions Long",
+                    "url": "/d/sqlx-transactions-long?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Autogrowth",
+                    "url": "/d/sqlx-autogrowth?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "File I/O",
+                    "url": "/d/sqlx-file-io?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "AlwaysOn",
+                    "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 92
+      },
+      "id": 51,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(count by (instance) ((mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= ${warn_pct}))) or (count by (instance) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}) * 0)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(count by (instance) ((mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"} >= 85))) or (count by (instance) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}) * 0)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum by (instance) (mssql_log_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum by (instance) (mssql_log_total_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(count by (instance) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc!~\"NOTHING|\"})) or (count by (instance) (mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", log_reuse_wait_desc=~\"${reuse_wait:regex}\"}) * 0)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "F"
+        }
+      ],
+      "title": "Servers - pressure / size / reuse blocked",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value #A": ">= Warn",
+              "Value #B": ">= 85%",
+              "Value #C": "Max %",
+              "Value #D": "Used MB",
+              "Value #E": "Total MB",
+              "Value #F": "Reuse Blocked",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              ">= 85%": 2,
+              ">= Warn": 1,
+              "Max %": 3,
+              "Reuse Blocked": 6,
+              "Server": 0,
+              "Total MB": 5,
+              "Used MB": 4
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Max %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "collector",
+    "log",
+    "tlog"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\"}, db)",
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "db",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\"}, db)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"}, log_reuse_wait_desc)",
+        "includeAll": true,
+        "label": "Reuse Wait",
+        "multi": true,
+        "name": "reuse_wait",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_log_used_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"$db\"}, log_reuse_wait_desc)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "70",
+          "value": "70"
+        },
+        "includeAll": false,
+        "label": "Warn %",
+        "multi": false,
+        "name": "warn_pct",
+        "options": [
+          {
+            "selected": false,
+            "text": "60",
+            "value": "60"
+          },
+          {
+            "selected": true,
+            "text": "70",
+            "value": "70"
+          },
+          {
+            "selected": false,
+            "text": "80",
+            "value": "80"
+          },
+          {
+            "selected": false,
+            "text": "85",
+            "value": "85"
+          },
+          {
+            "selected": false,
+            "text": "90",
+            "value": "90"
+          }
+        ],
+        "query": "60,70,80,85,90",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Collector log_usage",
+  "uid": "sqlx-log-usage",
+  "version": 16
+}

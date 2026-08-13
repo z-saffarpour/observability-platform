@@ -1,0 +1,162 @@
+# Instance-level configuration for drift detection across AG / FCI nodes.
+#
+# Complements mssql_database_configuration (per-database). Does not replace
+# mssql_security_configurations (surface area) or mssql_parallelism_configuration
+# (MAXDOP/memory as used by those dashboards). This collector is the source of
+# truth for configured vs in_use and Instant File Initialization.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_instance_configuration
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_instance_config_value
+    type: gauge
+    help: 'Configured sys.configurations.value for selected instance options.'
+    key_labels:
+      - config_name
+    values: [configured]
+    query_ref: mssql_instance_config
+
+  - metric_name: mssql_instance_config_value_in_use
+    type: gauge
+    help: 'sys.configurations.value_in_use for selected instance options (effective after last restart for non-dynamic options).'
+    key_labels:
+      - config_name
+    values: [in_use]
+    query_ref: mssql_instance_config
+
+  - metric_name: mssql_instance_config_restart_pending
+    type: gauge
+    help: '1 when configured value differs from value_in_use (restart or RECONFIGURE still needed).'
+    key_labels:
+      - config_name
+    values: [restart_pending]
+    query_ref: mssql_instance_config
+
+  - metric_name: mssql_instance_ifi_enabled
+    type: gauge
+    help: '1 if Instant File Initialization is enabled for the Database Engine service; 0 if disabled; -1 if dm_server_services.instant_file_initialization_enabled is unavailable.'
+    key_labels:
+      - service_name
+    values: [ifi_enabled]
+    query_ref: mssql_instance_ifi
+
+  - metric_name: mssql_instance_start_unix
+    type: gauge
+    help: 'SQL Server start time as Unix epoch seconds (UTC).'
+    values: [start_unix]
+    query_ref: mssql_instance_uptime
+
+  - metric_name: mssql_instance_uptime_seconds
+    type: gauge
+    help: 'Seconds since SQL Server start (sqlserver_start_time).'
+    values: [uptime_seconds]
+    query_ref: mssql_instance_uptime
+
+  - metric_name: mssql_instance_trace_flag
+    type: gauge
+    help: 'Globally enabled trace flags (DBCC TRACESTATUS(-1)). Empty when none are set or the caller cannot read them.'
+    key_labels:
+      - trace_flag
+    values: [is_enabled]
+    query_ref: mssql_instance_trace_flags
+
+queries:
+  - query_name: mssql_instance_config
+    query: |
+      SELECT
+          c.name AS config_name,
+          CAST(c.value AS float) AS configured,
+          CAST(c.value_in_use AS float) AS in_use,
+          CAST(CASE WHEN c.value <> c.value_in_use THEN 1 ELSE 0 END AS float) AS restart_pending
+      FROM sys.configurations AS c WITH (NOLOCK)
+      WHERE c.name IN (
+          N'max server memory (MB)',
+          N'min server memory (MB)',
+          N'max degree of parallelism',
+          N'cost threshold for parallelism',
+          N'optimize for ad hoc workloads',
+          N'backup compression default',
+          N'backup checksum default',
+          N'remote admin connections',
+          N'Database Mail XPs',
+          N'Agent XPs',
+          N'Ad Hoc Distributed Queries',
+          N'blocked process threshold (s)',
+          N'default trace enabled',
+          N'lightweight pooling',
+          N'fill factor (%)',
+          N'max worker threads',
+          N'remote query timeout (s)',
+          N'user connections',
+          N'contained database authentication',
+          N'priority boost',
+          N'network packet size (B)',
+          N'scan for startup procs'
+      );
+
+  - query_name: mssql_instance_ifi
+    query: |
+      DECLARE @sql nvarchar(max);
+
+      SET @sql = N'
+      SELECT
+          LEFT(ISNULL(s.servicename, N''''), 128) AS service_name,
+          CAST(
+              CASE
+                  WHEN s.instant_file_initialization_enabled = N''Y'' THEN 1
+                  WHEN s.instant_file_initialization_enabled = N''N'' THEN 0
+                  ELSE -1
+              END AS float
+          ) AS ifi_enabled
+      FROM sys.dm_server_services AS s WITH (NOLOCK)
+      WHERE s.servicename LIKE N''SQL Server (%''
+        AND s.servicename NOT LIKE N''SQL Server Agent%''
+        AND s.servicename NOT LIKE N''SQL Server Full-Text%''
+        AND s.servicename NOT LIKE N''SQL Server Launchpad%''
+        AND s.servicename NOT LIKE N''SQL Server PolyBase%'';';
+
+      BEGIN TRY
+          EXEC sys.sp_executesql @sql;
+      END TRY
+      BEGIN CATCH
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS service_name,
+              CAST(-1 AS float) AS ifi_enabled;
+      END CATCH;
+
+  - query_name: mssql_instance_uptime
+    query: |
+      SELECT
+          CAST(DATEDIFF(second, N'19700101', GETUTCDATE()) AS float)
+            - CAST(DATEDIFF(second, sqlserver_start_time, GETDATE()) AS float) AS start_unix,
+          CAST(DATEDIFF(second, sqlserver_start_time, GETDATE()) AS float) AS uptime_seconds
+      FROM sys.dm_os_sys_info WITH (NOLOCK);
+
+  - query_name: mssql_instance_trace_flags
+    query: |
+      IF OBJECT_ID(N'tempdb..#mssql_instance_tf') IS NOT NULL
+          DROP TABLE #mssql_instance_tf;
+
+      CREATE TABLE #mssql_instance_tf (
+          TraceFlag int NOT NULL,
+          Status int NULL,
+          Global int NULL,
+          Session int NULL
+      );
+
+      BEGIN TRY
+          INSERT INTO #mssql_instance_tf (TraceFlag, Status, Global, Session)
+          EXEC (N'DBCC TRACESTATUS(-1) WITH NO_INFOMSGS');
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      SELECT
+          CAST(TraceFlag AS nvarchar(20)) AS trace_flag,
+          CAST(CASE WHEN Status = 1 THEN 1 ELSE 0 END AS float) AS is_enabled
+      FROM #mssql_instance_tf
+      WHERE Global = 1;

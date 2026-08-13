@@ -1,0 +1,110 @@
+# SQL Server process CPU vs system idle / other — from ring buffer.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_cpu
+
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_cpu_sqlserver_process_percent
+    type: gauge
+    help: 'SQL Server process CPU percent (ring buffer).'
+    values: [sqlserver_process_cpu]
+    query_ref: mssql_cpu_ring_buffer
+
+  - metric_name: mssql_cpu_system_idle_percent
+    type: gauge
+    help: 'System idle CPU percent (ring buffer).'
+    values: [system_idle_cpu]
+    query_ref: mssql_cpu_ring_buffer
+
+  - metric_name: mssql_cpu_other_process_percent
+    type: gauge
+    help: 'Other process CPU percent (ring buffer).'
+    values: [other_process_cpu]
+    query_ref: mssql_cpu_ring_buffer
+
+  - metric_name: mssql_cpu_signal_wait_percent
+    type: gauge
+    help: 'Signal wait percent of non-benign waits (CPU pressure indicator; benign idle waits excluded).'
+    values: [signal_wait_percent]
+    query_ref: mssql_cpu_signal_waits
+
+queries:
+  - query_name: mssql_cpu_ring_buffer
+    query: |
+      -- ProcessUtilization can exceed 100 on large physical hosts (many logical CPUs).
+      -- Clamp SQL CPU to [0, 100 - SystemIdle] so values stay a real host percentage.
+      ;WITH utilization_cte AS (
+          SELECT TOP (1)
+              record.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS sqlserver_process_cpu_raw,
+              record.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS system_idle_cpu
+          FROM (
+              SELECT CONVERT(xml, record) AS record
+              FROM sys.dm_os_ring_buffers WITH (NOLOCK)
+              WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR'
+                AND record LIKE N'%<SystemHealth>%'
+          ) AS x
+          ORDER BY record.value('(./Record/@id)[1]', 'int') DESC
+      ),
+      normalized AS (
+          SELECT
+              system_idle_cpu,
+              CASE
+                  WHEN sqlserver_process_cpu_raw IS NULL THEN NULL
+                  WHEN sqlserver_process_cpu_raw < 0 THEN 0
+                  WHEN sqlserver_process_cpu_raw > (100 - system_idle_cpu) THEN (100 - system_idle_cpu)
+                  WHEN sqlserver_process_cpu_raw > 100 THEN 100
+                  ELSE sqlserver_process_cpu_raw
+              END AS sqlserver_process_cpu
+          FROM utilization_cte
+      )
+      SELECT
+          CAST(sqlserver_process_cpu AS float) AS sqlserver_process_cpu,
+          CAST(system_idle_cpu AS float) AS system_idle_cpu,
+          CAST(
+              CASE
+                  WHEN (100 - system_idle_cpu - sqlserver_process_cpu) < 0 THEN 0
+                  ELSE (100 - system_idle_cpu - sqlserver_process_cpu)
+              END AS float
+          ) AS other_process_cpu
+      FROM normalized;
+
+  - query_name: mssql_cpu_signal_waits
+    query: |
+      -- Benign wait exclusion aligned with mssql_waits collector.
+      SELECT
+          CAST(
+            100.0 * SUM(signal_wait_time_ms) / NULLIF(SUM(wait_time_ms), 0)
+            AS float
+          ) AS signal_wait_percent
+      FROM sys.dm_os_wait_stats WITH (NOLOCK)
+      WHERE wait_time_ms > 0
+        AND wait_type NOT IN (
+          N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',
+          N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE',
+          N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE',
+          N'DBMIRROR_DBM_EVENT', N'DBMIRROR_EVENTS_QUEUE', N'DBMIRROR_WORKER_QUEUE',
+          N'DBMIRRORING_CMD', N'DIRTY_PAGE_POLL', N'DISPATCHER_QUEUE_SEMAPHORE',
+          N'EXECSYNC', N'FSAGENT', N'FT_IFTS_SCHEDULER_IDLE_WAIT', N'FT_IFTSHC_MUTEX',
+          N'HADR_CLUSAPI_CALL', N'HADR_FILESTREAM_IOMGR_IOCOMPLETION', N'HADR_LOGCAPTURE_WAIT',
+          N'HADR_NOTIFICATION_DEQUEUE', N'HADR_TIMER_TASK', N'HADR_WORK_QUEUE',
+          N'KSOURCE_WAKEUP', N'LAZYWRITER_SLEEP', N'LOGMGR_QUEUE',
+          N'MEMORY_ALLOCATION_EXT', N'ONDEMAND_TASK_QUEUE',
+          N'PARALLEL_REDO_DRAIN_WORKER', N'PARALLEL_REDO_LOG_CACHE', N'PARALLEL_REDO_TRAN_LIST',
+          N'PARALLEL_REDO_WORKER_SYNC', N'PARALLEL_REDO_WORKER_WAIT_WORK',
+          N'PREEMPTIVE_XE_GETTARGETSTATE', N'PWAIT_ALL_COMPONENTS_INITIALIZED',
+          N'PWAIT_DIRECTLOGCONSUMER_GETNEXT', N'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP',
+          N'QDS_ASYNC_QUEUE', N'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
+          N'QDS_SHUTDOWN_QUEUE', N'REDO_THREAD_PENDING_WORK', N'REQUEST_FOR_DEADLOCK_SEARCH',
+          N'RESOURCE_QUEUE', N'SERVER_IDLE_CHECK', N'SLEEP_BPOOL_FLUSH', N'SLEEP_DBSTARTUP',
+          N'SLEEP_DCOMSTARTUP', N'SLEEP_MASTERDBREADY', N'SLEEP_MASTERMDREADY',
+          N'SLEEP_MASTERUPGRADED', N'SLEEP_MSDBSTARTUP', N'SLEEP_SYSTEMTASK', N'SLEEP_TASK',
+          N'SLEEP_TEMPDBSTARTUP', N'SNI_HTTP_ACCEPT', N'SP_SERVER_DIAGNOSTICS_SLEEP',
+          N'SQLTRACE_BUFFER_FLUSH', N'SQLTRACE_INCREMENTAL_FLUSH_SLEEP',
+          N'SQLTRACE_WAIT_ENTRIES', N'WAIT_FOR_RESULTS', N'WAITFOR', N'WAITFOR_TASKSHUTDOWN',
+          N'WAIT_XTP_RECOVERY', N'WAIT_XTP_HOST_WAIT', N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
+          N'WAIT_XTP_CKPT_CLOSE', N'XE_DISPATCHER_JOIN', N'XE_DISPATCHER_WAIT', N'XE_TIMER_EVENT',
+          N'SOS_WORK_DISPATCHER'
+        );

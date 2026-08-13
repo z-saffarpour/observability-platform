@@ -1,0 +1,69 @@
+# P0 — Critical Always On / WSFC / FCI
+groups:
+  - name: sql_exporter.p0.hadr
+    interval: 30s
+    rules:
+      - alert: SqlAlwaysOnReplicaUnhealthy
+        expr: mssql_alwayson_replica_db_synchronization_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: hadr
+          collector: mssql_alwayson
+        annotations:
+          summary: "Always On replica database is unhealthy"
+          description: "Synchronization health is NOT_HEALTHY for {{ $labels.db }} on {{ $labels.replica }}."
+          runbook: "Check AG dashboard, redo/send queues, suspended DBs, and WSFC/network health."
+
+      - alert: SqlHadrClusterQuorumNotNormal
+        expr: mssql_hadr_cluster_quorum_state != 1
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: hadr
+          collector: mssql_hadr_cluster
+        annotations:
+          summary: "WSFC quorum is not normal"
+          description: "Cluster {{ $labels.cluster_name }} quorum_state={{ $value }} ({{ $labels.quorum_state_desc }})."
+          runbook: "Inspect Failover Cluster Manager / Get-ClusterQuorum. Confirm node and witness status."
+
+      - alert: SqlHadrClusterMemberDown
+        expr: mssql_hadr_cluster_member_state != 1
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: hadr
+          collector: mssql_hadr_cluster
+        annotations:
+          summary: "WSFC cluster member is not up"
+          description: "Member {{ $labels.member_name }} ({{ $labels.member_type_desc }}) state={{ $value }} ({{ $labels.member_state_desc }})."
+          runbook: "Check cluster node / witness health and network connectivity."
+
+      - alert: SqlHadrListenerIpNotOnline
+        expr: mssql_hadr_listener_ip_state != 0
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: hadr
+          collector: mssql_hadr_cluster
+        annotations:
+          summary: "AG listener IP is not ONLINE"
+          description: "Listener {{ $labels.dns_name }} IP {{ $labels.ip_address }} state={{ $value }} ({{ $labels.state_desc }}) on AG {{ $labels.availability_group_name }}."
+          runbook: "Validate listener resource, IP ownership, and DNS after failover."
+
+      - alert: SqlHadrFciNodeNotUp
+        expr: mssql_hadr_fci_node_status != 0
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: hadr
+          collector: mssql_hadr_cluster
+        annotations:
+          summary: "FCI cluster node is not up"
+          description: "Node {{ $labels.node_name }} status={{ $value }} ({{ $labels.status_description }})."
+          runbook: "Inspect FCI node status and SQL Server resource group online state."

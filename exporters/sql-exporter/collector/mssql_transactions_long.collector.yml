@@ -1,0 +1,99 @@
+# Long-running open transactions.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_transactions_long
+
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_long_transaction_seconds
+    type: gauge
+    help: 'Open user transactions older than 30 seconds.'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - host_name
+      - status
+      - transaction_type
+      - transaction_state
+      - name
+    values: [open_seconds]
+    query_ref: mssql_long_transactions
+
+  - metric_name: mssql_long_transaction_count
+    type: gauge
+    help: 'Count of open user transactions older than 30 seconds.'
+    values: [long_tran_count]
+    query_ref: mssql_long_transaction_count
+
+  - metric_name: mssql_active_transactions_per_db
+    type: gauge
+    help: 'Active transactions counter per database (perf counter).'
+    key_labels:
+      - db
+    values: [cntr_value]
+    query_ref: mssql_active_transactions_counter
+
+queries:
+  - query_name: mssql_long_transactions
+    query: |
+      SELECT TOP (80)
+          CAST(s.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(s.database_id), N'') AS db,
+          ISNULL(s.login_name, N'') AS login_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          LEFT(ISNULL(s.host_name, N''), 64) AS host_name,
+          LOWER(ISNULL(s.status, N'')) AS status,
+          CASE at.transaction_type
+              WHEN 1 THEN N'read_write'
+              WHEN 2 THEN N'read_only'
+              WHEN 3 THEN N'system'
+              WHEN 4 THEN N'distributed'
+              ELSE CAST(at.transaction_type AS nvarchar(20))
+          END AS transaction_type,
+          CASE at.transaction_state
+              WHEN 0 THEN N'initializing'
+              WHEN 1 THEN N'initialized'
+              WHEN 2 THEN N'active'
+              WHEN 3 THEN N'ended'
+              WHEN 4 THEN N'commit_started'
+              WHEN 5 THEN N'prepared'
+              WHEN 6 THEN N'committed'
+              WHEN 7 THEN N'rolling_back'
+              WHEN 8 THEN N'rolled_back'
+              ELSE CAST(at.transaction_state AS nvarchar(20))
+          END AS transaction_state,
+          LEFT(ISNULL(at.name, N''), 64) AS name,
+          CAST(DATEDIFF(SECOND, at.transaction_begin_time, GETDATE()) AS float) AS open_seconds
+      FROM sys.dm_tran_active_transactions AS at WITH (NOLOCK)
+      INNER JOIN sys.dm_tran_session_transactions AS st WITH (NOLOCK)
+          ON at.transaction_id = st.transaction_id
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON st.session_id = s.session_id
+      WHERE s.is_user_process = 1
+        AND DATEDIFF(SECOND, at.transaction_begin_time, GETDATE()) >= 30
+      ORDER BY open_seconds DESC;
+
+  - query_name: mssql_long_transaction_count
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS long_tran_count
+      FROM sys.dm_tran_active_transactions AS at WITH (NOLOCK)
+      INNER JOIN sys.dm_tran_session_transactions AS st WITH (NOLOCK)
+          ON at.transaction_id = st.transaction_id
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON st.session_id = s.session_id
+      WHERE s.is_user_process = 1
+        AND DATEDIFF(SECOND, at.transaction_begin_time, GETDATE()) >= 30;
+
+  - query_name: mssql_active_transactions_counter
+    query: |
+      SELECT
+          RTRIM(instance_name) AS db,
+          CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = N'Active Transactions'
+        AND object_name LIKE N'%:Databases%'
+        AND instance_name NOT IN (N'_Total', N'mssqlsystemresource');

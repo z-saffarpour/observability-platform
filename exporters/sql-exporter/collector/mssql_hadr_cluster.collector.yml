@@ -1,0 +1,292 @@
+# AG Listener + WSFC / FCI cluster health.
+#
+# Complements mssql_alwayson (replica lag/sync) with:
+#   - Availability Group listeners (DNS, port, IP online/offline)
+#   - WSFC quorum and cluster member states (via HADR DMVs)
+#   - Failover Cluster Instance node ownership / status
+#
+# Safe when AG / WSFC / FCI are absent (empty result sets or 0 flags).
+#
+# Permissions: VIEW SERVER STATE, VIEW ANY DEFINITION
+#
+collector_name: mssql_hadr_cluster
+
+min_interval: 30s
+
+metrics:
+  # -------------------------------------------------------------------------
+  # Instance HADR / FCI flags (always one row)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_hadr_is_clustered
+    type: gauge
+    help: '1 if this SQL Server instance is a Failover Cluster Instance (SERVERPROPERTY IsClustered).'
+    values: [is_clustered]
+    query_ref: mssql_hadr_instance_flags
+
+  - metric_name: mssql_hadr_is_hadr_enabled
+    type: gauge
+    help: '1 if Always On Availability Groups is enabled (SERVERPROPERTY IsHadrEnabled).'
+    values: [is_hadr_enabled]
+    query_ref: mssql_hadr_instance_flags
+
+  # -------------------------------------------------------------------------
+  # WSFC cluster (sys.dm_hadr_cluster*)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_hadr_cluster_quorum_state
+    type: gauge
+    help: 'WSFC quorum_state (0=unknown quorum, 1=normal quorum, 2=forced quorum).'
+    key_labels:
+      - cluster_name
+      - quorum_type_desc
+      - quorum_state_desc
+    values: [quorum_state]
+    query_ref: mssql_hadr_cluster
+
+  - metric_name: mssql_hadr_cluster_quorum_type
+    type: gauge
+    help: 'WSFC quorum_type (0=node majority, 1=node+disk, 2=node+file share, 3=no majority disk only, 4=unknown).'
+    key_labels:
+      - cluster_name
+      - quorum_type_desc
+      - quorum_state_desc
+    values: [quorum_type]
+    query_ref: mssql_hadr_cluster
+
+  - metric_name: mssql_hadr_cluster_member_state
+    type: gauge
+    help: 'WSFC cluster member_state (0=unknown, 1=up, 2=down, 3=isolated/quarantined).'
+    key_labels:
+      - cluster_name
+      - member_name
+      - member_type_desc
+      - member_state_desc
+    values: [member_state]
+    query_ref: mssql_hadr_cluster_members
+
+  - metric_name: mssql_hadr_cluster_member_quorum_votes
+    type: gauge
+    help: 'Number of quorum votes contributed by this WSFC cluster member.'
+    key_labels:
+      - cluster_name
+      - member_name
+      - member_type_desc
+      - member_state_desc
+    values: [number_of_quorum_votes]
+    query_ref: mssql_hadr_cluster_members
+
+  # -------------------------------------------------------------------------
+  # AG listeners
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_hadr_listener_info
+    type: gauge
+    help: '1 per Availability Group listener IP (inventory / presence).'
+    key_labels:
+      - availability_group_name
+      - dns_name
+      - ip_address
+      - is_conformant
+    values: [info]
+    query_ref: mssql_hadr_listeners
+
+  - metric_name: mssql_hadr_listener_port
+    type: gauge
+    help: 'TCP port of the Availability Group listener.'
+    key_labels:
+      - availability_group_name
+      - dns_name
+      - ip_address
+    values: [port]
+    query_ref: mssql_hadr_listeners
+
+  - metric_name: mssql_hadr_listener_ip_state
+    type: gauge
+    help: 'AG listener IP state (0=ONLINE, 1=OFFLINE, 2=ONLINE_PENDING, 3=ONLINE_FAILED, -1=unknown/fallback from listener config).'
+    key_labels:
+      - availability_group_name
+      - dns_name
+      - ip_address
+      - state_desc
+      - is_dhcp
+    values: [ip_state]
+    query_ref: mssql_hadr_listener_ips
+
+  # -------------------------------------------------------------------------
+  # FCI nodes (sys.dm_os_cluster_nodes)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_hadr_fci_node_status
+    type: gauge
+    help: 'FCI cluster node status (0=up, 1=down, 2=paused, 3=joining, -1=unknown).'
+    key_labels:
+      - node_name
+      - status_description
+    values: [status]
+    query_ref: mssql_hadr_fci_nodes
+
+  - metric_name: mssql_hadr_fci_is_current_owner
+    type: gauge
+    help: '1 if this FCI node currently owns the SQL Server clustered resource.'
+    key_labels:
+      - node_name
+      - status_description
+    values: [is_current_owner]
+    query_ref: mssql_hadr_fci_nodes
+
+queries:
+  - query_name: mssql_hadr_instance_flags
+    query: |
+      SELECT
+          CAST(ISNULL(SERVERPROPERTY(N'IsClustered'), 0) AS float) AS is_clustered,
+          CAST(ISNULL(SERVERPROPERTY(N'IsHadrEnabled'), 0) AS float) AS is_hadr_enabled;
+
+  - query_name: mssql_hadr_cluster
+    query: |
+      IF OBJECT_ID(N'sys.dm_hadr_cluster', N'V') IS NULL
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS cluster_name,
+              CAST(N'' AS nvarchar(60)) AS quorum_type_desc,
+              CAST(N'' AS nvarchar(60)) AS quorum_state_desc,
+              CAST(NULL AS float) AS quorum_type,
+              CAST(NULL AS float) AS quorum_state
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(cluster_name, N'') AS cluster_name,
+              ISNULL(quorum_type_desc, N'') AS quorum_type_desc,
+              ISNULL(quorum_state_desc, N'') AS quorum_state_desc,
+              CAST(ISNULL(quorum_type, -1) AS float) AS quorum_type,
+              CAST(ISNULL(quorum_state, -1) AS float) AS quorum_state
+          FROM sys.dm_hadr_cluster;
+      END
+
+  - query_name: mssql_hadr_cluster_members
+    query: |
+      IF OBJECT_ID(N'sys.dm_hadr_cluster_members', N'V') IS NULL
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS cluster_name,
+              CAST(N'' AS nvarchar(128)) AS member_name,
+              CAST(N'' AS nvarchar(60)) AS member_type_desc,
+              CAST(N'' AS nvarchar(60)) AS member_state_desc,
+              CAST(NULL AS float) AS member_state,
+              CAST(NULL AS float) AS number_of_quorum_votes
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(c.cluster_name, N'') AS cluster_name,
+              ISNULL(m.member_name, N'') AS member_name,
+              ISNULL(m.member_type_desc, N'') AS member_type_desc,
+              ISNULL(m.member_state_desc, N'') AS member_state_desc,
+              CAST(ISNULL(m.member_state, -1) AS float) AS member_state,
+              CAST(ISNULL(m.number_of_quorum_votes, 0) AS float) AS number_of_quorum_votes
+          FROM sys.dm_hadr_cluster_members AS m
+          CROSS JOIN sys.dm_hadr_cluster AS c;
+      END
+
+  - query_name: mssql_hadr_listeners
+    query: |
+      IF OBJECT_ID(N'sys.availability_group_listeners', N'V') IS NULL
+         OR NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(256)) AS availability_group_name,
+              CAST(N'' AS nvarchar(63)) AS dns_name,
+              CAST(N'' AS nvarchar(128)) AS ip_address,
+              CAST(N'' AS nvarchar(5)) AS is_conformant,
+              CAST(NULL AS float) AS port,
+              CAST(NULL AS float) AS info
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(ag.name, N'') AS availability_group_name,
+              ISNULL(agl.dns_name, N'') AS dns_name,
+              CASE
+                WHEN lip.ip_address IS NOT NULL AND lip.ip_address <> N''
+                  THEN lip.ip_address
+                WHEN agl.ip_configuration_string_from_cluster IS NOT NULL
+                 AND agl.ip_configuration_string_from_cluster <> N''
+                  THEN LEFT(agl.ip_configuration_string_from_cluster, 128)
+                WHEN ISNULL(lip.is_dhcp, 0) = 1
+                  THEN N'(dhcp)'
+                ELSE N'(unknown)'
+              END AS ip_address,
+              CAST(ISNULL(agl.is_conformant, 0) AS nvarchar(5)) AS is_conformant,
+              CAST(ISNULL(agl.port, 0) AS float) AS port,
+              CAST(1 AS float) AS info
+          FROM sys.availability_group_listeners AS agl
+          INNER JOIN sys.availability_groups AS ag
+              ON agl.group_id = ag.group_id
+          LEFT JOIN sys.availability_group_listener_ip_addresses AS lip
+              ON lip.listener_id = agl.listener_id;
+      END
+
+  - query_name: mssql_hadr_listener_ips
+    query: |
+      IF OBJECT_ID(N'sys.availability_group_listeners', N'V') IS NULL
+         OR NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(256)) AS availability_group_name,
+              CAST(N'' AS nvarchar(63)) AS dns_name,
+              CAST(N'' AS nvarchar(128)) AS ip_address,
+              CAST(N'' AS nvarchar(60)) AS state_desc,
+              CAST(N'' AS nvarchar(5)) AS is_dhcp,
+              CAST(NULL AS float) AS ip_state
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          -- Prefer sys.availability_group_listener_ip_addresses; fall back to
+          -- ip_configuration_string_from_cluster when IP rows are missing/NULL
+          -- (common with DHCP or when the IP catalog is empty). Never emit an
+          -- empty ip_address label — sql_exporter/Prometheus drop those series.
+          SELECT
+              ISNULL(ag.name, N'') AS availability_group_name,
+              ISNULL(agl.dns_name, N'') AS dns_name,
+              CASE
+                WHEN lip.ip_address IS NOT NULL AND lip.ip_address <> N''
+                  THEN lip.ip_address
+                WHEN agl.ip_configuration_string_from_cluster IS NOT NULL
+                 AND agl.ip_configuration_string_from_cluster <> N''
+                  THEN LEFT(agl.ip_configuration_string_from_cluster, 128)
+                WHEN ISNULL(lip.is_dhcp, 0) = 1
+                  THEN N'(dhcp)'
+                ELSE N'(unknown)'
+              END AS ip_address,
+              ISNULL(NULLIF(lip.state_desc, N''), N'UNKNOWN') AS state_desc,
+              CAST(ISNULL(lip.is_dhcp, 0) AS nvarchar(5)) AS is_dhcp,
+              CAST(COALESCE(lip.state, -1) AS float) AS ip_state
+          FROM sys.availability_group_listeners AS agl
+          INNER JOIN sys.availability_groups AS ag
+              ON agl.group_id = ag.group_id
+          LEFT JOIN sys.availability_group_listener_ip_addresses AS lip
+              ON lip.listener_id = agl.listener_id;
+      END
+
+  - query_name: mssql_hadr_fci_nodes
+    query: |
+      IF OBJECT_ID(N'sys.dm_os_cluster_nodes', N'V') IS NULL
+         OR ISNULL(SERVERPROPERTY(N'IsClustered'), 0) = 0
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS node_name,
+              CAST(N'' AS nvarchar(60)) AS status_description,
+              CAST(NULL AS float) AS status,
+              CAST(NULL AS float) AS is_current_owner
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(NodeName, N'') AS node_name,
+              ISNULL(status_description, N'') AS status_description,
+              CAST(ISNULL(status, -1) AS float) AS status,
+              CAST(ISNULL(is_current_owner, 0) AS float) AS is_current_owner
+          FROM sys.dm_os_cluster_nodes;
+      END

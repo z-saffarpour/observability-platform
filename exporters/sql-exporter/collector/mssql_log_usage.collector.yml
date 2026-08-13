@@ -1,0 +1,64 @@
+# Transaction log usage — shared for DWH and OLTP.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_log_usage
+
+# Light query; 60s is enough on busy hosts.
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_log_used_percent
+    type: gauge
+    help: 'Transaction log used percent per database.'
+    key_labels:
+      - db
+      - log_reuse_wait_desc
+      - recovery_model_desc
+    values: [used_percent]
+    query_ref: mssql_log_space
+
+  - metric_name: mssql_log_used_mb
+    type: gauge
+    help: 'Transaction log used size (MB) per database.'
+    key_labels:
+      - db
+      - log_reuse_wait_desc
+      - recovery_model_desc
+    values: [used_mb]
+    query_ref: mssql_log_space
+
+  - metric_name: mssql_log_total_mb
+    type: gauge
+    help: 'Transaction log total size (MB) per database.'
+    key_labels:
+      - db
+      - log_reuse_wait_desc
+      - recovery_model_desc
+    values: [total_mb]
+    query_ref: mssql_log_space
+
+queries:
+  - query_name: mssql_log_space
+    query: |
+      SELECT
+          RTRIM(pc_pct.instance_name) AS db,
+          ISNULL(d.log_reuse_wait_desc, N'') AS log_reuse_wait_desc,
+          ISNULL(d.recovery_model_desc, N'') AS recovery_model_desc,
+          CAST(pc_pct.cntr_value AS float) AS used_percent,
+          CAST(pc_used.cntr_value AS float) / 1024.0 AS used_mb,
+          CAST(pc_size.cntr_value AS float) / 1024.0 AS total_mb
+      FROM sys.dm_os_performance_counters AS pc_pct WITH (NOLOCK)
+      INNER JOIN sys.dm_os_performance_counters AS pc_used WITH (NOLOCK)
+          ON pc_used.object_name = pc_pct.object_name
+         AND pc_used.instance_name = pc_pct.instance_name
+         AND pc_used.counter_name = N'Log File(s) Used Size (KB)'
+      INNER JOIN sys.dm_os_performance_counters AS pc_size WITH (NOLOCK)
+          ON pc_size.object_name = pc_pct.object_name
+         AND pc_size.instance_name = pc_pct.instance_name
+         AND pc_size.counter_name = N'Log File(s) Size (KB)'
+      LEFT JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.name = RTRIM(pc_pct.instance_name)
+      WHERE pc_pct.counter_name = N'Percent Log Used'
+        AND pc_pct.instance_name NOT IN (N'_Total', N'mssqlsystemresource')
+        AND pc_pct.object_name LIKE N'%:Databases%';

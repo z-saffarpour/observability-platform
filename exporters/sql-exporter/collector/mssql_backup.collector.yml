@@ -1,0 +1,343 @@
+# Database backup freshness and size (msdb.dbo.backupset).
+# backupset lookback for AGE / last-backup metrics is a rolling 400-day window
+# (DATEADD(DAY, -400, GETDATE())) so monthly Full backups older than 90 days
+# are not reported as "never". Shorter windows remain for today/7d/24h metrics.
+# Jobs → mssql_job_inventory / mssql_job_running / mssql_job_history
+#
+# GRANT SELECT ON msdb.dbo.backupset TO
+# GRANT SELECT ON msdb.dbo.sysjobs / sysjobsteps / sysjobhistory / syscategories TO
+#
+collector_name: mssql_backup
+
+min_interval: 900s
+
+metrics:
+  - metric_name: mssql_recent_backup
+    type: gauge
+    help: 'Unix epoch of last Full/Diff/Log backup per database (0 = never).'
+    key_labels:
+      - db
+    value_label: operation
+    values:
+      - last_full_backup_datetime
+      - last_diff_backup_datetime
+      - last_log_backup_datetime
+    query_ref: mssql_recent_backup
+
+  - metric_name: mssql_backup_age_seconds
+    type: gauge
+    help: 'Seconds since last backup by type. -1 = never backed up (or log N/A for SIMPLE). is_read_only=1 → monthly Full policy.'
+    key_labels:
+      - db
+      - backup_type
+      - recovery_model
+      - is_read_only
+    values: [age_seconds]
+    query_ref: mssql_backup_age
+
+  - metric_name: mssql_backup_size_bytes
+    type: gauge
+    help: 'Size in bytes of the most recent backup by type (0 if none).'
+    key_labels:
+      - db
+      - backup_type
+    values: [backup_size_bytes]
+    query_ref: mssql_backup_size
+
+  - metric_name: mssql_backup_log_size_today_bytes
+    type: gauge
+    help: 'Sum of transaction-log backup sizes (bytes) finished today (local calendar day) per database.'
+    key_labels:
+      - db
+    values: [log_size_today_bytes]
+    query_ref: mssql_backup_log_size_today
+
+  - metric_name: mssql_backup_damaged_7d
+    type: gauge
+    help: 'Damaged backupset rows (is_damaged=1) in last 7 days by database and type.'
+    key_labels:
+      - db
+      - backup_type
+    values: [damaged_count]
+    query_ref: mssql_backup_damaged
+
+  - metric_name: mssql_backup_job_failed_24h
+    type: gauge
+    help: 'Failed SQL Agent job outcomes (24h) for jobs that contain a BACKUP step.'
+    key_labels:
+      - job_name
+      - category_name
+    values: [failed_count]
+    query_ref: mssql_backup_job_failed
+
+  - metric_name: mssql_backup_job_failed_total_24h
+    type: gauge
+    help: 'Total failed backup-related Agent job outcomes in last 24h.'
+    values: [failed_count]
+    query_ref: mssql_backup_job_failed_total
+
+  - metric_name: mssql_backup_throughput_mb_s
+    type: gauge
+    help: 'Throughput of the most recent backup by type (MB/s).'
+    key_labels:
+      - db
+      - backup_type
+    values: [throughput_mb_s]
+    query_ref: mssql_backup_recent_performance
+
+  - metric_name: mssql_backup_compression_ratio
+    type: gauge
+    help: 'backup_size / compressed_backup_size for the most recent backup by type.'
+    key_labels:
+      - db
+      - backup_type
+    values: [compression_ratio]
+    query_ref: mssql_backup_recent_performance
+
+  - metric_name: mssql_backup_verify_failed_count
+    type: gauge
+    help: 'Failed VERIFYONLY-related SQL Agent outcomes in last 24h.'
+    values: [failed_count]
+    query_ref: mssql_backup_verify_failed
+
+queries:
+  - query_name: mssql_backup_recent_performance
+    query: |
+      ;WITH ranked AS
+      (
+        SELECT
+            database_name,
+            CASE type WHEN 'D' THEN N'full' WHEN 'I' THEN N'diff' WHEN 'L' THEN N'log' END AS backup_type,
+            CAST(backup_size AS float) AS backup_size_bytes,
+            CAST(ISNULL(compressed_backup_size, 0) AS float) AS compressed_backup_size_bytes,
+            backup_start_date,
+            backup_finish_date,
+            ROW_NUMBER() OVER (
+              PARTITION BY database_name, type
+              ORDER BY backup_finish_date DESC
+            ) AS rn
+        FROM msdb.dbo.backupset WITH (NOLOCK)
+        WHERE type IN ('D', 'I', 'L')
+          AND backup_finish_date >= DATEADD(DAY, -400, GETDATE())
+      )
+      SELECT
+          database_name AS db,
+          backup_type,
+          CAST(
+            CASE
+              WHEN DATEDIFF(SECOND, backup_start_date, backup_finish_date) <= 0 THEN 0
+              ELSE (backup_size_bytes / 1048576.0)
+                   / CAST(DATEDIFF(SECOND, backup_start_date, backup_finish_date) AS float)
+            END AS float
+          ) AS throughput_mb_s,
+          CAST(
+            CASE
+              WHEN compressed_backup_size_bytes <= 0 THEN 0
+              ELSE backup_size_bytes / compressed_backup_size_bytes
+            END AS float
+          ) AS compression_ratio
+      FROM ranked
+      WHERE rn = 1;
+
+  - query_name: mssql_backup_verify_failed
+    query: |
+      ;WITH verify_jobs AS
+      (
+        SELECT DISTINCT j.job_id
+        FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+        INNER JOIN msdb.dbo.sysjobsteps AS s WITH (NOLOCK)
+            ON j.job_id = s.job_id
+        WHERE s.command LIKE N'%VERIFYONLY%'
+      )
+      SELECT CAST(COUNT(*) AS float) AS failed_count
+      FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND h.job_id IN (SELECT job_id FROM verify_jobs)
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -24, GETDATE());
+
+  - query_name: mssql_recent_backup
+    query: |
+      WITH myRecentBackup AS
+      (
+        SELECT
+            database_name AS [Database],
+            MAX(backup_finish_date) AS LastBackupDatetime,
+            CASE type
+              WHEN 'D' THEN 'Full'
+              WHEN 'I' THEN 'Differential'
+              WHEN 'L' THEN 'Transaction Log'
+            END AS Type
+        FROM msdb.dbo.backupset WITH (NOLOCK)
+        WHERE type IN ('D', 'I', 'L')
+          AND backup_finish_date >= DATEADD(DAY, -400, GETDATE())
+        GROUP BY database_name, type
+      )
+      SELECT
+          myDatabase.name AS db,
+          ISNULL(DATEDIFF(SECOND, {d '1970-01-01'}, myFullBackup.LastBackupDatetime), 0) AS [last_full_backup_datetime],
+          ISNULL(DATEDIFF(SECOND, {d '1970-01-01'}, myDiffBackup.LastBackupDatetime), 0) AS [last_diff_backup_datetime],
+          ISNULL(DATEDIFF(SECOND, {d '1970-01-01'}, myLogBackup.LastBackupDatetime), 0) AS [last_log_backup_datetime]
+      FROM sys.databases AS myDatabase
+      LEFT JOIN myRecentBackup AS myFullBackup
+          ON myDatabase.name = myFullBackup.[Database] AND myFullBackup.Type = 'Full'
+      LEFT JOIN myRecentBackup AS myDiffBackup
+          ON myDatabase.name = myDiffBackup.[Database] AND myDiffBackup.Type = 'Differential'
+      LEFT JOIN myRecentBackup AS myLogBackup
+          ON myDatabase.name = myLogBackup.[Database] AND myLogBackup.Type = 'Transaction Log'
+      WHERE myDatabase.state = 0
+        AND myDatabase.source_database_id IS NULL
+        AND myDatabase.is_in_standby = 0
+        AND myDatabase.name <> N'tempdb'
+        -- Skip AG secondaries / non-primary replicas (backups run on primary only)
+        AND ISNULL(sys.fn_hadr_is_primary_replica(myDatabase.name), 1) = 1;
+
+  - query_name: mssql_backup_age
+    query: |
+      WITH last_bak AS
+      (
+        SELECT
+            database_name,
+            type,
+            MAX(backup_finish_date) AS last_finish
+        FROM msdb.dbo.backupset WITH (NOLOCK)
+        WHERE type IN ('D', 'I', 'L')
+          AND backup_finish_date >= DATEADD(DAY, -400, GETDATE())
+        GROUP BY database_name, type
+      ),
+      db AS
+      (
+        SELECT
+            name AS db,
+            recovery_model_desc AS recovery_model,
+            CAST(is_read_only AS varchar(1)) AS is_read_only
+        FROM sys.databases
+        WHERE state = 0
+          AND source_database_id IS NULL          -- exclude DB snapshots
+          AND is_in_standby = 0                   -- exclude log-shipping / restore standby
+          AND name <> N'tempdb'
+          -- exclude AlwaysOn secondary replicas (backup expected on primary only)
+          AND ISNULL(sys.fn_hadr_is_primary_replica(name), 1) = 1
+      ),
+      types AS
+      (
+        SELECT N'D' AS type, N'full' AS backup_type
+        UNION ALL SELECT N'I', N'diff'
+        UNION ALL SELECT N'L', N'log'
+      )
+      SELECT
+          d.db,
+          t.backup_type,
+          d.recovery_model,
+          d.is_read_only,
+          CAST(
+            CASE
+              -- Read-only DBs: monthly Full only; Diff/Log not expected
+              WHEN d.is_read_only = N'1' AND t.type IN (N'I', N'L') THEN -1
+              WHEN t.type = N'L' AND d.recovery_model = N'SIMPLE' THEN -1
+              WHEN b.last_finish IS NULL THEN -1
+              ELSE DATEDIFF(SECOND, b.last_finish, GETDATE())
+            END AS float
+          ) AS age_seconds
+      FROM db AS d
+      CROSS JOIN types AS t
+      LEFT JOIN last_bak AS b
+          ON b.database_name = d.db AND b.type = t.type;
+
+  - query_name: mssql_backup_size
+    query: |
+      WITH ranked AS
+      (
+        SELECT
+            database_name,
+            CASE type WHEN 'D' THEN N'full' WHEN 'I' THEN N'diff' WHEN 'L' THEN N'log' END AS backup_type,
+            CAST(backup_size AS float) AS backup_size_bytes,
+            ROW_NUMBER() OVER (
+              PARTITION BY database_name, type
+              ORDER BY backup_finish_date DESC
+            ) AS rn
+        FROM msdb.dbo.backupset WITH (NOLOCK)
+        WHERE type IN ('D', 'I', 'L')
+          AND backup_finish_date >= DATEADD(DAY, -400, GETDATE())
+      )
+      SELECT
+          database_name AS db,
+          backup_type,
+          backup_size_bytes
+      FROM ranked
+      WHERE rn = 1;
+
+  - query_name: mssql_backup_log_size_today
+    query: |
+      SELECT
+          database_name AS db,
+          CAST(SUM(CAST(backup_size AS float)) AS float) AS log_size_today_bytes
+      FROM msdb.dbo.backupset WITH (NOLOCK)
+      WHERE type = N'L'
+        AND backup_finish_date >= CAST(CAST(GETDATE() AS date) AS datetime)
+      GROUP BY database_name;
+
+  - query_name: mssql_backup_damaged
+    query: |
+      SELECT
+          ISNULL(database_name, N'') AS db,
+          CASE type WHEN 'D' THEN N'full' WHEN 'I' THEN N'diff' WHEN 'L' THEN N'log' ELSE N'other' END AS backup_type,
+          CAST(COUNT(*) AS float) AS damaged_count
+      FROM msdb.dbo.backupset WITH (NOLOCK)
+      WHERE is_damaged = 1
+        AND backup_finish_date >= DATEADD(DAY, -7, GETDATE())
+      GROUP BY database_name, type;
+
+  - query_name: mssql_backup_job_failed
+    query: |
+      ;WITH backup_jobs AS
+      (
+        SELECT DISTINCT j.job_id, j.name AS job_name, ISNULL(c.name, N'') AS category_name
+        FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+        INNER JOIN msdb.dbo.sysjobsteps AS s WITH (NOLOCK)
+            ON j.job_id = s.job_id
+        LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+            ON j.category_id = c.category_id
+        WHERE s.command LIKE N'%BACKUP %DATABASE%'
+           OR s.command LIKE N'%BACKUP %LOG%'
+           OR s.subsystem = N'SSIS' AND s.command LIKE N'%[Bb]ackup%'
+      )
+      SELECT
+          bj.job_name,
+          bj.category_name,
+          CAST(COUNT(*) AS float) AS failed_count
+      FROM backup_jobs AS bj
+      INNER JOIN msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+          ON h.job_id = bj.job_id
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -24, GETDATE())
+      GROUP BY bj.job_name, bj.category_name;
+
+  - query_name: mssql_backup_job_failed_total
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS failed_count
+      FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND h.job_id IN (
+            SELECT DISTINCT j.job_id
+            FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+            INNER JOIN msdb.dbo.sysjobsteps AS s WITH (NOLOCK)
+                ON j.job_id = s.job_id
+            WHERE s.command LIKE N'%BACKUP %DATABASE%'
+               OR s.command LIKE N'%BACKUP %LOG%'
+        )
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -24, GETDATE());

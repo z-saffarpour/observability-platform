@@ -1,0 +1,257 @@
+# Per-file I/O latency metrics for Microsoft SQL Server.
+# physical_name is retained for path-based Grafana panels; file_id and logical_name
+# are also labeled for stable identification.
+#
+# It is required that the SQL Server user has the following permissions:
+#
+#   GRANT VIEW SERVER STATE TO
+#   GRANT VIEW ANY DEFINITION TO
+#
+# Auto-loaded via collectors: [mssql_*] and collector_files: ["collector/*.collector.yml"]
+#
+collector_name: mssql_file_io
+
+# Per-file VFS + volume stats can be expensive with many DWH data files.
+min_interval: 180s
+
+metrics:
+  - metric_name: mssql_file_io_stall_read_ms
+    type: gauge
+    help: 'Cumulative IO stall read time (ms) per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [io_stall_read_ms]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_stall_write_ms
+    type: gauge
+    help: 'Cumulative IO stall write time (ms) per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [io_stall_write_ms]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_stall_ms
+    type: gauge
+    help: 'Cumulative IO stall total time (ms) per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [io_stall_ms]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_num_of_reads
+    type: gauge
+    help: 'Cumulative number of reads per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [num_of_reads]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_num_of_writes
+    type: gauge
+    help: 'Cumulative number of writes per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [num_of_writes]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_read_bytes
+    type: gauge
+    help: 'Cumulative bytes read per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [num_of_bytes_read]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_write_bytes
+    type: gauge
+    help: 'Cumulative bytes written per database file.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [num_of_bytes_written]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_avg_read_latency_ms
+    type: gauge
+    help: 'Lifetime average since SQL startup (stall/ops); prefer rate(stall)/rate(ops) for interval latency.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [avg_read_latency_ms]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_file_io_avg_write_latency_ms
+    type: gauge
+    help: 'Lifetime average since SQL startup (stall/ops); prefer rate(stall)/rate(ops) for interval latency.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - volume_mount_point
+    values: [avg_write_latency_ms]
+    query_ref: mssql_file_io_stats
+
+  - metric_name: mssql_volume_total_bytes
+    type: gauge
+    help: 'Volume total bytes for SQL data/log mounts.'
+    key_labels:
+      - volume_mount_point
+    values: [total_bytes]
+    query_ref: mssql_volume_space
+
+  - metric_name: mssql_volume_available_bytes
+    type: gauge
+    help: 'Volume available bytes for SQL data/log mounts.'
+    key_labels:
+      - volume_mount_point
+    values: [available_bytes]
+    query_ref: mssql_volume_space
+
+  - metric_name: mssql_volume_used_percent
+    type: gauge
+    help: 'Volume used percent for SQL data/log mounts.'
+    key_labels:
+      - volume_mount_point
+    values: [used_percent]
+    query_ref: mssql_volume_space
+
+  - metric_name: mssql_file_io_pending_requests
+    type: gauge
+    help: 'Current number of pending IO requests.'
+    values: [pending_requests]
+    query_ref: mssql_file_io_pending
+
+  - metric_name: mssql_file_io_pending_wait_ms
+    type: gauge
+    help: 'Sum of io_pending_ms_ticks for currently pending IO requests (wait time, not bytes).'
+    values: [pending_wait_ms]
+    query_ref: mssql_file_io_pending
+
+  - metric_name: mssql_file_io_read_latency_p95_ms
+    type: gauge
+    help: '95th percentile of per-file average read latency (ms).'
+    values: [read_latency_p95_ms]
+    query_ref: mssql_file_io_latency_p95
+
+  - metric_name: mssql_file_io_write_latency_p95_ms
+    type: gauge
+    help: '95th percentile of per-file average write latency (ms).'
+    values: [write_latency_p95_ms]
+    query_ref: mssql_file_io_latency_p95
+
+queries:
+  - query_name: mssql_file_io_pending
+    query: |
+      SELECT
+          CAST(SUM(CASE WHEN io_pending = 1 THEN 1 ELSE 0 END) AS float) AS pending_requests,
+          CAST(SUM(CASE WHEN io_pending = 1 THEN ISNULL(io_pending_ms_ticks, 0) ELSE 0 END) AS float) AS pending_wait_ms
+      FROM sys.dm_io_pending_io_requests WITH (NOLOCK);
+
+  - query_name: mssql_file_io_latency_p95
+    query: |
+      ;WITH lat AS (
+          SELECT
+              CASE WHEN vfs.num_of_reads = 0 THEN 0
+                   ELSE CAST(vfs.io_stall_read_ms AS float) / vfs.num_of_reads
+              END AS avg_read_latency_ms,
+              CASE WHEN vfs.num_of_writes = 0 THEN 0
+                   ELSE CAST(vfs.io_stall_write_ms AS float) / vfs.num_of_writes
+              END AS avg_write_latency_ms
+          FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS vfs
+      ),
+      p AS (
+          SELECT DISTINCT
+              CAST(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY avg_read_latency_ms) OVER () AS float) AS read_latency_p95_ms,
+              CAST(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY avg_write_latency_ms) OVER () AS float) AS write_latency_p95_ms
+          FROM lat
+      )
+      SELECT TOP (1) read_latency_p95_ms, write_latency_p95_ms
+      FROM p;
+
+  - query_name: mssql_file_io_stats
+    query: |
+      SELECT
+          ISNULL(DB_NAME(vfs.database_id), N'') AS db,
+          CAST(vfs.file_id AS nvarchar(20)) AS file_id,
+          ISNULL(mf.type_desc, N'') AS type_desc,
+          ISNULL(mf.name, N'') AS logical_name,
+          ISNULL(mf.physical_name, N'') AS physical_name,
+          ISNULL(vs.volume_mount_point, N'') AS volume_mount_point,
+          CAST(vfs.io_stall_read_ms AS float) AS io_stall_read_ms,
+          CAST(vfs.io_stall_write_ms AS float) AS io_stall_write_ms,
+          CAST(vfs.io_stall AS float) AS io_stall_ms,
+          CAST(vfs.num_of_reads AS float) AS num_of_reads,
+          CAST(vfs.num_of_writes AS float) AS num_of_writes,
+          CAST(vfs.num_of_bytes_read AS float) AS num_of_bytes_read,
+          CAST(vfs.num_of_bytes_written AS float) AS num_of_bytes_written,
+          CASE WHEN vfs.num_of_reads = 0 THEN 0
+               ELSE CAST(vfs.io_stall_read_ms AS float) / vfs.num_of_reads
+          END AS avg_read_latency_ms,
+          CASE WHEN vfs.num_of_writes = 0 THEN 0
+               ELSE CAST(vfs.io_stall_write_ms AS float) / vfs.num_of_writes
+          END AS avg_write_latency_ms
+      FROM sys.dm_io_virtual_file_stats(NULL, NULL) AS vfs
+      INNER JOIN sys.master_files AS mf WITH (NOLOCK)
+          ON vfs.database_id = mf.database_id
+         AND vfs.file_id = mf.file_id
+      OUTER APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) AS vs;
+
+  - query_name: mssql_volume_space
+    query: |
+      SELECT
+          volume_mount_point,
+          CAST(MAX(total_bytes) AS float) AS total_bytes,
+          CAST(MAX(available_bytes) AS float) AS available_bytes,
+          CASE WHEN MAX(total_bytes) = 0 THEN 0
+               ELSE (1.0 - CAST(MAX(available_bytes) AS float) / CAST(MAX(total_bytes) AS float)) * 100.0
+          END AS used_percent
+      FROM (
+          SELECT DISTINCT
+              vs.volume_mount_point,
+              vs.total_bytes,
+              vs.available_bytes
+          FROM sys.master_files AS mf WITH (NOLOCK)
+          CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) AS vs
+      ) AS v
+      GROUP BY volume_mount_point;

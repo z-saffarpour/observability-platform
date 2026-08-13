@@ -1,0 +1,248 @@
+# Wait stats metrics for Microsoft SQL Server.
+#
+# It is required that the SQL Server user has the following permissions:
+#
+#   GRANT VIEW SERVER STATE TO
+#
+# Auto-loaded via collectors: [mssql_*] and collector_files: ["collector/*.collector.yml"]
+#
+collector_name: mssql_waits
+
+# Cumulative wait stats; 2m is enough and lighter on busy DWH hosts.
+min_interval: 120s
+
+metrics:
+  - metric_name: mssql_wait_time_ms
+    type: gauge
+    help: 'Cumulative wait time (ms) for top wait types (filtered benign waits).'
+    key_labels:
+      - wait_type
+    values: [wait_time_ms]
+    query_ref: mssql_wait_stats
+
+  - metric_name: mssql_wait_waiting_tasks
+    type: gauge
+    help: 'Cumulative waiting tasks count for top wait types.'
+    key_labels:
+      - wait_type
+    values: [waiting_tasks_count]
+    query_ref: mssql_wait_stats
+
+  - metric_name: mssql_wait_signal_time_ms
+    type: gauge
+    help: 'Cumulative signal wait time (ms) for top wait types.'
+    key_labels:
+      - wait_type
+    values: [signal_wait_time_ms]
+    query_ref: mssql_wait_stats
+
+  - metric_name: mssql_wait_resource_time_ms
+    type: gauge
+    help: 'Resource wait time (ms) = wait_time - signal_wait for top wait types.'
+    key_labels:
+      - wait_type
+    values: [resource_wait_time_ms]
+    query_ref: mssql_wait_stats
+
+  - metric_name: mssql_wait_max_time_ms
+    type: gauge
+    help: 'Max wait time (ms) observed for top wait types.'
+    key_labels:
+      - wait_type
+    values: [max_wait_time_ms]
+    query_ref: mssql_wait_stats
+
+  - metric_name: mssql_waits_nonbenign_percent
+    type: gauge
+    help: 'Percent of cumulative wait time that is non-benign.'
+    values: [nonbenign_percent]
+    query_ref: mssql_waits_summary
+
+  - metric_name: mssql_waits_top5_share_percent
+    type: gauge
+    help: 'Share of non-benign wait time contributed by top 5 waits.'
+    values: [top5_share_percent]
+    query_ref: mssql_waits_summary
+
+  - metric_name: mssql_waits_signal_ratio_percent
+    type: gauge
+    help: 'Signal wait ratio percent over non-benign wait time.'
+    values: [signal_ratio_percent]
+    query_ref: mssql_waits_summary
+
+  - metric_name: mssql_waits_by_class_time_ms
+    type: gauge
+    help: 'Cumulative wait time (ms) grouped by wait class.'
+    key_labels:
+      - wait_class
+    values: [wait_time_ms]
+    query_ref: mssql_waits_by_class
+
+  - metric_name: mssql_waits_by_class_tasks
+    type: gauge
+    help: 'Cumulative waiting tasks grouped by wait class.'
+    key_labels:
+      - wait_class
+    values: [waiting_tasks_count]
+    query_ref: mssql_waits_by_class
+
+queries:
+  - query_name: mssql_waits_summary
+    query: |
+      ;WITH waits AS (
+          SELECT wait_type, wait_time_ms, signal_wait_time_ms
+          FROM sys.dm_os_wait_stats WITH (NOLOCK)
+          WHERE waiting_tasks_count > 0
+      ),
+      benign AS (
+          SELECT wait_type, wait_time_ms, signal_wait_time_ms
+          FROM waits
+          WHERE wait_type IN (
+            N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',
+            N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE',
+            N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE',
+            N'DBMIRROR_DBM_EVENT', N'DBMIRROR_EVENTS_QUEUE', N'DBMIRROR_WORKER_QUEUE',
+            N'DBMIRRORING_CMD', N'DIRTY_PAGE_POLL', N'DISPATCHER_QUEUE_SEMAPHORE',
+            N'EXECSYNC', N'FSAGENT', N'FT_IFTS_SCHEDULER_IDLE_WAIT', N'FT_IFTSHC_MUTEX',
+            N'HADR_CLUSAPI_CALL', N'HADR_FILESTREAM_IOMGR_IOCOMPLETION', N'HADR_LOGCAPTURE_WAIT',
+            N'HADR_NOTIFICATION_DEQUEUE', N'HADR_TIMER_TASK', N'HADR_WORK_QUEUE',
+            N'KSOURCE_WAKEUP', N'LAZYWRITER_SLEEP', N'LOGMGR_QUEUE',
+            N'MEMORY_ALLOCATION_EXT', N'ONDEMAND_TASK_QUEUE',
+            N'PARALLEL_REDO_DRAIN_WORKER', N'PARALLEL_REDO_LOG_CACHE', N'PARALLEL_REDO_TRAN_LIST',
+            N'PARALLEL_REDO_WORKER_SYNC', N'PARALLEL_REDO_WORKER_WAIT_WORK',
+            N'PREEMPTIVE_XE_GETTARGETSTATE', N'PWAIT_ALL_COMPONENTS_INITIALIZED',
+            N'PWAIT_DIRECTLOGCONSUMER_GETNEXT', N'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP',
+            N'QDS_ASYNC_QUEUE', N'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
+            N'QDS_SHUTDOWN_QUEUE', N'REDO_THREAD_PENDING_WORK', N'REQUEST_FOR_DEADLOCK_SEARCH',
+            N'RESOURCE_QUEUE', N'SERVER_IDLE_CHECK', N'SLEEP_BPOOL_FLUSH', N'SLEEP_DBSTARTUP',
+            N'SLEEP_DCOMSTARTUP', N'SLEEP_MASTERDBREADY', N'SLEEP_MASTERMDREADY',
+            N'SLEEP_MASTERUPGRADED', N'SLEEP_MSDBSTARTUP', N'SLEEP_SYSTEMTASK', N'SLEEP_TASK',
+            N'SLEEP_TEMPDBSTARTUP', N'SNI_HTTP_ACCEPT', N'SP_SERVER_DIAGNOSTICS_SLEEP',
+            N'SQLTRACE_BUFFER_FLUSH', N'SQLTRACE_INCREMENTAL_FLUSH_SLEEP',
+            N'SQLTRACE_WAIT_ENTRIES', N'WAIT_FOR_RESULTS', N'WAITFOR', N'WAITFOR_TASKSHUTDOWN',
+            N'WAIT_XTP_RECOVERY', N'WAIT_XTP_HOST_WAIT', N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
+            N'WAIT_XTP_CKPT_CLOSE', N'XE_DISPATCHER_JOIN', N'XE_DISPATCHER_WAIT', N'XE_TIMER_EVENT',
+            N'SOS_WORK_DISPATCHER'
+          )
+      ),
+      nonbenign AS (
+          SELECT w.wait_type, w.wait_time_ms, w.signal_wait_time_ms
+          FROM waits AS w
+          WHERE NOT EXISTS (SELECT 1 FROM benign AS b WHERE b.wait_type = w.wait_type)
+      ),
+      top5 AS (
+          SELECT TOP (5) wait_time_ms
+          FROM nonbenign
+          ORDER BY wait_time_ms DESC
+      )
+      SELECT
+          CAST(
+            CASE WHEN (SELECT SUM(wait_time_ms) FROM waits) <= 0 THEN 0
+                 ELSE ((SELECT SUM(wait_time_ms) FROM nonbenign) * 100.0) / (SELECT SUM(wait_time_ms) FROM waits)
+            END AS float
+          ) AS nonbenign_percent,
+          CAST(
+            CASE WHEN (SELECT SUM(wait_time_ms) FROM nonbenign) <= 0 THEN 0
+                 ELSE ((SELECT SUM(wait_time_ms) FROM top5) * 100.0) / (SELECT SUM(wait_time_ms) FROM nonbenign)
+            END AS float
+          ) AS top5_share_percent,
+          CAST(
+            CASE WHEN (SELECT SUM(wait_time_ms) FROM nonbenign) <= 0 THEN 0
+                 ELSE ((SELECT SUM(signal_wait_time_ms) FROM nonbenign) * 100.0) / (SELECT SUM(wait_time_ms) FROM nonbenign)
+            END AS float
+          ) AS signal_ratio_percent;
+
+  - query_name: mssql_waits_by_class
+    query: |
+      ;WITH waits AS (
+          SELECT
+              wait_type,
+              wait_time_ms,
+              waiting_tasks_count,
+              CASE
+                WHEN wait_type LIKE N'LCK[_]M[_]%' THEN N'lock'
+                WHEN wait_type LIKE N'PAGEIOLATCH[_]%' OR wait_type LIKE N'IO[_]%' THEN N'io'
+                WHEN wait_type LIKE N'CX%' THEN N'parallelism'
+                WHEN wait_type LIKE N'WRITELOG%' OR wait_type LIKE N'LOGBUFFER%' THEN N'log'
+                WHEN wait_type LIKE N'HADR[_]%' THEN N'alwayson'
+                WHEN wait_type LIKE N'PAGELATCH[_]%' THEN N'latch'
+                WHEN wait_type LIKE N'SOS[_]%' THEN N'scheduler'
+                WHEN wait_type LIKE N'RESOURCE[_]SEMAPHORE%' THEN N'memory'
+                ELSE N'other'
+              END AS wait_class
+          FROM sys.dm_os_wait_stats WITH (NOLOCK)
+          WHERE waiting_tasks_count > 0
+            AND wait_type NOT IN (
+              N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',
+              N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE',
+              N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE',
+              N'DBMIRROR_DBM_EVENT', N'DBMIRROR_EVENTS_QUEUE', N'DBMIRROR_WORKER_QUEUE',
+              N'DBMIRRORING_CMD', N'DIRTY_PAGE_POLL', N'DISPATCHER_QUEUE_SEMAPHORE',
+              N'EXECSYNC', N'FSAGENT', N'FT_IFTS_SCHEDULER_IDLE_WAIT', N'FT_IFTSHC_MUTEX',
+              N'HADR_CLUSAPI_CALL', N'HADR_FILESTREAM_IOMGR_IOCOMPLETION', N'HADR_LOGCAPTURE_WAIT',
+              N'HADR_NOTIFICATION_DEQUEUE', N'HADR_TIMER_TASK', N'HADR_WORK_QUEUE',
+              N'KSOURCE_WAKEUP', N'LAZYWRITER_SLEEP', N'LOGMGR_QUEUE',
+              N'MEMORY_ALLOCATION_EXT', N'ONDEMAND_TASK_QUEUE',
+              N'PARALLEL_REDO_DRAIN_WORKER', N'PARALLEL_REDO_LOG_CACHE', N'PARALLEL_REDO_TRAN_LIST',
+              N'PARALLEL_REDO_WORKER_SYNC', N'PARALLEL_REDO_WORKER_WAIT_WORK',
+              N'PREEMPTIVE_XE_GETTARGETSTATE', N'PWAIT_ALL_COMPONENTS_INITIALIZED',
+              N'PWAIT_DIRECTLOGCONSUMER_GETNEXT', N'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP',
+              N'QDS_ASYNC_QUEUE', N'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
+              N'QDS_SHUTDOWN_QUEUE', N'REDO_THREAD_PENDING_WORK', N'REQUEST_FOR_DEADLOCK_SEARCH',
+              N'RESOURCE_QUEUE', N'SERVER_IDLE_CHECK', N'SLEEP_BPOOL_FLUSH', N'SLEEP_DBSTARTUP',
+              N'SLEEP_DCOMSTARTUP', N'SLEEP_MASTERDBREADY', N'SLEEP_MASTERMDREADY',
+              N'SLEEP_MASTERUPGRADED', N'SLEEP_MSDBSTARTUP', N'SLEEP_SYSTEMTASK', N'SLEEP_TASK',
+              N'SLEEP_TEMPDBSTARTUP', N'SNI_HTTP_ACCEPT', N'SP_SERVER_DIAGNOSTICS_SLEEP',
+              N'SQLTRACE_BUFFER_FLUSH', N'SQLTRACE_INCREMENTAL_FLUSH_SLEEP',
+              N'SQLTRACE_WAIT_ENTRIES', N'WAIT_FOR_RESULTS', N'WAITFOR', N'WAITFOR_TASKSHUTDOWN',
+              N'WAIT_XTP_RECOVERY', N'WAIT_XTP_HOST_WAIT', N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
+              N'WAIT_XTP_CKPT_CLOSE', N'XE_DISPATCHER_JOIN', N'XE_DISPATCHER_WAIT', N'XE_TIMER_EVENT',
+              N'SOS_WORK_DISPATCHER'
+            )
+      )
+      SELECT
+          wait_class,
+          CAST(SUM(wait_time_ms) AS float) AS wait_time_ms,
+          CAST(SUM(waiting_tasks_count) AS float) AS waiting_tasks_count
+      FROM waits
+      GROUP BY wait_class;
+
+  - query_name: mssql_wait_stats
+    query: |
+      SELECT TOP (40)
+          wait_type,
+          CAST(wait_time_ms AS float) AS wait_time_ms,
+          CAST(waiting_tasks_count AS float) AS waiting_tasks_count,
+          CAST(signal_wait_time_ms AS float) AS signal_wait_time_ms,
+          CAST(wait_time_ms - signal_wait_time_ms AS float) AS resource_wait_time_ms,
+          CAST(max_wait_time_ms AS float) AS max_wait_time_ms
+      FROM sys.dm_os_wait_stats WITH (NOLOCK)
+      WHERE waiting_tasks_count > 0
+        AND wait_type NOT IN (
+          N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',
+          N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE',
+          N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE',
+          N'DBMIRROR_DBM_EVENT', N'DBMIRROR_EVENTS_QUEUE', N'DBMIRROR_WORKER_QUEUE',
+          N'DBMIRRORING_CMD', N'DIRTY_PAGE_POLL', N'DISPATCHER_QUEUE_SEMAPHORE',
+          N'EXECSYNC', N'FSAGENT', N'FT_IFTS_SCHEDULER_IDLE_WAIT', N'FT_IFTSHC_MUTEX',
+          N'HADR_CLUSAPI_CALL', N'HADR_FILESTREAM_IOMGR_IOCOMPLETION', N'HADR_LOGCAPTURE_WAIT',
+          N'HADR_NOTIFICATION_DEQUEUE', N'HADR_TIMER_TASK', N'HADR_WORK_QUEUE',
+          N'KSOURCE_WAKEUP', N'LAZYWRITER_SLEEP', N'LOGMGR_QUEUE',
+          N'MEMORY_ALLOCATION_EXT', N'ONDEMAND_TASK_QUEUE',
+          N'PARALLEL_REDO_DRAIN_WORKER', N'PARALLEL_REDO_LOG_CACHE', N'PARALLEL_REDO_TRAN_LIST',
+          N'PARALLEL_REDO_WORKER_SYNC', N'PARALLEL_REDO_WORKER_WAIT_WORK',
+          N'PREEMPTIVE_XE_GETTARGETSTATE', N'PWAIT_ALL_COMPONENTS_INITIALIZED',
+          N'PWAIT_DIRECTLOGCONSUMER_GETNEXT', N'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP',
+          N'QDS_ASYNC_QUEUE', N'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP',
+          N'QDS_SHUTDOWN_QUEUE', N'REDO_THREAD_PENDING_WORK', N'REQUEST_FOR_DEADLOCK_SEARCH',
+          N'RESOURCE_QUEUE', N'SERVER_IDLE_CHECK', N'SLEEP_BPOOL_FLUSH', N'SLEEP_DBSTARTUP',
+          N'SLEEP_DCOMSTARTUP', N'SLEEP_MASTERDBREADY', N'SLEEP_MASTERMDREADY',
+          N'SLEEP_MASTERUPGRADED', N'SLEEP_MSDBSTARTUP', N'SLEEP_SYSTEMTASK', N'SLEEP_TASK',
+          N'SLEEP_TEMPDBSTARTUP', N'SNI_HTTP_ACCEPT', N'SP_SERVER_DIAGNOSTICS_SLEEP',
+          N'SQLTRACE_BUFFER_FLUSH', N'SQLTRACE_INCREMENTAL_FLUSH_SLEEP',
+          N'SQLTRACE_WAIT_ENTRIES', N'WAIT_FOR_RESULTS', N'WAITFOR', N'WAITFOR_TASKSHUTDOWN',
+          N'WAIT_XTP_RECOVERY', N'WAIT_XTP_HOST_WAIT', N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG',
+          N'WAIT_XTP_CKPT_CLOSE', N'XE_DISPATCHER_JOIN', N'XE_DISPATCHER_WAIT', N'XE_TIMER_EVENT',
+          N'SOS_WORK_DISPATCHER'
+        )
+      ORDER BY wait_time_ms DESC;

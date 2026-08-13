@@ -1,0 +1,26 @@
+groups:
+  - name: windows_exporter.p0.host
+    rules:
+      - alert: WindowsDiskSpaceCritical
+        expr: instance_volume:windows_disk_free_ratio < 0.05
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: host
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }} volume {{ $labels.volume }}"
+          description: "Free space is below 5% for ten minutes."
+          runbook: "Free space on the volume; prioritize SQL data/log and OS drives."
+
+      - alert: WindowsCommitChargeCritical
+        expr: instance:windows_memory_commit_ratio > 0.95
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: host
+        annotations:
+          summary: "Commit charge critical on {{ $labels.instance }}"
+          description: "Committed memory is above 95% of the commit limit."
+          runbook: "Identify top consumers, pagefile sizing, and SQL max server memory."

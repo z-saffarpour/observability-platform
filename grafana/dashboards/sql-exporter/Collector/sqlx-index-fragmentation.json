@@ -1,0 +1,2455 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Index fragmentation ops view: KPI, rebuild/reorganize action queue, impact-ranked hotspots, and DB inventory. Collector samples LIMITED mode for large indexes (>=10k pages, >=30% frag) about every 6h.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "Missing Index",
+      "type": "link",
+      "url": "/d/sqlx-missing-index?${__url_time_range}&${instance:queryparam}&${db:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Index Usage",
+      "type": "link",
+      "url": "/d/sqlx-index-usage?${__url_time_range}&${instance:queryparam}&${db:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Heavy Queries",
+      "type": "link",
+      "url": "/d/sqlx-heavy-queries?${__url_time_range}&${instance:queryparam}&${db:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Statistics",
+      "type": "link",
+      "url": "/d/sqlx-stats?${__url_time_range}&${instance:queryparam}&${db:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Columnstore",
+      "type": "link",
+      "url": "/d/sqlx-columnstore?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Health / KPI",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Fragmented Indexes",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) or vector(0)",
+          "instant": true,
+          "legendFormat": "Fragmented Indexes",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Fragmented Indexes",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Servers Affected",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(count by (instance) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Servers Affected",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Servers Affected",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Databases Affected",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(count by (instance, db) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Databases Affected",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Databases Affected",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "displayName": "Max Frag %",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Frag %",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Frag %",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Rebuild >=70%",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= 70) or vector(0)",
+          "instant": true,
+          "legendFormat": "Rebuild >=70%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Rebuild >=70%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Reorg 30-70%",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= 30) and (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} < 70)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Reorg 30-70%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Reorg 30-70%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "displayName": "Total Size",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 512
+              },
+              {
+                "color": "red",
+                "value": 2048
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum(((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) * 8 / 1024)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Total Size",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Size",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "displayName": "Worst Impact",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 500000
+              },
+              {
+                "color": "red",
+                "value": 2000000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}) * on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Worst Impact",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Worst Impact",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "panels": [],
+      "title": "Action Queue (maintenance candidates)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Frag %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 70
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pages"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 50000
+                    },
+                    {
+                      "color": "red",
+                      "value": 200000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 512
+                    },
+                    {
+                      "color": "red",
+                      "value": 2048
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Impact"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 500000
+                    },
+                    {
+                      "color": "red",
+                      "value": 2000000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Missing Index",
+                    "url": "/d/sqlx-missing-index?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Index Usage",
+                    "url": "/d/sqlx-index-usage?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Statistics",
+                    "url": "/d/sqlx-stats?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Columnstore",
+                    "url": "/d/sqlx-columnstore?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) ((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) * 8 / 1024))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}) * on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        }
+      ],
+      "title": "Priority list - sort by Impact (Frag% x Pages); REBUILD when Frag >=70, else REORGANIZE",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 7,
+              "Value #B": 8,
+              "Value #C": 9,
+              "Value #D": 10,
+              "alloc_unit_type_desc": 6,
+              "db": 1,
+              "index_name": 4,
+              "index_type_desc": 5,
+              "instance": 0,
+              "schema_name": 2,
+              "table_name": 3
+            },
+            "renameByName": {
+              "Value #A": "Frag %",
+              "Value #B": "Pages",
+              "Value #C": "Size",
+              "Value #D": "Impact",
+              "alloc_unit_type_desc": "Alloc",
+              "db": "Database",
+              "index_name": "Index",
+              "index_type_desc": "Type",
+              "instance": "Server",
+              "schema_name": "Schema",
+              "table_name": "Table"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Alloc": 6,
+              "Database": 1,
+              "Frag %": 7,
+              "Impact": 10,
+              "Index": 4,
+              "Pages": 8,
+              "Schema": 2,
+              "Server": 0,
+              "Size": 9,
+              "Table": 3,
+              "Type": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Impact"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 20,
+      "panels": [],
+      "title": "Hotspots",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 21,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}}.{{schema_name}}.{{table_name}} / {{index_name}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top by Fragmentation %",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 500000
+              },
+              {
+                "color": "red",
+                "value": 2000000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "id": 22,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}) * on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))))",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}}.{{schema_name}}.{{table_name}} / {{index_name}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top by Impact (Frag% x Pages)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 512
+              },
+              {
+                "color": "red",
+                "value": 2048
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 23,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, ((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) * 8 / 1024))",
+          "instant": true,
+          "legendFormat": "{{instance}} {{db}}.{{schema_name}}.{{table_name}} / {{index_name}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Top by Index Size (MB)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 24,
+      "options": {
+        "displayMode": "gradient",
+        "naming": {
+          "mode": "auto"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance, index_type_desc) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "instant": true,
+          "legendFormat": "{{instance}} {{index_type_desc}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Indexes by Type",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 30,
+      "panels": [],
+      "title": "Trends (collector samples ~every 6h)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Fragmentation % by Server",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Fragmented Index Count by Server",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 70
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(12, (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "legendFormat": "{{instance}} {{db}}.{{schema_name}}.{{table_name}} / {{index_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top Indexes - Fragmentation %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-blue",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 512
+              },
+              {
+                "color": "red",
+                "value": 2048
+              }
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(12, ((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) * 8 / 1024))",
+          "legendFormat": "{{instance}} {{db}}.{{schema_name}}.{{table_name}} / {{index_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top Indexes - Size (MB)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 40,
+      "panels": [],
+      "title": "Database Inventory",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Indexes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Frag %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 70
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pages"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 50000
+                    },
+                    {
+                      "color": "red",
+                      "value": 200000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decmbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "semi-dark-blue",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 512
+                    },
+                    {
+                      "color": "red",
+                      "value": 2048
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Worst Impact"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 500000
+                    },
+                    {
+                      "color": "red",
+                      "value": 2000000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rebuild >=70%"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Missing Index",
+                    "url": "/d/sqlx-missing-index?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Index Usage",
+                    "url": "/d/sqlx-index-usage?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Heavy Queries",
+                    "url": "/d/sqlx-heavy-queries?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Statistics",
+                    "url": "/d/sqlx-stats?${__url_time_range}&var-instance=${__value.raw}&var-db=${__data.fields.Database}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Columnstore",
+                    "url": "/d/sqlx-columnstore?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 55
+      },
+      "id": 41,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance, db) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db) ((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum by (instance, db) ((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum by (instance, db) (((mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag})) * 8 / 1024))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db) (((mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}) * on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_page_count{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} and on(instance, db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= ${min_frag}))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count by (instance, db) (mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", index_type_desc=~\"${index_type:regex}\"} >= 70)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "F"
+        }
+      ],
+      "title": "Per-database fragmentation summary",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6,
+              "Value #F": 7,
+              "db": 1,
+              "instance": 0
+            },
+            "renameByName": {
+              "Value #A": "Indexes",
+              "Value #B": "Max Frag %",
+              "Value #C": "Pages",
+              "Value #D": "Size",
+              "Value #E": "Worst Impact",
+              "Value #F": "Rebuild >=70%",
+              "db": "Database",
+              "instance": "Server"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Database": 1,
+              "Indexes": 2,
+              "Max Frag %": 3,
+              "Pages": 4,
+              "Rebuild >=70%": 7,
+              "Server": 0,
+              "Size": 5,
+              "Worst Impact": 6
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Worst Impact"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30m",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "collector",
+    "indexes",
+    "maintenance"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\"}, db)",
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "db",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\"}, db)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\"}, index_type_desc)",
+        "includeAll": true,
+        "label": "Index Type",
+        "multi": true,
+        "name": "index_type",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_index_fragmentation_percent{job=\"sql_exporter\", instance=~\"$instance\"}, index_type_desc)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "30",
+          "value": "30"
+        },
+        "includeAll": false,
+        "label": "Min Frag %",
+        "multi": false,
+        "name": "min_frag",
+        "options": [
+          {
+            "selected": true,
+            "text": "30",
+            "value": "30"
+          },
+          {
+            "selected": false,
+            "text": "50",
+            "value": "50"
+          },
+          {
+            "selected": false,
+            "text": "70 (rebuild only)",
+            "value": "70"
+          }
+        ],
+        "query": "30,50,70",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-14d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Collector index_fragmentation",
+  "uid": "sqlx-index-fragmentation",
+  "version": 15
+}

@@ -1,0 +1,30 @@
+# P2 — Medium configuration / growth signals
+groups:
+  - name: sql_exporter.p2.config
+    interval: 60s
+    rules:
+      - alert: SqlDatabaseConfigurationUnsafe
+        expr: mssql_database_auto_shrink_enabled == 1 or mssql_database_auto_close_enabled == 1 or mssql_database_page_verify_option{db!="tempdb"} != 2
+        for: 10m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_database_configuration
+        annotations:
+          summary: "Unsafe database configuration detected"
+          description: "Database {{ $labels.db }} has AUTO_SHRINK/AUTO_CLOSE enabled or PAGE_VERIFY is not CHECKSUM."
+          runbook: "Disable AUTO_SHRINK/AUTO_CLOSE and set PAGE_VERIFY=CHECKSUM where appropriate."
+
+      - alert: SqlDatabaseGrowingRapidly
+        expr: increase(mssql_database_data_size_mb[24h]) > 10240
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_database_size_growth
+        annotations:
+          summary: "Database grew by more than 10 GiB in 24 hours"
+          description: "Database {{ $labels.db }} data files grew {{ $value | humanize }} MiB in 24 hours."
+          runbook: "Capacity planning — confirm expected load vs unexpected growth."

@@ -1,0 +1,155 @@
+# Data/Log autogrowth (and shrink) events from the default trace (last 24h).
+#
+#   GRANT VIEW SERVER STATE TO
+# Empty when default trace is disabled.
+#
+# Default-trace columns used:
+#   EventClass 92/93/94/95 = data_growth / log_growth / data_shrink / log_shrink
+#   IntegerData            = pages grown/shrunk (8 KB pages)
+#   Duration               = microseconds
+#
+collector_name: mssql_autogrowth
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_autogrowth_events_24h
+    type: gauge
+    help: 'Autogrowth/shrink events in default trace (last 24h) by db/file/event.'
+    key_labels:
+      - db
+      - file_name
+      - event_type
+    values: [event_count]
+    query_ref: mssql_autogrowth_events
+
+  - metric_name: mssql_autogrowth_growth_mb_24h
+    type: gauge
+    help: 'Total MB grown/shrunk in default trace (last 24h) by db/file/event (pages*8KB).'
+    key_labels:
+      - db
+      - file_name
+      - event_type
+    values: [growth_mb]
+    query_ref: mssql_autogrowth_events
+
+  - metric_name: mssql_autogrowth_avg_duration_ms_24h
+    type: gauge
+    help: 'Average autogrowth/shrink duration in ms (last 24h) by db/file/event.'
+    key_labels:
+      - db
+      - file_name
+      - event_type
+    values: [avg_duration_ms]
+    query_ref: mssql_autogrowth_events
+
+  - metric_name: mssql_autogrowth_max_duration_ms_24h
+    type: gauge
+    help: 'Max autogrowth/shrink duration in ms (last 24h) by db/file/event.'
+    key_labels:
+      - db
+      - file_name
+      - event_type
+    values: [max_duration_ms]
+    query_ref: mssql_autogrowth_events
+
+  - metric_name: mssql_autogrowth_last_age_seconds
+    type: gauge
+    help: 'Seconds since last autogrowth/shrink event per db/file/event (-1 if none in trace).'
+    key_labels:
+      - db
+      - file_name
+      - event_type
+    values: [age_seconds]
+    query_ref: mssql_autogrowth_events
+
+  - metric_name: mssql_autogrowth_total_24h
+    type: gauge
+    help: 'Total data+log autogrowth events (EventClass 92/93) in default trace last 24h.'
+    values: [event_count]
+    query_ref: mssql_autogrowth_total
+
+  - metric_name: mssql_autogrowth_shrink_total_24h
+    type: gauge
+    help: 'Total data+log shrink events (EventClass 94/95) in default trace last 24h.'
+    values: [shrink_count]
+    query_ref: mssql_autogrowth_total
+
+  - metric_name: mssql_autogrowth_growth_mb_total_24h
+    type: gauge
+    help: 'Total MB from data+log autogrowth events in default trace last 24h.'
+    values: [growth_mb]
+    query_ref: mssql_autogrowth_total
+
+queries:
+  - query_name: mssql_autogrowth_events
+    query: |
+      DECLARE @path nvarchar(260);
+      SELECT @path = REVERSE(SUBSTRING(REVERSE(path), CHARINDEX(N'\', REVERSE(path)), 260)) + N'log.trc'
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      IF @path IS NULL
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS db,
+              CAST(N'' AS nvarchar(260)) AS file_name,
+              CAST(N'' AS nvarchar(20)) AS event_type,
+              CAST(NULL AS float) AS event_count,
+              CAST(NULL AS float) AS growth_mb,
+              CAST(NULL AS float) AS avg_duration_ms,
+              CAST(NULL AS float) AS max_duration_ms,
+              CAST(NULL AS float) AS age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(t.DatabaseName, N'') AS db,
+              ISNULL(t.FileName, N'') AS file_name,
+              CASE t.EventClass
+                WHEN 92 THEN N'data_growth'
+                WHEN 93 THEN N'log_growth'
+                WHEN 94 THEN N'data_shrink'
+                WHEN 95 THEN N'log_shrink'
+                ELSE N'other'
+              END AS event_type,
+              CAST(COUNT(*) AS float) AS event_count,
+              CAST(SUM(ISNULL(t.IntegerData, 0)) * 8.0 / 1024.0 AS float) AS growth_mb,
+              CAST(AVG(CAST(ISNULL(t.Duration, 0) AS float) / 1000.0) AS float) AS avg_duration_ms,
+              CAST(MAX(CAST(ISNULL(t.Duration, 0) AS float) / 1000.0) AS float) AS max_duration_ms,
+              CAST(DATEDIFF(SECOND, MAX(t.StartTime), GETDATE()) AS float) AS age_seconds
+          FROM sys.fn_trace_gettable(@path, DEFAULT) AS t
+          WHERE t.EventClass IN (92, 93, 94, 95)
+            AND t.StartTime >= DATEADD(HOUR, -24, GETDATE())
+          GROUP BY
+              t.DatabaseName,
+              t.FileName,
+              t.EventClass;
+      END
+
+  - query_name: mssql_autogrowth_total
+    query: |
+      DECLARE @path nvarchar(260);
+      SELECT @path = REVERSE(SUBSTRING(REVERSE(path), CHARINDEX(N'\', REVERSE(path)), 260)) + N'log.trc'
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      IF @path IS NULL
+      BEGIN
+          SELECT
+              CAST(NULL AS float) AS event_count,
+              CAST(NULL AS float) AS shrink_count,
+              CAST(NULL AS float) AS growth_mb
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CAST(SUM(CASE WHEN t.EventClass IN (92, 93) THEN 1 ELSE 0 END) AS float) AS event_count,
+              CAST(SUM(CASE WHEN t.EventClass IN (94, 95) THEN 1 ELSE 0 END) AS float) AS shrink_count,
+              CAST(SUM(CASE WHEN t.EventClass IN (92, 93) THEN ISNULL(t.IntegerData, 0) ELSE 0 END) * 8.0 / 1024.0 AS float) AS growth_mb
+          FROM sys.fn_trace_gettable(@path, DEFAULT) AS t
+          WHERE t.EventClass IN (92, 93, 94, 95)
+            AND t.StartTime >= DATEADD(HOUR, -24, GETDATE());
+      END

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sql_exporter install, upgrade, and uninstall guide</title>
+  <style>
+    :root {
+      --bg: #f6f4ef;
+      --surface: #fffdf8;
+      --text: #1f2a2e;
+      --muted: #5a6a70;
+      --accent: #0b6e6e;
+      --accent-soft: #d9efef;
+      --border: #d7d0c4;
+      --code-bg: #1e2930;
+      --code-fg: #e8eef2;
+      --thead: #e8f3f3;
+      --shadow: 0 10px 30px rgba(31, 42, 46, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "IBM Plex Sans", Tahoma, sans-serif;
+      background:
+        radial-gradient(circle at top right, #e7f4f4 0, transparent 40%),
+        linear-gradient(180deg, #f8f6f1 0%, var(--bg) 100%);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.75rem 1.5rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+
+    header.hero h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.45rem, 2.4vw, 2rem);
+      color: var(--accent);
+      line-height: 1.35;
+    }
+
+    header.hero p { margin: 0.35rem 0; color: var(--muted); }
+
+    .badge {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-top: 0.75rem;
+    }
+
+    nav.toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    nav.toc h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.05rem;
+    }
+
+    nav.toc ol {
+      margin: 0;
+      padding-inline-start: 1.25rem;
+    }
+
+    nav.toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    nav.toc a:hover { text-decoration: underline; }
+
+    main section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem 1.4rem;
+      margin-bottom: 1.1rem;
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 0.85rem;
+      font-size: 1.25rem;
+      color: #0a4f4f;
+      border-bottom: 2px solid var(--accent-soft);
+      padding-bottom: 0.35rem;
+    }
+
+    h3 {
+      margin: 1.15rem 0 0.55rem;
+      font-size: 1.05rem;
+      color: #234;
+    }
+
+    p { margin: 0.55rem 0; }
+
+    ul, ol { margin: 0.4rem 0 0.7rem; padding-inline-start: 1.3rem; }
+
+    a { color: var(--accent); }
+
+    code, kbd {
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      font-size: 0.92em;
+      background: #eef3f4;
+      border: 1px solid #d7e0e3;
+      border-radius: 5px;
+      padding: 0.05rem 0.35rem;
+    }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border-radius: 10px;
+      padding: 0.95rem 1rem;
+      overflow-x: auto;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      font-size: 0.9rem;
+      white-space: pre;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.6rem 0 0.9rem;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.65rem;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--thead);
+      color: #0a4f4f;
+      font-weight: 700;
+    }
+
+    tr:nth-child(even) td { background: #fbfaf7; }
+
+    .note {
+      background: #fff8e8;
+      border: 1px solid #edd9a5;
+      border-radius: 10px;
+      padding: 0.7rem 0.9rem;
+      color: #5a4a22;
+      margin: 0.7rem 0;
+    }
+
+    footer {
+      margin-top: 1.5rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .wrap { max-width: none; padding: 0; }
+      header.hero, main section, nav.toc {
+        box-shadow: none;
+        border-color: #ccc;
+      }
+      pre { white-space: pre-wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1><code>sql_exporter</code> install, upgrade, and uninstall guide</h1>
+      <p>This document covers <strong>fresh installation</strong>, <strong>version upgrades</strong>, and <strong>safe remote removal</strong> of <code>sql_exporter</code> on SQL Server hosts.</p>
+      <p>For configuration details, collector profiles, and troubleshooting, see:
+        <a href="install-config-guide.md">Install and config guide</a>
+      </p>
+      <p>Markdown source: <a href="install-upgrade-guide.md">install-upgrade-guide.md</a>
+        · Persian HTML: <a href="../fa/install-upgrade-guide.html">fa/install-upgrade-guide.html</a>
+      </p>
+      <span class="badge">Documented version: 0.24.4</span>
+    </header>
+
+    <nav class="toc" aria-label="Table of contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#which-script">Which script should I use?</a></li>
+        <li><a href="#prereqs">Prerequisites</a></li>
+        <li><a href="#access">Required access</a></li>
+        <li><a href="#install">Fresh install (remote)</a></li>
+        <li><a href="#upgrade">Upgrade (remote)</a></li>
+        <li><a href="#uninstall">Remote uninstall</a></li>
+        <li><a href="#manual">Manual install / upgrade</a></li>
+        <li><a href="#health">Health checks</a></li>
+        <li><a href="#troubleshoot">Quick troubleshooting</a></li>
+        <li><a href="#rollout">Recommended rollout</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="which-script">
+        <h2>Which script should I use?</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Goal</th><th>Script</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Fresh install or create/update the service from scratch</td>
+                <td><code>scripts/powershell/sql-exporter/Install-SqlExporterRemote.ps1</code></td>
+                <td>Creates or updates the service; knows the default install path</td>
+              </tr>
+              <tr>
+                <td>Upgrade an existing installation</td>
+                <td><code>scripts/powershell/sql-exporter/Upgrade-SqlExporterRemote.ps1</code></td>
+                <td>Resolves the exe from the service; backs up; rolls back on failure</td>
+              </tr>
+              <tr>
+                <td>Remove the service and optionally its files</td>
+                <td><code>scripts/powershell/sql-exporter/Uninstall-SqlExporterRemote.ps1</code></td>
+                <td>Detects ServiceBase/NSSM; ZIP backup by default; supports <code>-WhatIf</code></td>
+              </tr>
+              <tr>
+                <td>Config / profile only (no binary replace)</td>
+                <td><code>scripts/powershell/sql-exporter/Deploy-SqlExporterConfig.ps1</code></td>
+                <td>Deploys <code>sql_exporter.yml</code> (and <code>profiles\</code> when <code>-Profile</code> is set)</td>
+              </tr>
+              <tr>
+                <td>Sync collector <code>.yml</code> files only</td>
+                <td><code>scripts/powershell/sql-exporter/Deploy-Collectors.ps1</code></td>
+                <td><code>-Layout Collector</code> (default) or <code>-Layout Root</code></td>
+              </tr>
+              <tr>
+                <td>Export Grafana dashboards → repo</td>
+                <td><code>scripts/powershell/sql-exporter/Export-GrafanaDashboards.ps1</code></td>
+                <td>Writes live <code>sqlx-*</code> dashboards under <code>grafana/dashboards/</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Install / Upgrade / Deploy-Config use <strong>WinRM</strong>. <code>Deploy-Collectors</code> also uses WinRM for service stop/start. <code>Export-GrafanaDashboards</code> uses the Grafana HTTP API (<code>GRAFANA_URL</code> + <code>GRAFANA_SERVICE_ACCOUNT_TOKEN</code>).</p>
+        <h3>Deploy-Collectors layouts</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th><code>-Layout</code></th><th>Behavior</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Collector</code> (default)</td>
+                <td>Copy into remote <code>collector\</code>; remove root <code>*.collector.yml</code></td>
+              </tr>
+              <tr>
+                <td><code>Root</code></td>
+                <td>Copy into install root; delete remote <code>collector\</code> folder</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code>.\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Computers sql-host-01 -Layout Collector
+.\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Computers sql-host-01 -Layout Root</code></pre>
+      </section>
+
+      <section id="prereqs">
+        <h2>Prerequisites</h2>
+        <ul>
+          <li>WinRM / PowerShell Remoting access to the target host</li>
+          <li>An account that can install/manage Windows services on the target</li>
+          <li>Package files at the project root:
+            <ul>
+              <li><code>sql_exporter.exe</code></li>
+              <li><code>sql_exporter.yml</code></li>
+              <li><code>web-config.yml</code></li>
+              <li><code>collector/*.collector.yml</code></li>
+              <li><code>profiles/*.yml</code></li>
+            </ul>
+          </li>
+          <li>SQL access for the service account (at minimum <code>VIEW SERVER STATE</code> and <code>VIEW ANY DEFINITION</code>)</li>
+          <li>An open scrape port for Prometheus (upstream default: <strong>9399</strong>)</li>
+        </ul>
+        <pre><code># Verify WinRM before install
+Test-WSMan -ComputerName sql-host-01</code></pre>
+      </section>
+
+      <section id="access">
+        <h2>Required access</h2>
+        <p>List required access, create ACLs/firewall/account rights, then audit. SQL grants are separate (T-SQL script):</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Test-SqlExporterRequiredAccess.ps1 -ShowRequirements
+.\scripts\powershell\sql-exporter\Set-SqlExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20 -WhatIf
+.\scripts\powershell\sql-exporter\Set-SqlExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20
+.\scripts\powershell\sql-exporter\Test-SqlExporterRequiredAccess.ps1
+.\scripts\powershell\sql-exporter\Set-SqlExporterRequiredAccess.ps1 `
+  -ComputerName sql-host-01 `
+  -Credential (Get-Credential) `
+  -ServiceAccount 'DOMAIN\SqlExporterAccount' `
+  -PrometheusRemoteAddress 10.10.10.20 `
+  -GrantLogonAsService</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Role</th><th>Access</th><th>Tool</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Install/upgrade operator</td><td>Administrators on the target</td><td>WinRM account</td></tr>
+              <tr><td>Deploy client</td><td>WinRM / PowerShell Remoting</td><td><code>Install-</code> / <code>Upgrade-</code> / <code>Deploy-*</code></td></tr>
+              <tr><td>Windows service</td><td>Read on install path and <code>web-config.yml</code></td><td><code>Set-SqlExporterRequiredAccess.ps1</code></td></tr>
+              <tr><td>Service → SQL Server</td><td><code>VIEW SERVER STATE</code>, <code>VIEW ANY DEFINITION</code> (+ optional msdb/SSISDB/user DBs)</td><td><code>scripts/sql/Create-SqlExporterLogin.sql</code></td></tr>
+              <tr><td>Prometheus</td><td>TCP/<strong>9399</strong> (+ Basic Auth when enabled)</td><td>Firewall in <code>Set-…RequiredAccess.ps1</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>Set-SqlExporterRequiredAccess.ps1</code> creates Windows/network access; <code>Test-SqlExporterRequiredAccess.ps1</code> audits it. SQL Server permissions are granted with <code>Create-SqlExporterLogin.sql</code> (as sysadmin).</p>
+        <p>GRANT details: <a href="install-config-guide.md">Install and config guide — Grant access</a>.</p>
+      </section>
+
+      <section id="install">
+        <h2>Fresh install (remote — recommended)</h2>
+
+        <h3>1) Dry-run with WhatIf</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 -Computers sql-host-01,sql-host-02 -WhatIf</code></pre>
+
+        <h3>2) Apply</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+        <h3>2b) Apply with a collector profile</h3>
+        <p>Same UX as <code>windows_exporter -Profile sql-server.yml</code>. SQL Exporter profiles live under <code>profiles/</code> (for example <code>oltp.yml</code>, <code>dwh.yml</code>):</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers OKDC34017 `
+  -Profile oltp.yml `
+  -RemoteCredential (Get-Credential)</code></pre>
+        <p>This copies <code>profiles\</code> to the install path and writes the selected profile’s <code>collectors:</code> list into <code>sql_exporter.yml</code>.</p>
+
+        <h3>3) Service account (optional)</h3>
+        <p>Default: <code>LocalSystem</code></p>
+        <p>Domain credential:</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ServiceAccountMode Credential `
+  -ServiceCredential (Get-Credential 'DOMAIN\SqlExporterAccount')</code></pre>
+        <p>gMSA:</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ServiceAccountMode gMSA `
+  -ServiceAccount 'DOMAIN\SqlExporterAccount$'</code></pre>
+
+        <h3>What gets installed</h3>
+        <ul>
+          <li>Default install path: <code>C:\Program Files\Observability\PrometheusExporters\sql-exporter</code></li>
+          <li>Service name: <code>prometheus_sql_exporter</code></li>
+          <li>Files: <code>sql_exporter.exe</code>, <code>sql_exporter.yml</code>, <code>web-config.yml</code>, <code>profiles\</code>, and <code>collector\</code> (unless <code>-SkipCollectors</code>)</li>
+          <li>Default listen address: <code>:9399</code></li>
+        </ul>
+
+        <h3>Important install parameters</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Parameter</th><th>Default</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>-Computers</code></td><td>sample list in the script</td><td>Targets</td></tr>
+              <tr><td><code>-SourceRoot</code></td><td>project root</td><td>Package source</td></tr>
+              <tr><td><code>-InstallRoot</code></td><td>Program Files path above</td><td>Install path on target</td></tr>
+              <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>Windows service name</td></tr>
+              <tr><td><code>-ListenAddress</code></td><td><code>:9399</code></td><td>Scrape address/port</td></tr>
+              <tr><td><code>-Profile</code></td><td>(empty)</td><td>Apply <code>profiles/&lt;name&gt;.yml</code> collectors into <code>sql_exporter.yml</code></td></tr>
+              <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td>Service account type</td></tr>
+              <tr><td><code>-RemoteCredential</code></td><td>(empty)</td><td>WinRM credential</td></tr>
+              <tr><td><code>-SkipCollectors</code></td><td>off</td><td>Skip copying collectors</td></tr>
+              <tr><td><code>-ServiceMode</code></td><td><code>ServiceBase</code></td><td>Service host: <code>ServiceBase</code> or <code>NSSM</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="upgrade">
+        <h2>Upgrade (remote)</h2>
+        <p>Use the upgrade script when the service already exists and you want to move to the current package version (for example <strong>0.24.4</strong>).</p>
+
+        <h3>Upgrade script behavior</h3>
+        <ol>
+          <li>Compares the source binary version with <code>-ExpectedVersion</code></li>
+          <li>Resolves <code>sql_exporter.exe</code> from the service (Native or NSSM)</li>
+          <li>Backs up <code>sql_exporter.exe</code>, <code>sql_exporter.yml</code>, <code>web-config.yml</code>, <code>collector\</code>, and <code>profiles\</code></li>
+          <li>Stops the service, replaces binary/web-config/collectors/profiles, verifies version, starts the service</li>
+          <li>Without <code>-Profile</code>, leaves the remote <code>sql_exporter.yml</code> collectors unchanged; with <code>-Profile</code>, applies that profile’s collectors while preserving DSN and other settings</li>
+          <li>On start or version failure, restores files from backup</li>
+          <li>Prunes older backups beyond <code>-KeepBackups</code> (default: 5)</li>
+        </ol>
+        <p>Example backup path:</p>
+        <pre><code>&lt;InstallPath&gt;\_backup\upgrade_&lt;oldVersion&gt;_yyyyMMdd_HHmmss\</code></pre>
+
+        <h3>1) Dry-run</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 -Computers sql-host-01,sql-host-02 -WhatIf</code></pre>
+
+        <h3>2) Apply upgrade</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+        <h3>2b) Upgrade and set a collector profile</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers OKDC34017 `
+  -Profile oltp.yml `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+        <h3>3) If the exe path cannot be resolved from the service</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -InstallRoot 'D:\Monitoring\sql_exporter'</code></pre>
+
+        <h3>Important upgrade parameters</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Parameter</th><th>Default</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>-Computers</code></td><td>sample list in the script</td><td>Targets</td></tr>
+              <tr><td><code>-SourceRoot</code></td><td>project root</td><td>Package source</td></tr>
+              <tr><td><code>-ExpectedVersion</code></td><td><code>0.24.4</code></td><td>Expected binary version</td></tr>
+              <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>Service name</td></tr>
+              <tr><td><code>-InstallRoot</code></td><td>(empty = auto-detect)</td><td>Force install path</td></tr>
+              <tr><td><code>-Profile</code></td><td>(empty)</td><td>Apply <code>profiles/&lt;name&gt;.yml</code> collectors; omit to preserve remote config</td></tr>
+              <tr><td><code>-RemoteCredential</code></td><td>(empty)</td><td>WinRM credential</td></tr>
+              <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>Stop/start timeout</td></tr>
+              <tr><td><code>-KeepBackups</code></td><td><code>5</code></td><td>Number of backups to retain</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Status values</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Upgraded</code></td><td>Version changed</td></tr>
+              <tr><td><code>Refreshed</code></td><td>Same version; files/collectors refreshed</td></tr>
+              <tr><td><code>WhatIf</code></td><td>Simulation only</td></tr>
+              <tr><td><code>Failed</code></td><td>Error; rollback applied when possible</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="uninstall">
+        <h2>Remote uninstall</h2>
+        <p>The script detects ServiceBase or NSSM, removes <code>prometheus_sql_exporter</code>, and deletes <code>C:\Program Files\Observability\PrometheusExporters\sql-exporter</code> unless <code>-KeepFiles</code> is used. A ZIP backup is created under <code>C:\ProgramData\Observability\PrometheusExporters\uninstall-backups</code> unless <code>-SkipBackup</code> is specified. The Event Source remains registered by default.</p>
+        <pre><code># Preview
+.\scripts\powershell\sql-exporter\Uninstall-SqlExporterRemote.ps1 `
+  -Computers sql-host-01,sql-host-02 -WhatIf
+
+# Remove service and files
+.\scripts\powershell\sql-exporter\Uninstall-SqlExporterRemote.ps1 `
+  -Computers sql-host-01,sql-host-02 `
+  -ServiceMode Preserve `
+  -RemoteCredential (Get-Credential)
+
+# Remove service only
+.\scripts\powershell\sql-exporter\Uninstall-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 -KeepFiles</code></pre>
+        <div class="note">Optional destructive switches: <code>-SkipBackup</code> and <code>-RemoveEventSource</code>.</div>
+      </section>
+
+      <section id="manual">
+        <h2>Manual install / upgrade (no WinRM)</h2>
+        <div class="note">Use only when remote access is unavailable.</div>
+
+        <h3>Manual install</h3>
+        <ol>
+          <li>Copy the package folder to the server.</li>
+          <li>Set <code>data_source_name</code> in <code>sql_exporter.yml</code>.</li>
+          <li>Grant SQL permissions (details: <a href="install-config-guide.md">install-config-guide</a>).</li>
+          <li>Create the Windows service, or use the install script against a reachable host.</li>
+          <li>Before starting the service:</li>
+        </ol>
+        <pre><code>.\sql_exporter.exe "-config.file=sql_exporter.yml" -config.check</code></pre>
+
+        <h3>Manual upgrade</h3>
+        <ol>
+          <li>Stop the service.</li>
+          <li>Back up the install folder.</li>
+          <li>Replace <code>sql_exporter.exe</code> (and <code>collector\</code> / yml files as needed).</li>
+          <li>Check the version:</li>
+        </ol>
+        <pre><code>.\sql_exporter.exe --version</code></pre>
+        <ol start="5">
+          <li>Start the service. If it fails, restore from backup.</li>
+        </ol>
+      </section>
+
+      <section id="health">
+        <h2>Health checks after install or upgrade</h2>
+        <ol>
+          <li>Service status:</li>
+        </ol>
+        <pre><code>Get-Service prometheus_sql_exporter</code></pre>
+        <ol start="2">
+          <li>Version:</li>
+        </ol>
+        <pre><code>&amp; 'C:\Program Files\Observability\PrometheusExporters\sql-exporter\sql_exporter.exe' --version</code></pre>
+        <ol start="3">
+          <li>Metrics:</li>
+        </ol>
+        <pre><code>http://HOSTNAME:9399/metrics</code></pre>
+        <p>If Basic Auth is enabled in <code>web-config.yml</code>, test with username/password. How to create the hash and configure Prometheus: <a href="install-config-guide.md#6-scrape-port-and-basic-auth-optional">Install and config guide — port and Basic Auth</a>.</p>
+        <p>You should at least see:</p>
+        <ul>
+          <li><code>mssql_up</code></li>
+          <li><code>mssql_hostname</code></li>
+          <li><code>mssql_product_version</code></li>
+        </ul>
+        <ol start="4">
+          <li>In Prometheus, the scrape target should show <code>up=1</code>.</li>
+        </ol>
+      </section>
+
+      <section id="troubleshoot">
+        <h2>Quick deployment troubleshooting</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Issue</th><th>Check</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>WinRM cannot connect</td><td>Remoting, firewall, credential; <code>Test-WSMan</code>; <code>Test-SqlExporterRequiredAccess.ps1</code></td></tr>
+              <tr><td>Service will not start</td><td>Event Viewer, <code>config.check</code>, ImagePath; for custom accounts use <code>-GrantLogonAsService</code></td></tr>
+              <tr><td>Upgrade cannot resolve exe</td><td>Pass <code>-InstallRoot</code></td></tr>
+              <tr><td>No metrics after upgrade</td><td>Port 9399, <code>sql_exporter.yml</code>, SQL permissions, Basic Auth / scrape job; <code>Test-SqlExporterRequiredAccess.ps1</code></td></tr>
+              <tr><td>SQL access errors / empty metrics</td><td><code>Create-SqlExporterLogin.sql</code>; collector permission notes in <a href="install-config-guide.md">install-config-guide</a></td></tr>
+              <tr><td>Automatic rollback</td><td>Script error output + <code>_backup</code> folder</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="rollout">
+        <h2>Recommended rollout order</h2>
+        <ol>
+          <li>Test one non-critical server with <code>-WhatIf</code>, then apply.</li>
+          <li>Confirm <code>/metrics</code> and Prometheus scrape health.</li>
+          <li>Roll out remaining hosts from <code>servers.txt</code>.</li>
+          <li>For config/profile changes without replacing the binary, use <code>Deploy-SqlExporterConfig.ps1</code> (with or without <code>-Profile</code>) and the <a href="install-config-guide.md">config guide</a>.</li>
+          <li>To push only collector YAML updates, use <code>Deploy-Collectors.ps1</code> (<code>-Layout Collector</code> or <code>-Layout Root</code>).</li>
+        </ol>
+      </section>
+    </main>
+
+    <footer>
+      Markdown source:
+      <a href="install-upgrade-guide.md">install-upgrade-guide.md</a>
+      · HTML synced with the current English guide
+    </footer>
+  </div>
+</body>
+</html>

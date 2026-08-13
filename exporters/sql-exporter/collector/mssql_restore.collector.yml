@@ -1,0 +1,361 @@
+# Restore / backup-sync freshness (msdb.dbo.restorehistory + backupset).
+# Mirrors the Power BI restore monitor: last restore per destination DB,
+# lag since restored backup (Difference Restore), source server/db, type, size.
+#
+# Intended for secondary / standby hosts that continuously RESTORE Full/Diff/Log
+# from another instance (log-shipping-like), e.g. sql-host-02\NODE.
+# On hosts with no restores, queries return empty sets.
+#
+# restorehistory lookback is a rolling 400-day window (DATEADD(DAY, -400, GETDATE())),
+# so monthly restores older than 90 days are not reported as "never".
+#
+# GRANT SELECT ON msdb.dbo.restorehistory TO
+# GRANT SELECT ON msdb.dbo.backupset TO
+# GRANT SELECT ON msdb.dbo.backupmediafamily TO
+# GRANT SELECT ON msdb.dbo.sysjobs / sysjobsteps / sysjobhistory / syscategories TO
+#
+collector_name: mssql_restore
+
+min_interval: 300s
+
+metrics:
+  # Difference Restore ≈ seconds since backup_finish_date of last applied restore
+  - metric_name: mssql_restore_lag_seconds
+    type: gauge
+    help: 'Seconds since backup_finish_date of the most recent restore (Power BI Difference Restore). -1 = none in last 400 days.'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [lag_seconds]
+    query_ref: mssql_restore_last
+
+  # Alias of lag_seconds — kept for Grafana panels and Prometheus rules that still
+  # query mssql_restore_gap_to_rpo_seconds.
+  - metric_name: mssql_restore_gap_to_rpo_seconds
+    type: gauge
+    help: 'Same as mssql_restore_lag_seconds (RPO gap alias for existing alerts/dashboards). -1 = none in last 400 days.'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [lag_seconds]
+    query_ref: mssql_restore_last
+
+  - metric_name: mssql_restore_age_seconds
+    type: gauge
+    help: 'Seconds since restore_date of the most recent restore per destination database. -1 = never.'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [age_seconds]
+    query_ref: mssql_restore_last
+
+  - metric_name: mssql_restore_last_unix
+    type: gauge
+    help: 'Unix epoch of last restore_date (0 = never).'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [restore_unix]
+    query_ref: mssql_restore_last
+
+  - metric_name: mssql_restore_backup_unix
+    type: gauge
+    help: 'Unix epoch of backup_finish_date for the last restored backup (0 = never).'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [backup_unix]
+    query_ref: mssql_restore_last
+
+  - metric_name: mssql_restore_backup_size_bytes
+    type: gauge
+    help: 'backup_size of the most recent restored backup (0 if unknown).'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [backup_size_bytes]
+    query_ref: mssql_restore_last
+
+  - metric_name: mssql_restore_throughput_mb_s
+    type: gauge
+    help: 'Throughput of the source backup for the most recently restored backup (MB/s).'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [throughput_mb_s]
+    query_ref: mssql_restore_last
+
+  - metric_name: mssql_restore_last_by_type_lag_seconds
+    type: gauge
+    help: 'Seconds since backup_finish_date of last restore by backup type (full/diff/log). -1 = none in last 400 days.'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [lag_seconds]
+    query_ref: mssql_restore_last_by_type
+
+  - metric_name: mssql_restore_last_by_type_age_seconds
+    type: gauge
+    help: 'Seconds since restore_date of last restore by backup type. -1 = none in last 400 days.'
+    key_labels:
+      - db
+      - original_db
+      - backup_type
+      - original_server
+      - recovery_model
+    values: [age_seconds]
+    query_ref: mssql_restore_last_by_type
+
+  - metric_name: mssql_restore_db_standby
+    type: gauge
+    help: '1 if database is in standby / read-only restoring mode (is_in_standby=1).'
+    key_labels:
+      - db
+      - state_desc
+    values: [is_in_standby]
+    query_ref: mssql_restore_db_state
+
+  - metric_name: mssql_restore_db_state
+    type: gauge
+    help: 'sys.databases.state for DBs that are RESTORING/RECOVERING/standby or have restorehistory in last 400 days.'
+    key_labels:
+      - db
+      - state_desc
+    values: [state]
+    query_ref: mssql_restore_db_state
+
+  - metric_name: mssql_restore_job_failed_24h
+    type: gauge
+    help: 'Failed SQL Agent job outcomes (24h) for jobs that contain a RESTORE step.'
+    key_labels:
+      - job_name
+      - category_name
+    values: [failed_count]
+    query_ref: mssql_restore_job_failed
+
+  - metric_name: mssql_restore_job_executions_24h
+    type: gauge
+    help: 'Total SQL Agent job outcomes (24h) for restore jobs that had at least one failure (same scope as mssql_restore_job_failed_24h).'
+    key_labels:
+      - job_name
+      - category_name
+    values: [execution_count]
+    query_ref: mssql_restore_job_failed
+
+  - metric_name: mssql_restore_job_failed_total_24h
+    type: gauge
+    help: 'Total failed restore-related Agent job outcomes in last 24h.'
+    values: [failed_count]
+    query_ref: mssql_restore_job_failed_total
+
+queries:
+  - query_name: mssql_restore_last
+    query: |
+      ;WITH ranked AS
+      (
+        SELECT
+            rh.destination_database_name AS db,
+            ISNULL(bs.database_name, N'') AS original_db,
+            CASE bs.type
+              WHEN N'D' THEN N'full'
+              WHEN N'I' THEN N'diff'
+              WHEN N'L' THEN N'log'
+              ELSE N'other'
+            END AS backup_type,
+            ISNULL(bs.server_name, N'') AS original_server,
+            ISNULL(bs.recovery_model, N'') AS recovery_model,
+            rh.restore_date,
+            bs.backup_start_date,
+            bs.backup_finish_date,
+            CAST(ISNULL(bs.backup_size, 0) AS float) AS backup_size_bytes,
+            ROW_NUMBER() OVER (
+              PARTITION BY rh.destination_database_name
+              ORDER BY rh.restore_date DESC, rh.restore_history_id DESC
+            ) AS rn
+        FROM msdb.dbo.restorehistory AS rh WITH (NOLOCK)
+        INNER JOIN msdb.dbo.backupset AS bs WITH (NOLOCK)
+            ON rh.backup_set_id = bs.backup_set_id
+        WHERE rh.restore_date >= DATEADD(DAY, -400, GETDATE())
+          AND bs.type IN (N'D', N'I', N'L')
+      )
+      SELECT
+          r.db,
+          r.original_db,
+          r.backup_type,
+          r.original_server,
+          r.recovery_model,
+          CAST(
+            CASE
+              WHEN r.backup_finish_date IS NULL THEN -1
+              ELSE DATEDIFF(SECOND, r.backup_finish_date, GETDATE())
+            END AS float
+          ) AS lag_seconds,
+          CAST(
+            CASE
+              WHEN r.restore_date IS NULL THEN -1
+              ELSE DATEDIFF(SECOND, r.restore_date, GETDATE())
+            END AS float
+          ) AS age_seconds,
+          CAST(ISNULL(DATEDIFF(SECOND, {d '1970-01-01'}, r.restore_date), 0) AS float) AS restore_unix,
+          CAST(ISNULL(DATEDIFF(SECOND, {d '1970-01-01'}, r.backup_finish_date), 0) AS float) AS backup_unix,
+          r.backup_size_bytes,
+          CAST(
+            CASE
+              WHEN DATEDIFF(SECOND, r.backup_start_date, r.backup_finish_date) <= 0 THEN 0
+              ELSE (r.backup_size_bytes / 1048576.0)
+                   / CAST(DATEDIFF(SECOND, r.backup_start_date, r.backup_finish_date) AS float)
+            END AS float
+          ) AS throughput_mb_s
+      FROM ranked AS r
+      WHERE r.rn = 1;
+
+  - query_name: mssql_restore_last_by_type
+    query: |
+      ;WITH ranked AS
+      (
+        SELECT
+            rh.destination_database_name AS db,
+            ISNULL(bs.database_name, N'') AS original_db,
+            CASE bs.type
+              WHEN N'D' THEN N'full'
+              WHEN N'I' THEN N'diff'
+              WHEN N'L' THEN N'log'
+              ELSE N'other'
+            END AS backup_type,
+            ISNULL(bs.server_name, N'') AS original_server,
+            ISNULL(bs.recovery_model, N'') AS recovery_model,
+            rh.restore_date,
+            bs.backup_finish_date,
+            ROW_NUMBER() OVER (
+              PARTITION BY rh.destination_database_name, bs.type
+              ORDER BY rh.restore_date DESC, rh.restore_history_id DESC
+            ) AS rn
+        FROM msdb.dbo.restorehistory AS rh WITH (NOLOCK)
+        INNER JOIN msdb.dbo.backupset AS bs WITH (NOLOCK)
+            ON rh.backup_set_id = bs.backup_set_id
+        WHERE rh.restore_date >= DATEADD(DAY, -400, GETDATE())
+          AND bs.type IN (N'D', N'I', N'L')
+      )
+      SELECT
+          r.db,
+          r.original_db,
+          r.backup_type,
+          r.original_server,
+          r.recovery_model,
+          CAST(
+            CASE
+              WHEN r.backup_finish_date IS NULL THEN -1
+              ELSE DATEDIFF(SECOND, r.backup_finish_date, GETDATE())
+            END AS float
+          ) AS lag_seconds,
+          CAST(
+            CASE
+              WHEN r.restore_date IS NULL THEN -1
+              ELSE DATEDIFF(SECOND, r.restore_date, GETDATE())
+            END AS float
+          ) AS age_seconds
+      FROM ranked AS r
+      WHERE r.rn = 1;
+
+  - query_name: mssql_restore_db_state
+    query: |
+      ;WITH restored_dbs AS
+      (
+        SELECT DISTINCT destination_database_name AS db
+        FROM msdb.dbo.restorehistory WITH (NOLOCK)
+        WHERE restore_date >= DATEADD(DAY, -400, GETDATE())
+      )
+      SELECT
+          d.name AS db,
+          d.state_desc AS state_desc,
+          CAST(d.state AS float) AS state,
+          CAST(d.is_in_standby AS float) AS is_in_standby
+      FROM sys.databases AS d WITH (NOLOCK)
+      WHERE d.name <> N'tempdb'
+        AND (
+              d.is_in_standby = 1
+           OR d.state IN (1, 2, 3)  -- RESTORING, RECOVERING, RECOVERY_PENDING
+           OR EXISTS (SELECT 1 FROM restored_dbs AS r WHERE r.db = d.name)
+            );
+
+  - query_name: mssql_restore_job_failed
+    query: |
+      ;WITH restore_jobs AS
+      (
+        SELECT DISTINCT j.job_id, j.name AS job_name, ISNULL(c.name, N'') AS category_name
+        FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+        INNER JOIN msdb.dbo.sysjobsteps AS s WITH (NOLOCK)
+            ON j.job_id = s.job_id
+        LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+            ON j.category_id = c.category_id
+        WHERE s.command LIKE N'%RESTORE %DATABASE%'
+           OR s.command LIKE N'%RESTORE %LOG%'
+           OR (s.subsystem = N'SSIS' AND s.command LIKE N'%[Rr]estore%')
+      ),
+      recent AS
+      (
+        SELECT
+            h.job_id,
+            h.run_status
+        FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+        WHERE h.step_id = 0
+          AND CONVERT(datetime,
+                STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                + ' '
+                + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+              ) >= DATEADD(HOUR, -24, GETDATE())
+      )
+      SELECT
+          rj.job_name,
+          rj.category_name,
+          CAST(SUM(CASE WHEN r.run_status = 0 THEN 1 ELSE 0 END) AS float) AS failed_count,
+          CAST(COUNT(*) AS float) AS execution_count
+      FROM restore_jobs AS rj
+      INNER JOIN recent AS r
+          ON r.job_id = rj.job_id
+      GROUP BY rj.job_name, rj.category_name
+      HAVING SUM(CASE WHEN r.run_status = 0 THEN 1 ELSE 0 END) > 0;
+
+  - query_name: mssql_restore_job_failed_total
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS failed_count
+      FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND h.job_id IN (
+            SELECT DISTINCT j.job_id
+            FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+            INNER JOIN msdb.dbo.sysjobsteps AS s WITH (NOLOCK)
+                ON j.job_id = s.job_id
+            WHERE s.command LIKE N'%RESTORE %DATABASE%'
+               OR s.command LIKE N'%RESTORE %LOG%'
+        )
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -24, GETDATE());

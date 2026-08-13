@@ -1,0 +1,254 @@
+# SQL Agent job failures — dedicated alerting surface.
+# Inventory → mssql_job_inventory | Running → mssql_job_running | Full history → mssql_job_history
+#
+#   GRANT SELECT ON msdb.dbo.sysjobhistory TO
+#   GRANT SELECT ON msdb.dbo.sysjobs TO
+#   GRANT SELECT ON msdb.dbo.sysjobservers TO
+#   GRANT SELECT ON msdb.dbo.syscategories TO
+#
+collector_name: mssql_job_failed
+
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_job_failed_total
+    type: gauge
+    help: 'Failed job outcomes (run_status=0, step_id=0) in lookback window.'
+    key_labels:
+      - window
+    values: [failed_count]
+    query_ref: mssql_job_failed_total
+
+  - metric_name: mssql_job_failed_count
+    type: gauge
+    help: 'Failed job outcomes per job in lookback window.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - window
+    values: [failed_count]
+    query_ref: mssql_job_failed_by_job
+
+  - metric_name: mssql_job_failed_last_age_seconds
+    type: gauge
+    help: 'Seconds since the most recent failure for each job that failed in last 7 days.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+    values: [age_seconds]
+    query_ref: mssql_job_failed_last
+
+  - metric_name: mssql_job_failed_last_duration_seconds
+    type: gauge
+    help: 'Duration seconds of the most recent failure per job (last 7 days).'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+    values: [duration_seconds]
+    query_ref: mssql_job_failed_last
+
+  - metric_name: mssql_job_failed_recent_duration_seconds
+    type: gauge
+    help: 'Recent failed outcomes in last 24h (TOP 50), with message snip.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - run_date
+      - run_time
+      - message_snip
+    values: [duration_seconds]
+    query_ref: mssql_job_failed_recent
+
+  - metric_name: mssql_job_failed_current
+    type: gauge
+    help: '1 if last_run_outcome from sysjobservers is Failed (0). Useful for sticky fail alerts.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - run_date
+      - run_time
+    values: [is_failed]
+    query_ref: mssql_job_failed_current
+
+  - metric_name: mssql_job_failed_current_duration_seconds
+    type: gauge
+    help: 'Duration seconds of the sticky failed last run (sysjobservers.last_run_duration).'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - run_date
+      - run_time
+    values: [duration_seconds]
+    query_ref: mssql_job_failed_current
+
+queries:
+  - query_name: mssql_job_failed_total
+    query: |
+      SELECT
+          N'1h' AS window,
+          CAST(COUNT(*) AS float) AS failed_count
+      FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -1, GETDATE())
+      UNION ALL
+      SELECT
+          N'24h' AS window,
+          CAST(COUNT(*) AS float) AS failed_count
+      FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -24, GETDATE());
+
+  - query_name: mssql_job_failed_by_job
+    query: |
+      ;WITH hist AS
+      (
+          SELECT h.job_id, N'1h' AS window
+          FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+          WHERE h.step_id = 0
+            AND h.run_status = 0
+            AND CONVERT(datetime,
+                  STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                  + ' '
+                  + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+                ) >= DATEADD(HOUR, -1, GETDATE())
+          UNION ALL
+          SELECT h.job_id, N'24h' AS window
+          FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+          WHERE h.step_id = 0
+            AND h.run_status = 0
+            AND CONVERT(datetime,
+                  STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                  + ' '
+                  + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+                ) >= DATEADD(HOUR, -24, GETDATE())
+      )
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          hist.window,
+          CAST(COUNT(*) AS float) AS failed_count
+      FROM hist
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON hist.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      GROUP BY j.name, c.name, j.[enabled], hist.window;
+
+  - query_name: mssql_job_failed_last
+    query: |
+      ;WITH ranked AS
+      (
+          SELECT
+              h.job_id,
+              CONVERT(datetime,
+                STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                + ' '
+                + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+              ) AS run_dt,
+              ((h.run_duration / 10000) * 3600)
+                + (((h.run_duration % 10000) / 100) * 60)
+                + (h.run_duration % 100) AS duration_seconds,
+              ROW_NUMBER() OVER (
+                PARTITION BY h.job_id
+                ORDER BY h.run_date DESC, h.run_time DESC, h.instance_id DESC
+              ) AS rn
+          FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+          WHERE h.step_id = 0
+            AND h.run_status = 0
+            AND CONVERT(datetime,
+                  STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                  + ' '
+                  + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+                ) >= DATEADD(DAY, -7, GETDATE())
+      )
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          CAST(DATEDIFF(SECOND, r.run_dt, GETDATE()) AS float) AS age_seconds,
+          CAST(r.duration_seconds AS float) AS duration_seconds
+      FROM ranked AS r
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON r.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      WHERE r.rn = 1;
+
+  - query_name: mssql_job_failed_recent
+    query: |
+      SELECT TOP (50)
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-') AS run_date,
+          STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':') AS run_time,
+          LEFT(
+            REPLACE(REPLACE(REPLACE(ISNULL(h.message, N''), CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            120
+          ) AS message_snip,
+          CAST(
+            ((h.run_duration / 10000) * 3600)
+              + (((h.run_duration % 10000) / 100) * 60)
+              + (h.run_duration % 100)
+            AS float
+          ) AS duration_seconds
+      FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON h.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      WHERE h.step_id = 0
+        AND h.run_status = 0
+        AND CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) >= DATEADD(HOUR, -24, GETDATE())
+      ORDER BY h.run_date DESC, h.run_time DESC, h.instance_id DESC;
+
+  - query_name: mssql_job_failed_current
+    query: |
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          CASE
+            WHEN js.last_run_date > 0 THEN
+              STUFF(STUFF(RIGHT('00000000' + CAST(js.last_run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+            ELSE N''
+          END AS run_date,
+          CASE
+            WHEN js.last_run_date > 0 THEN
+              STUFF(STUFF(RIGHT('000000' + CAST(js.last_run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ELSE N''
+          END AS run_time,
+          CAST(1 AS float) AS is_failed,
+          CAST(
+            ((js.last_run_duration / 10000) * 3600)
+              + (((js.last_run_duration % 10000) / 100) * 60)
+              + (js.last_run_duration % 100)
+            AS float
+          ) AS duration_seconds
+      FROM msdb.dbo.sysjobservers AS js WITH (NOLOCK)
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON js.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      WHERE js.last_run_outcome = 0;

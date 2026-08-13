@@ -1,0 +1,110 @@
+# Alertmanager config for sql_exporter priority routing (P0 / P1 / P2).
+#
+# Channels:
+#   - Email  → native email_configs (SMTP)
+#   - SMS    → webhook_configs pointing at your SMS gateway / notifier
+#
+# Replace CHANGE_ME_* placeholders before production use.
+# Wire Prometheus with:
+#   alerting:
+#     alertmanagers:
+#       - static_configs:
+#           - targets: ["alertmanager:9093"]
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "CHANGE_ME_SMTP_HOST:587"
+  smtp_from: "CHANGE_ME_ALERTS_FROM@example.com"
+  smtp_auth_username: "CHANGE_ME_SMTP_USER"
+  smtp_auth_password: "CHANGE_ME_SMTP_PASSWORD"
+  smtp_require_tls: true
+
+templates:
+  - "templates/*.tmpl"
+
+route:
+  receiver: email-p2
+  group_by: [priority, alertname, instance, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # P0 — page immediately: SMS + Email
+    - matchers:
+        - priority = "P0"
+      receiver: sms-email-p0
+      group_wait: 0s
+      group_interval: 2m
+      repeat_interval: 15m
+      continue: false
+
+    # P1 — Email always; SMS optional via same webhook (shorter repeat than P2)
+    - matchers:
+        - priority = "P1"
+      receiver: email-sms-p1
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: false
+
+    # P2 — Email only (no SMS noise)
+    - matchers:
+        - priority = "P2"
+      receiver: email-p2
+      group_wait: 1m
+      group_interval: 15m
+      repeat_interval: 12h
+      continue: false
+
+inhibit_rules:
+  # Critical P0 suppresses same alertname at lower priority on the same instance
+  - source_matchers:
+      - priority = "P0"
+    target_matchers:
+      - priority =~ "P1|P2"
+    equal: [alertname, instance]
+
+  # Critical severity suppresses warning for the same alert/instance
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: [alertname, instance]
+
+receivers:
+  - name: sms-email-p0
+    email_configs:
+      - to: "CHANGE_ME_P0_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P0][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
+      # SMS gateway / custom notifier. Expected to accept Alertmanager webhook JSON.
+      # Example body fields: commonLabels.priority, commonLabels.alertname, commonLabels.instance
+      - url: "http://CHANGE_ME_SMS_GATEWAY/alertmanager"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: email-sms-p1
+    email_configs:
+      - to: "CHANGE_ME_P1_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P1][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
+      # Keep SMS for P1 if your gateway supports priority filtering; otherwise remove this block.
+      - url: "http://CHANGE_ME_SMS_GATEWAY/alertmanager"
+        send_resolved: false
+        max_alerts: 10
+
+  - name: email-p2
+    email_configs:
+      - to: "CHANGE_ME_P2_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P2][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.sql_exporter.html" . }}'

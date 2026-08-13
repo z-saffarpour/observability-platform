@@ -1,0 +1,73 @@
+groups:
+  - name: windows_exporter.p2.mssql
+    rules:
+      - alert: MssqlLongRunningTransaction
+        expr: windows_mssql_transactions_longest_transaction_running_seconds > 3600
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: mssql
+        annotations:
+          summary: "Long-running SQL transaction on {{ $labels.instance }}"
+          description: "Longest transaction has been running for {{ $value | humanizeDuration }}."
+          runbook: "Identify open tran sessions; check impact on log reuse and blocking."
+
+      - alert: MssqlSqlErrors
+        expr: increase(windows_mssql_sql_errors_total[15m]) > 5
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: mssql
+        annotations:
+          summary: "SQL errors increased on {{ $labels.instance }}"
+          description: "{{ $value }} SQL errors in 15 minutes (severity {{ $labels.severity }})."
+          runbook: "Inspect SQL error log for the matching severity."
+
+      - alert: MssqlPageIoLatchWaitsHigh
+        expr: increase(windows_mssql_waitstats_page_io_latch_waits[15m]) > 1000
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: mssql
+        annotations:
+          summary: "High PAGEIOLATCH waits on {{ $labels.instance }}"
+          description: "PAGEIOLATCH wait count increased by {{ $value }} in 15 minutes."
+          runbook: "Correlate with disk latency and buffer cache / PLE alerts."
+
+      - alert: MssqlLockWaitsHigh
+        expr: increase(windows_mssql_waitstats_lock_waits[15m]) > 1000
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: mssql
+        annotations:
+          summary: "High lock waits on {{ $labels.instance }}"
+          description: "Lock waits increased by {{ $value }} in 15 minutes."
+          runbook: "Review blocking chains and indexing / isolation level."
+
+      - alert: MssqlTempdbFreeSpaceLow
+        expr: windows_mssql_transactions_tempdb_free_space_bytes < 1e9
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: mssql
+        annotations:
+          summary: "tempdb free space low on {{ $labels.instance }}"
+          description: "tempdb free space is {{ $value | humanize }}B (default threshold 1GB)."
+          runbook: "Check version store, temp objects, and tempdb file layout."
+
+      - alert: MssqlUserConnectionsHigh
+        expr: windows_mssql_genstats_user_connections > 500
+        for: 20m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: mssql
+        annotations:
+          summary: "High SQL user connections on {{ $labels.instance }}"
+          description: "User connections are {{ $value }} (default threshold 500). Tune per instance capacity."
+          runbook: "Check connection pooling and abandoned sessions."

@@ -1,0 +1,183 @@
+# Missing index DMV sample (cardinality-capped TOP N) + per-DB rollup.
+# Advisory only — validate before creating indexes (cost/impact/seeks are hints).
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_missing_index
+
+min_interval: 600s
+
+metrics:
+  - metric_name: mssql_missing_index_impact
+    type: gauge
+    help: 'avg_user_impact (%) for TOP missing-index suggestions.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [avg_user_impact]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_user_seeks
+    type: gauge
+    help: 'user_seeks for TOP missing-index suggestions.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [user_seeks]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_user_scans
+    type: gauge
+    help: 'user_scans for TOP missing-index suggestions.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [user_scans]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_score
+    type: gauge
+    help: 'Simple score = avg_user_impact * (user_seeks + user_scans) for TOP suggestions.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [improvement_score]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_avg_cost
+    type: gauge
+    help: 'avg_total_user_cost for TOP missing-index suggestions.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [avg_total_user_cost]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_unique_compiles
+    type: gauge
+    help: 'unique_compiles for TOP missing-index suggestions.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [unique_compiles]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_cost_score
+    type: gauge
+    help: 'Microsoft-style score = avg_total_user_cost * avg_user_impact * (user_seeks + user_scans).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - equality_columns
+      - inequality_columns
+      - included_columns
+    values: [cost_score]
+    query_ref: mssql_missing_index_top
+
+  - metric_name: mssql_missing_index_db_suggestions
+    type: gauge
+    help: 'Count of missing-index suggestions sampled for the database (capped by TOP N query).'
+    key_labels:
+      - db
+    values: [suggestion_count]
+    query_ref: mssql_missing_index_db
+
+  - metric_name: mssql_missing_index_db_max_score
+    type: gauge
+    help: 'Max simple improvement score among sampled suggestions for the database.'
+    key_labels:
+      - db
+    values: [max_score]
+    query_ref: mssql_missing_index_db
+
+  - metric_name: mssql_missing_index_db_sum_score
+    type: gauge
+    help: 'Sum of simple improvement scores among sampled suggestions for the database.'
+    key_labels:
+      - db
+    values: [sum_score]
+    query_ref: mssql_missing_index_db
+
+  - metric_name: mssql_missing_index_db_max_impact
+    type: gauge
+    help: 'Max avg_user_impact (%) among sampled suggestions for the database.'
+    key_labels:
+      - db
+    values: [max_impact]
+    query_ref: mssql_missing_index_db
+
+queries:
+  - query_name: mssql_missing_index_top
+    query: |
+      SELECT TOP (30)
+          ISNULL(DB_NAME(d.database_id), N'') AS db,
+          ISNULL(OBJECT_SCHEMA_NAME(d.object_id, d.database_id), N'') AS schema_name,
+          ISNULL(OBJECT_NAME(d.object_id, d.database_id), N'') AS table_name,
+          LEFT(ISNULL(d.equality_columns, N''), 80) AS equality_columns,
+          LEFT(ISNULL(d.inequality_columns, N''), 80) AS inequality_columns,
+          LEFT(ISNULL(d.included_columns, N''), 80) AS included_columns,
+          CAST(s.avg_user_impact AS float) AS avg_user_impact,
+          CAST(s.user_seeks AS float) AS user_seeks,
+          CAST(s.user_scans AS float) AS user_scans,
+          CAST(s.avg_total_user_cost AS float) AS avg_total_user_cost,
+          CAST(s.unique_compiles AS float) AS unique_compiles,
+          CAST(s.avg_user_impact * (s.user_seeks + s.user_scans) AS float) AS improvement_score,
+          CAST(s.avg_total_user_cost * s.avg_user_impact * (s.user_seeks + s.user_scans) AS float) AS cost_score
+      FROM sys.dm_db_missing_index_group_stats AS s WITH (NOLOCK)
+      INNER JOIN sys.dm_db_missing_index_groups AS g WITH (NOLOCK)
+          ON s.group_handle = g.index_group_handle
+      INNER JOIN sys.dm_db_missing_index_details AS d WITH (NOLOCK)
+          ON g.index_handle = d.index_handle
+      WHERE d.database_id > 4
+        AND ISNULL(OBJECT_NAME(d.object_id, d.database_id), N'') <> N''
+      ORDER BY s.avg_user_impact * (s.user_seeks + s.user_scans) DESC;
+
+  - query_name: mssql_missing_index_db
+    query: |
+      ;WITH top_sug AS (
+          SELECT TOP (30)
+              ISNULL(DB_NAME(d.database_id), N'') AS db,
+              CAST(s.avg_user_impact AS float) AS avg_user_impact,
+              CAST(s.avg_user_impact * (s.user_seeks + s.user_scans) AS float) AS improvement_score
+          FROM sys.dm_db_missing_index_group_stats AS s WITH (NOLOCK)
+          INNER JOIN sys.dm_db_missing_index_groups AS g WITH (NOLOCK)
+              ON s.group_handle = g.index_group_handle
+          INNER JOIN sys.dm_db_missing_index_details AS d WITH (NOLOCK)
+              ON g.index_handle = d.index_handle
+          WHERE d.database_id > 4
+            AND ISNULL(OBJECT_NAME(d.object_id, d.database_id), N'') <> N''
+          ORDER BY s.avg_user_impact * (s.user_seeks + s.user_scans) DESC
+      )
+      SELECT
+          db,
+          CAST(COUNT_BIG(*) AS float) AS suggestion_count,
+          CAST(MAX(improvement_score) AS float) AS max_score,
+          CAST(SUM(improvement_score) AS float) AS sum_score,
+          CAST(MAX(avg_user_impact) AS float) AS max_impact
+      FROM top_sug
+      GROUP BY db;

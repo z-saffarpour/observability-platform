@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>windows_exporter install, upgrade, and uninstall guide</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --text: #1f2937;
+      --muted: #4b5563;
+      --border: #d1d5db;
+      --accent: #0f766e;
+      --accent-soft: #ecfdf5;
+      --code-bg: #0b1220;
+      --code-text: #e5e7eb;
+      --thead: #f3f4f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 3rem;
+    }
+    header.hero {
+      background: linear-gradient(135deg, #0f766e 0%, #115e59 55%, #134e4a 100%);
+      color: #fff;
+      border-radius: 14px;
+      padding: 1.5rem 1.4rem;
+      margin-bottom: 1.25rem;
+    }
+    header.hero h1 {
+      margin: 0 0 0.5rem;
+      font-size: 1.55rem;
+      font-weight: 700;
+    }
+    header.hero p { margin: 0.25rem 0; opacity: 0.95; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.9rem;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.16);
+      border: 1px solid rgba(255,255,255,0.28);
+      border-radius: 999px;
+      padding: 0.2rem 0.7rem;
+      font-size: 0.85rem;
+    }
+    nav.toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+    nav.toc h2 {
+      margin: 0 0 0.6rem;
+      font-size: 1rem;
+    }
+    nav.toc ol {
+      margin: 0;
+      padding-inline-start: 1.25rem;
+    }
+    nav.toc a { color: var(--accent); text-decoration: none; }
+    nav.toc a:hover { text-decoration: underline; }
+    article {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem 1.6rem;
+    }
+    h2 {
+      margin: 1.8rem 0 0.7rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 2px solid var(--accent-soft);
+      color: #0f172a;
+      font-size: 1.25rem;
+    }
+    h2:first-child { margin-top: 0.2rem; }
+    h3 {
+      margin: 1.2rem 0 0.5rem;
+      font-size: 1.05rem;
+      color: #134e4a;
+    }
+    a { color: var(--accent); }
+    code, kbd {
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      font-size: 0.92em;
+      background: #eef2f7;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 0.05rem 0.35rem;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+      overflow-x: auto;
+      line-height: 1.45;
+      border: 1px solid #1f2937;
+    }
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      font-size: 0.88rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1rem;
+      font-size: 0.95rem;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.7rem;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: var(--thead);
+      font-weight: 600;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    .note {
+      background: var(--accent-soft);
+      border: 1px solid #99f6e4;
+      border-radius: 10px;
+      padding: 0.75rem 0.9rem;
+      margin: 0.8rem 0;
+    }
+    .path {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      background: #f8fafc;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.7rem 0.9rem;
+    }
+    footer {
+      margin-top: 1rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    .lang-switch { margin-top: 0.75rem; }
+    .lang-switch a {
+      color: #fff;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    @media print {
+      body { background: #fff; }
+      .wrap { max-width: none; padding: 0; }
+      header.hero, article, nav.toc {
+        border: 0;
+        border-radius: 0;
+      }
+      header.hero { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      pre { white-space: pre-wrap; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>windows_exporter install, upgrade, and uninstall guide</h1>
+      <p>Remote install, upgrade, and safe removal over WinRM for version <strong>0.31.8</strong></p>
+      <div class="meta">
+        <span class="badge">Scrape port: 9182</span>
+        <span class="badge">Metrics path: /metrics</span>
+        <span class="badge">Scripts: PowerShell + WinRM</span>
+      </div>
+      <p class="lang-switch">
+        Markdown source:
+        <a href="install-upgrade-guide.md">install-upgrade-guide.md</a>
+        ·
+        <a href="../fa/install-upgrade-guide.html">فارسی (HTML)</a>
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Table of contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#prereq">Prerequisites</a></li>
+        <li><a href="#access">Required access</a></li>
+        <li><a href="#profile">Choosing a profile</a></li>
+        <li><a href="#install">Remote install</a></li>
+        <li><a href="#upgrade">Remote upgrade</a></li>
+        <li><a href="#uninstall">Remote uninstall</a></li>
+        <li><a href="#rollout">Recommended rollout order</a></li>
+        <li><a href="#verify">Post-install / post-upgrade checks</a></li>
+        <li><a href="#notes">Version 0.31.8 notes</a></li>
+        <li><a href="#troubleshoot">Quick troubleshooting</a></li>
+        <li><a href="#related">Related docs</a></li>
+      </ol>
+    </nav>
+
+    <article>
+      <p>
+        This guide covers <strong>remote</strong> install and upgrade over WinRM to version <strong>0.31.8</strong>.
+        Default scrape port: <strong>9182</strong> (Basic Auth off).
+      </p>
+      <div class="note">
+        For manual local service setup, firewall,
+        <a href="install-config-guide.md#basic-auth-optional">creating and enabling Basic Auth</a>,
+        and a sample <code>scrape_config</code>,
+        see <a href="install-config-guide.md">Installation and configuration</a>.
+      </div>
+
+      <h2 id="prereq">Prerequisites</h2>
+      <table>
+        <thead>
+          <tr><th>Item</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Client</td>
+            <td>PowerShell 5.1+; full package locally (exe, yml, <code>profiles/</code>, scripts)</td>
+          </tr>
+          <tr>
+            <td>Target</td>
+            <td>Windows Server 2016+; Administrator; WinRM / PowerShell Remoting enabled</td>
+          </tr>
+          <tr>
+            <td>Network</td>
+            <td>Client → target WinRM; Prometheus → TCP/9182</td>
+          </tr>
+          <tr>
+            <td>Package</td>
+            <td><code>windows_exporter.exe</code>, <code>windows_exporter.yml</code>, <code>web-config.yml</code>, <code>profiles/</code>, <code>scripts/powershell/windows-exporter/</code> (and <code>scripts/ssas/windows-exporter/</code> when present)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Run the scripts <strong>from a client</strong>. Do not start <code>windows_exporter.exe</code> on the client.</p>
+<pre><code># Verify WinRM before install
+Test-WSMan -ComputerName SERVER01</code></pre>
+
+      <h2 id="access">Required access</h2>
+      <p>List required access, create ACLs/firewall/rights, then audit:</p>
+<pre><code>.\scripts\powershell\windows-exporter\Test-WindowsExporterRequiredAccess.ps1 -ShowRequirements
+.\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20 -WhatIf
+.\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20
+.\scripts\powershell\windows-exporter\Test-WindowsExporterRequiredAccess.ps1
+.\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 `
+  -ComputerName SQL01 `
+  -Credential (Get-Credential) `
+  -ServiceAccount 'DOMAIN\svc-winexporter$' `
+  -PrometheusRemoteAddress 10.10.10.20 `
+  -GrantPerformanceMonitorUsers</code></pre>
+      <p><code>Set-WindowsExporterRequiredAccess.ps1</code> creates access; <code>Test-WindowsExporterRequiredAccess.ps1</code> audits it. SSAS Admin/DMV rights are configured inside Analysis Services, not by these scripts.</p>
+
+      <h2 id="profile">Choosing a profile</h2>
+      <table>
+        <thead>
+          <tr><th>Method</th><th>Parameter</th><th>Behavior</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Install default</td>
+            <td>no <code>-Profile</code></td>
+            <td>root <code>windows_exporter.yml</code></td>
+          </tr>
+          <tr>
+            <td>Fixed</td>
+            <td><code>-Profile sql-server.yml</code></td>
+            <td>role config from <code>profiles/</code></td>
+          </tr>
+          <tr>
+            <td>Auto</td>
+            <td><code>-AutoProfile</code></td>
+            <td>role discovery via <code>Discover-WindowsExporterRole.ps1</code> per host</td>
+          </tr>
+          <tr>
+            <td>Upgrade preserve</td>
+            <td>no <code>-Profile</code> / <code>-AutoProfile</code></td>
+            <td>keeps current <code>--config.file</code>; refreshes <code>profiles/</code> and <code>scripts/</code>, ensures <code>textfile_inputs/</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Do not pass both <code>-Profile</code> and <code>-AutoProfile</code>.
+        Role details: <a href="profiles.md">Role-based profiles</a>.
+        On SSAS hosts, after the exporter is installed, install the metrics task separately per
+        <a href="ssas-monitoring.md">SSAS monitoring</a>.
+      </p>
+<pre><code>.\scripts\powershell\windows-exporter\Discover-WindowsExporterRole.ps1
+.\scripts\powershell\windows-exporter\Discover-WindowsExporterRole.ps1 -ComputerName SQL01,SQL02 -Credential (Get-Credential)</code></pre>
+
+      <h2 id="install">Remote install</h2>
+      <p>Script: <code>scripts/powershell/windows-exporter/Install-WindowsExporterRemote.ps1</code></p>
+
+      <h3>What it does</h3>
+      <ol>
+        <li>Copies package files, <code>profiles/</code>, and <code>scripts/</code> (powershell + ssas) from the client and creates <code>textfile_inputs/</code></li>
+        <li>Creates a timestamped backup (<code>_backup\install_...</code>)</li>
+        <li>Creates or updates the native <code>windows_exporter</code> service ImagePath</li>
+        <li>Applies the service account and starts the service</li>
+        <li>Re-runs are safe (idempotent refresh)</li>
+      </ol>
+      <p class="note">Installing the exporter alone does not create the SSAS metrics service. After install with an SSAS-capable profile, run <code>Install-SsasMetricsTask.ps1</code> as Administrator to install <code>prometheus_windows_ssas</code>. Details: <a href="ssas-monitoring.md">SSAS monitoring</a>.</p>
+      <p>Default install path:</p>
+      <div class="path">C:\Program Files\Observability\PrometheusExporters\windows-exporter</div>
+
+      <h3>Key parameters</h3>
+      <table>
+        <thead>
+          <tr><th>Parameter</th><th>Default</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-Computers</code></td><td>(required)</td><td>Host names or list from a file</td></tr>
+          <tr><td><code>-SourceRoot</code></td><td>package root</td><td>Package path on the client</td></tr>
+          <tr><td><code>-InstallRoot</code></td><td>Program Files path above</td><td>Install path on the target</td></tr>
+          <tr><td><code>-ServiceMode</code></td><td><code>ServiceBase</code></td><td><code>ServiceBase</code> or <code>NSSM</code>; NSSM is deployed to <code>C:\Program Files\Observability\Tools\NSSM\nssm.exe</code></td></tr>
+          <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>—</td><td>Role config selection</td></tr>
+          <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td><code>LocalSystem</code>, <code>LocalService</code>, <code>NetworkService</code>, <code>Credential</code>, <code>gMSA</code>, <code>NtService</code></td></tr>
+          <tr><td><code>-ServiceCredential</code></td><td>—</td><td>For <code>Credential</code> mode</td></tr>
+          <tr><td><code>-ServiceAccount</code></td><td>—</td><td>gMSA ending with <code>$</code></td></tr>
+          <tr><td><code>-RemoteCredential</code></td><td>—</td><td>WinRM credential</td></tr>
+          <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>Service stop/start wait timeout</td></tr>
+          <tr><td><code>-WhatIf</code></td><td>—</td><td>Dry run</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Examples</h3>
+<pre><code>.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 `
+  -WhatIf
+
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01,SQL02 `
+  -Profile sql-server.yml `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01,APP01 `
+  -AutoProfile `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -Profile sql-server.yml `
+  -ServiceAccountMode Credential `
+  -ServiceCredential (Get-Credential) `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -ServiceAccountMode gMSA `
+  -ServiceAccount 'DOMAIN\svc-winexporter$' `
+  -RemoteCredential (Get-Credential)
+
+# Virtual service account (NT SERVICE\windows_exporter)
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+# After NtService, harden ACLs for the virtual account:
+# .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'</code></pre>
+
+      <h2 id="upgrade">Remote upgrade</h2>
+      <p>Script: <code>scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1</code></p>
+
+      <h3>What it does</h3>
+      <ol>
+        <li>Auto-detects <strong>Native</strong> or <strong>NSSM</strong> installs and the binary path</li>
+        <li>Backs up before replace (<code>_backup\upgrade_&lt;version&gt;_...</code>)</li>
+        <li>Refreshes the exe, YAML files, <code>profiles/</code>, and <code>scripts/</code>, and ensures <code>textfile_inputs/</code></li>
+        <li>Verifies the installed version against <code>-ExpectedVersion</code> (default <code>0.31.8</code>)</li>
+        <li>Rolls back files (and ImagePath/AppParameters if a profile change was applied) when validation or startup fails</li>
+        <li>Keeps the newest <code>-KeepBackups</code> upgrade backups (default 5)</li>
+      </ol>
+
+      <h3>Key parameters</h3>
+      <table>
+        <thead>
+          <tr><th>Parameter</th><th>Default</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-Computers</code></td><td>(required)</td><td>Target hosts</td></tr>
+          <tr><td><code>-ExpectedVersion</code></td><td><code>0.31.8</code></td><td>Expected package and post-install version</td></tr>
+          <tr><td><code>-InstallRoot</code></td><td>(auto-detect)</td><td>Only if the exe path cannot be detected</td></tr>
+          <tr><td><code>-ServiceMode</code></td><td><code>Preserve</code></td><td>Preserve and validate the installed <code>ServiceBase</code>/<code>NSSM</code> mode</td></tr>
+          <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>preserve current</td><td>Change <code>--config.file</code></td></tr>
+          <tr><td><code>-ServiceAccountMode</code></td><td>preserve current</td><td><code>LocalSystem</code>, <code>LocalService</code>, <code>NetworkService</code>, <code>Credential</code>, <code>gMSA</code>, <code>NtService</code></td></tr>
+          <tr><td><code>-ServiceCredential</code></td><td>—</td><td>For <code>Credential</code> mode</td></tr>
+          <tr><td><code>-ServiceAccount</code></td><td>—</td><td>gMSA ending with <code>$</code>; optional <code>NT SERVICE\&lt;ServiceName&gt;</code> for <code>NtService</code></td></tr>
+          <tr><td><code>-KeepBackups</code></td><td><code>5</code></td><td>Number of <code>upgrade_*</code> backups to retain</td></tr>
+          <tr><td><code>-RemoteCredential</code></td><td>—</td><td>WinRM credential</td></tr>
+          <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>Service stop/start wait timeout</td></tr>
+          <tr><td><code>-WhatIf</code></td><td>—</td><td>Dry run</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Examples</h3>
+<pre><code>.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 `
+  -WhatIf
+
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SQL01,SQL02 `
+  -Profile sql-server.yml `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SQL01,SQL02 `
+  -AutoProfile `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ExpectedVersion 0.32.0 `
+  -RemoteCredential (Get-Credential)
+
+# Upgrade and switch to NT SERVICE\windows_exporter
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+      <h2 id="uninstall">Remote uninstall</h2>
+      <p><code>Uninstall-WindowsExporterRemote.ps1</code> detects ServiceBase or NSSM, stops and removes <code>prometheus_windows_exporter</code>, and removes deployment files unless <code>-KeepFiles</code> is used. A ZIP backup is created under <code>C:\ProgramData\Observability\PrometheusExporters\uninstall-backups</code> unless <code>-SkipBackup</code> is specified. The Application event source is preserved by default.</p>
+      <pre><code># Preview
+.\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 -WhatIf
+
+# Remove service and files
+.\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 `
+  -ServiceMode Preserve `
+  -RemoteCredential (Get-Credential)
+
+# Remove service only
+.\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 -KeepFiles</code></pre>
+      <div class="note">Use <code>-RemoveEventSource</code> only when historical Application events no longer need their registered source.</div>
+
+      <h2 id="rollout">Recommended rollout order</h2>
+      <ol>
+        <li>Canary one host with <code>-WhatIf</code>, then a real install/upgrade</li>
+        <li>Check <code>Get-Service windows_exporter</code> and <code>/metrics</code></li>
+        <li>Verify Prometheus <code>up</code> and <code>windows_exporter_collector_success</code></li>
+        <li>Confirm dashboards and rules against the new metric names</li>
+        <li>Roll out to the remaining servers</li>
+      </ol>
+
+      <h2 id="verify">Post-install / post-upgrade checks</h2>
+<pre><code>Get-Service windows_exporter
+Get-CimInstance Win32_Service -Filter "Name='windows_exporter'" |
+  Select-Object Name, State, StartName, PathName
+
+.\windows_exporter.exe --version
+
+Invoke-WebRequest http://localhost:9182/metrics</code></pre>
+      <p>From Prometheus:</p>
+<pre><code>Test-NetConnection SERVER01 -Port 9182</code></pre>
+      <p>Health metrics: <code>up</code>, <code>windows_exporter_collector_success</code>, <code>windows_exporter_collector_duration_seconds</code>.</p>
+
+      <h2 id="notes">Version 0.31.8 notes</h2>
+      <ul>
+        <li>Startup rejects unknown YAML keys</li>
+        <li><code>telemetry.max-requests</code> is invalid</li>
+        <li>The old <code>logon</code> collector is replaced by <code>terminal_services</code></li>
+        <li><code>web-config.yml</code> alone is not enough; <code>--web.config.file</code> must be in the service ImagePath</li>
+      </ul>
+
+      <h2 id="troubleshoot">Quick troubleshooting</h2>
+      <table>
+        <thead>
+          <tr><th>Symptom</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>WinRM / access errors</td>
+            <td><code>Test-WSMan</code>; <code>Test-WindowsExporterRequiredAccess.ps1</code>; use <code>Set-WindowsExporterRequiredAccess.ps1</code> when creating ACLs/firewall</td>
+          </tr>
+          <tr>
+            <td>Service will not start</td>
+            <td>Application Event Log; run manually with the ImagePath args</td>
+          </tr>
+          <tr>
+            <td>Version mismatch on upgrade</td>
+            <td>Align <code>-ExpectedVersion</code> with package <code>--version</code></td>
+          </tr>
+          <tr>
+            <td>Upgrade failed + rollback</td>
+            <td>Error message shows cause; backup under <code>_backup\upgrade_...</code></td>
+          </tr>
+          <tr>
+            <td>401 on <code>/metrics</code></td>
+            <td>Only when Basic Auth is enabled: check hash/password and <code>--web.config.file</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>More detail: <a href="troubleshooting.md">Troubleshooting</a>.</p>
+
+      <h2 id="related">Related docs</h2>
+      <ul>
+        <li><a href="install-config-guide.md#basic-auth-optional">Installation and configuration / Basic Auth</a></li>
+        <li><a href="#access">Required access (Set/Test)</a></li>
+        <li><a href="profiles.md">Role-based profiles</a></li>
+        <li><a href="ssas-monitoring.md">SSAS monitoring</a></li>
+        <li><a href="prometheus-rules.md">Prometheus rules</a></li>
+        <li><a href="troubleshooting.md">Troubleshooting</a></li>
+      </ul>
+    </article>
+
+    <footer>
+      windows_exporter 0.31.8 · docs/en/install-upgrade-guide.html
+    </footer>
+  </div>
+</body>
+</html>

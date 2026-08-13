@@ -1,0 +1,478 @@
+# Index usage ops view (not fragmentation).
+#
+# Signals:
+#   - hot indexes by user_reads (seeks+scans+lookups)
+#   - scan_ratio / lookup_ratio / write_read_ratio on hot indexes
+#   - stale / write-heavy candidates (drop / disable review)
+#   - per-database usage rollup
+#
+# Notes:
+#   - dm_db_index_usage_stats resets on restart / offline / index recreate
+#   - SSISDB / Distribution excluded (flood TOP lists)
+#
+#   GRANT VIEW SERVER STATE TO
+#   VIEW ANY DEFINITION / DB access for index names
+#
+collector_name: mssql_index_usage
+
+min_interval: 300s
+
+metrics:
+  # ----- Hot indexes (TOP by reads) -----
+  - metric_name: mssql_index_usage_seeks
+    type: gauge
+    help: 'user_seeks for TOP hot indexes by total read activity.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [user_seeks]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_scans
+    type: gauge
+    help: 'user_scans for TOP hot indexes by total read activity.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [user_scans]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_lookups
+    type: gauge
+    help: 'user_lookups for TOP hot indexes by total read activity.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [user_lookups]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_updates
+    type: gauge
+    help: 'user_updates for TOP hot indexes by total read activity.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [user_updates]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_reads
+    type: gauge
+    help: 'user_seeks+scans+lookups for TOP hot indexes.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [user_reads]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_scan_ratio
+    type: gauge
+    help: 'user_scans / NULLIF(user_reads,0) for TOP hot indexes (scan-heavy signal).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [scan_ratio]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_lookup_ratio
+    type: gauge
+    help: 'user_lookups / NULLIF(user_reads,0) for TOP hot indexes (bookmark-lookup signal).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [lookup_ratio]
+    query_ref: mssql_index_usage_hot
+
+  - metric_name: mssql_index_usage_write_read_ratio
+    type: gauge
+    help: 'user_updates / NULLIF(user_reads,0) for TOP hot indexes.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+    values: [write_read_ratio]
+    query_ref: mssql_index_usage_hot
+
+  # ----- Stale / write-heavy drop candidates -----
+  - metric_name: mssql_index_usage_stale_updates
+    type: gauge
+    help: 'user_updates for unused or write-heavy indexes (drop/disable review candidates).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+      - candidate_kind
+    values: [user_updates]
+    query_ref: mssql_index_usage_stale
+
+  - metric_name: mssql_index_usage_stale_reads
+    type: gauge
+    help: 'user_reads for unused or write-heavy indexes (drop/disable review candidates).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+      - candidate_kind
+    values: [user_reads]
+    query_ref: mssql_index_usage_stale
+
+  - metric_name: mssql_index_usage_stale_write_read_ratio
+    type: gauge
+    help: 'updates/reads (reads=0 → updates) for unused or write-heavy indexes.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+      - candidate_kind
+    values: [write_read_ratio]
+    query_ref: mssql_index_usage_stale
+
+  # ----- Per-database rollup -----
+  - metric_name: mssql_index_usage_db_reads
+    type: gauge
+    help: 'Sum of user_seeks+scans+lookups across indexes with usage stats in the database.'
+    key_labels:
+      - db
+    values: [user_reads]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_updates
+    type: gauge
+    help: 'Sum of user_updates across indexes with usage stats in the database.'
+    key_labels:
+      - db
+    values: [user_updates]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_scans
+    type: gauge
+    help: 'Sum of user_scans across indexes with usage stats in the database.'
+    key_labels:
+      - db
+    values: [user_scans]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_seeks
+    type: gauge
+    help: 'Sum of user_seeks across indexes with usage stats in the database.'
+    key_labels:
+      - db
+    values: [user_seeks]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_lookups
+    type: gauge
+    help: 'Sum of user_lookups across indexes with usage stats in the database.'
+    key_labels:
+      - db
+    values: [user_lookups]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_tracked_indexes
+    type: gauge
+    help: 'Count of non-MS-shipped indexes present in dm_db_index_usage_stats for the database.'
+    key_labels:
+      - db
+    values: [tracked_indexes]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_unused_indexes
+    type: gauge
+    help: 'Count of nonclustered indexes with user_reads=0 and user_updates>0 (since last stats reset).'
+    key_labels:
+      - db
+    values: [unused_indexes]
+    query_ref: mssql_index_usage_db
+
+  - metric_name: mssql_index_usage_db_scan_ratio
+    type: gauge
+    help: 'db user_scans / NULLIF(user_reads,0) — database-level scan pressure.'
+    key_labels:
+      - db
+    values: [scan_ratio]
+    query_ref: mssql_index_usage_db
+
+queries:
+  - query_name: mssql_index_usage_hot
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_iu_hot') IS NOT NULL DROP TABLE #mssql_iu_hot;
+      CREATE TABLE #mssql_iu_hot (
+          db sysname NOT NULL,
+          schema_name sysname NOT NULL,
+          table_name sysname NOT NULL,
+          index_name sysname NOT NULL,
+          index_type_desc nvarchar(60) NOT NULL,
+          user_seeks float NOT NULL,
+          user_scans float NOT NULL,
+          user_lookups float NOT NULL,
+          user_updates float NOT NULL,
+          user_reads float NOT NULL,
+          scan_ratio float NOT NULL,
+          lookup_ratio float NOT NULL,
+          write_read_ratio float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND database_id > 4
+            AND HAS_DBACCESS(name) = 1
+            AND name NOT IN (N'SSISDB', N'Distribution');
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #mssql_iu_hot (
+              db, schema_name, table_name, index_name, index_type_desc,
+              user_seeks, user_scans, user_lookups, user_updates, user_reads,
+              scan_ratio, lookup_ratio, write_read_ratio
+            )
+            SELECT TOP (25)
+                DB_NAME(),
+                ISNULL(OBJECT_SCHEMA_NAME(ius.object_id), N''),
+                ISNULL(OBJECT_NAME(ius.object_id), N''),
+                CASE
+                  WHEN i.index_id = 0 THEN N''(HEAP)''
+                  ELSE ISNULL(i.name, N''(unnamed)'')
+                END,
+                ISNULL(i.type_desc, N''),
+                CAST(ius.user_seeks AS float),
+                CAST(ius.user_scans AS float),
+                CAST(ius.user_lookups AS float),
+                CAST(ius.user_updates AS float),
+                CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS float),
+                CAST(ius.user_scans AS float)
+                  / NULLIF(CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS float), 0),
+                CAST(ius.user_lookups AS float)
+                  / NULLIF(CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS float), 0),
+                CAST(ius.user_updates AS float)
+                  / NULLIF(CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS float), 0)
+            FROM sys.dm_db_index_usage_stats AS ius WITH (NOLOCK)
+            INNER JOIN sys.indexes AS i WITH (NOLOCK)
+              ON i.object_id = ius.object_id
+             AND i.index_id = ius.index_id
+            WHERE ius.database_id = DB_ID()
+              AND OBJECTPROPERTY(ius.object_id, ''IsMSShipped'') = 0
+              AND OBJECT_NAME(ius.object_id) IS NOT NULL
+              AND (ius.user_seeks + ius.user_scans + ius.user_lookups) > 0
+            ORDER BY (ius.user_seeks + ius.user_scans + ius.user_lookups) DESC,
+                     ius.user_updates DESC;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT TOP (50)
+          db, schema_name, table_name, index_name, index_type_desc,
+          user_seeks, user_scans, user_lookups, user_updates, user_reads,
+          ISNULL(scan_ratio, 0) AS scan_ratio,
+          ISNULL(lookup_ratio, 0) AS lookup_ratio,
+          ISNULL(write_read_ratio, 0) AS write_read_ratio
+      FROM #mssql_iu_hot
+      ORDER BY user_reads DESC, user_updates DESC;
+
+  - query_name: mssql_index_usage_stale
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_iu_stale') IS NOT NULL DROP TABLE #mssql_iu_stale;
+      CREATE TABLE #mssql_iu_stale (
+          db sysname NOT NULL,
+          schema_name sysname NOT NULL,
+          table_name sysname NOT NULL,
+          index_name sysname NOT NULL,
+          index_type_desc nvarchar(60) NOT NULL,
+          candidate_kind nvarchar(20) NOT NULL,
+          user_updates float NOT NULL,
+          user_reads float NOT NULL,
+          write_read_ratio float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND database_id > 4
+            AND HAS_DBACCESS(name) = 1
+            AND name NOT IN (N'SSISDB', N'Distribution');
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #mssql_iu_stale (
+              db, schema_name, table_name, index_name, index_type_desc,
+              candidate_kind, user_updates, user_reads, write_read_ratio
+            )
+            SELECT TOP (20)
+                DB_NAME(),
+                ISNULL(OBJECT_SCHEMA_NAME(ius.object_id), N''),
+                ISNULL(OBJECT_NAME(ius.object_id), N''),
+                ISNULL(i.name, N''(unnamed)''),
+                ISNULL(i.type_desc, N''),
+                CASE
+                  WHEN (ius.user_seeks + ius.user_scans + ius.user_lookups) = 0
+                    THEN N''unused''
+                  ELSE N''write_heavy''
+                END,
+                CAST(ius.user_updates AS float),
+                CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS float),
+                CASE
+                  WHEN (ius.user_seeks + ius.user_scans + ius.user_lookups) = 0
+                    THEN CAST(ius.user_updates AS float)
+                  ELSE CAST(ius.user_updates AS float)
+                    / CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS float)
+                END
+            FROM sys.dm_db_index_usage_stats AS ius WITH (NOLOCK)
+            INNER JOIN sys.indexes AS i WITH (NOLOCK)
+              ON i.object_id = ius.object_id
+             AND i.index_id = ius.index_id
+            WHERE ius.database_id = DB_ID()
+              AND OBJECTPROPERTY(ius.object_id, ''IsMSShipped'') = 0
+              AND OBJECT_NAME(ius.object_id) IS NOT NULL
+              AND i.index_id > 1
+              AND i.is_primary_key = 0
+              AND i.is_unique_constraint = 0
+              AND ius.user_updates >= 1000
+              AND (
+                    (ius.user_seeks + ius.user_scans + ius.user_lookups) = 0
+                 OR (
+                      (ius.user_seeks + ius.user_scans + ius.user_lookups) > 0
+                  AND ius.user_updates >= 10 * (ius.user_seeks + ius.user_scans + ius.user_lookups)
+                    )
+                  )
+            ORDER BY ius.user_updates DESC;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT TOP (40)
+          db, schema_name, table_name, index_name, index_type_desc,
+          candidate_kind, user_updates, user_reads, write_read_ratio
+      FROM #mssql_iu_stale
+      ORDER BY user_updates DESC, write_read_ratio DESC;
+
+  - query_name: mssql_index_usage_db
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_iu_db') IS NOT NULL DROP TABLE #mssql_iu_db;
+      CREATE TABLE #mssql_iu_db (
+          db sysname NOT NULL,
+          user_seeks float NOT NULL,
+          user_scans float NOT NULL,
+          user_lookups float NOT NULL,
+          user_updates float NOT NULL,
+          user_reads float NOT NULL,
+          tracked_indexes float NOT NULL,
+          unused_indexes float NOT NULL,
+          scan_ratio float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND database_id > 4
+            AND HAS_DBACCESS(name) = 1
+            AND name NOT IN (N'SSISDB', N'Distribution');
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #mssql_iu_db (
+              db, user_seeks, user_scans, user_lookups, user_updates, user_reads,
+              tracked_indexes, unused_indexes, scan_ratio
+            )
+            SELECT
+                DB_NAME(),
+                CAST(SUM(CAST(ius.user_seeks AS bigint)) AS float),
+                CAST(SUM(CAST(ius.user_scans AS bigint)) AS float),
+                CAST(SUM(CAST(ius.user_lookups AS bigint)) AS float),
+                CAST(SUM(CAST(ius.user_updates AS bigint)) AS float),
+                CAST(SUM(CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS bigint)) AS float),
+                CAST(COUNT(*) AS float),
+                CAST(SUM(
+                  CASE
+                    WHEN i.index_id > 1
+                     AND i.is_primary_key = 0
+                     AND i.is_unique_constraint = 0
+                     AND (ius.user_seeks + ius.user_scans + ius.user_lookups) = 0
+                     AND ius.user_updates > 0
+                    THEN 1 ELSE 0
+                  END
+                ) AS float),
+                CAST(SUM(CAST(ius.user_scans AS bigint)) AS float)
+                  / NULLIF(CAST(SUM(CAST(ius.user_seeks + ius.user_scans + ius.user_lookups AS bigint)) AS float), 0)
+            FROM sys.dm_db_index_usage_stats AS ius WITH (NOLOCK)
+            INNER JOIN sys.indexes AS i WITH (NOLOCK)
+              ON i.object_id = ius.object_id
+             AND i.index_id = ius.index_id
+            WHERE ius.database_id = DB_ID()
+              AND OBJECTPROPERTY(ius.object_id, ''IsMSShipped'') = 0
+              AND OBJECT_NAME(ius.object_id) IS NOT NULL;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT
+          db, user_seeks, user_scans, user_lookups, user_updates, user_reads,
+          tracked_indexes, unused_indexes,
+          ISNULL(scan_ratio, 0) AS scan_ratio
+      FROM #mssql_iu_db;

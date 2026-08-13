@@ -1,0 +1,36 @@
+groups:
+  - name: windows_exporter.role.dynamics
+    rules:
+      - alert: DynamicsServiceNotRunning
+        expr: |
+          windows_service_state{
+            state="running",
+            name=~"(?i)(AOS60\\$.+|FabricHostSvc|W3SVC|WAS)"
+          } == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: dynamics
+        annotations:
+          summary: "Dynamics service {{ $labels.name }} is not running on {{ $labels.instance }}"
+          description: "An AX 2012 AOS, D365 Service Fabric host, or required web service has not been running for three minutes."
+          runbook: "Check AOS/FabricHost/IIS services and recent application Event Log errors."
+
+      - alert: DynamicsProcessMissing
+        expr: |
+          max by (instance, job) (
+            windows_service_state{state="running",name=~"(?i)(AOS60\\$.+|FabricHostSvc)"}
+          ) == 1
+          unless on (instance, job) max by (instance, job) (
+            windows_process_cpu_time_total{process=~"(?i)(Ax32Serv|FabricHost|Microsoft\\.Dynamics\\.AX\\..*)"}
+          )
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: dynamics
+        annotations:
+          summary: "No Dynamics process was observed on {{ $labels.instance }}"
+          description: "The Dynamics profile is being scraped but no AX AOS or D365 Service Fabric application process was observed for five minutes."
+          runbook: "Confirm process include filter and whether the workload process is running."

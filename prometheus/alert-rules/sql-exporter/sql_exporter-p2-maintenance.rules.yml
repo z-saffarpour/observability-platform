@@ -1,0 +1,108 @@
+# P2 — Medium maintenance / DBA review
+groups:
+  - name: sql_exporter.p2.maintenance
+    interval: 60s
+    rules:
+      - alert: SqlAutogrowthFrequent
+        expr: mssql_autogrowth_total_24h > 10
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_autogrowth
+        annotations:
+          summary: "Frequent SQL Server file autogrowth"
+          description: "{{ $value }} autogrowth events were observed in the available 24-hour trace window."
+          runbook: "Pre-size files and review growth increments to reduce fragmentation/stalls."
+
+      - alert: SqlColumnstoreDeletedRowsHigh
+        expr: mssql_columnstore_deleted_ratio > 0.2
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_columnstore
+        annotations:
+          summary: "Columnstore deleted-row ratio is high"
+          description: "Compressed rowgroups in {{ $labels.db }} have a deleted-row ratio of {{ $value | humanizePercentage }}."
+          runbook: "Schedule REORGANIZE/REBUILD for affected columnstore indexes."
+
+      - alert: SqlIndexHighlyFragmented
+        expr: mssql_index_fragmentation_percent > 30
+        for: 30m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_index_fragmentation
+        annotations:
+          summary: "Large SQL index is highly fragmented"
+          description: "Index {{ $labels.index_name }} on {{ $labels.db }}.{{ $labels.schema_name }}.{{ $labels.table_name }} is {{ $value | humanize }}% fragmented."
+          runbook: "DBA review only — schedule index maintenance; do not page on-call."
+
+      - alert: SqlIndexWriteHeavy
+        expr: mssql_index_usage_updates > 1000000
+        for: 30m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_index_usage
+        annotations:
+          summary: "Index has high write activity"
+          description: "Index {{ $labels.index_name }} on {{ $labels.db }} has {{ $value | humanize }} cumulative updates; review reads before removal."
+          runbook: "DBA review — compare seeks/scans before dropping unused indexes."
+
+      - alert: SqlMissingIndexHighImpact
+        expr: mssql_missing_index_score > 1000000
+        for: 30m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_missing_index
+        annotations:
+          summary: "High-impact missing-index suggestion"
+          description: "Table {{ $labels.db }}.{{ $labels.schema_name }}.{{ $labels.table_name }} has improvement score {{ $value | humanize }}."
+          runbook: "DBA review — validate with Query Store before creating indexes."
+
+      - alert: SqlStatisticsStale
+        expr: mssql_stats_stale_count > 20
+        for: 30m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_stats
+        annotations:
+          summary: "Many SQL Server statistics are stale"
+          description: "Database {{ $labels.db }} has {{ $value }} statistics classified as stale."
+          runbook: "DBA review — schedule UPDATE STATISTICS for affected objects."
+
+      - alert: SqlQueryStoreDisabled
+        expr: mssql_query_store_enabled == 0
+        for: 30m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_query_store
+        annotations:
+          summary: "Query Store is disabled"
+          description: "Query Store is disabled for database {{ $labels.db }}; ignore if this is intentional."
+          runbook: "Enable Query Store only when desired; mute for DBs where disabled by design."
+
+      - alert: SqlAgentJobRunningTooLong
+        expr: mssql_job_running_seconds > 7200
+        for: 10m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: maintenance
+          collector: mssql_job_running
+        annotations:
+          summary: "SQL Agent job has been running for more than two hours"
+          description: "Job {{ $labels.job_name }} has run for {{ $value | humanizeDuration }}."
+          runbook: "Compare with baseline duration; check blocking and step progress."

@@ -1,0 +1,176 @@
+# Database integrity signals: suspect pages + last known good CHECKDB age.
+#
+#   GRANT VIEW SERVER STATE TO
+#   GRANT SELECT ON msdb.dbo.suspect_pages TO
+#   CHECKDB age uses DBCC DBINFO (needs rights to run DBCC against each ONLINE DB).
+#
+collector_name: mssql_database_integrity
+
+min_interval: 3600s
+
+metrics:
+  - metric_name: mssql_suspect_pages
+    type: gauge
+    help: 'Rows in msdb.dbo.suspect_pages by database and event_type (1=823/824, 2=bad checksum, 3=torn page, …).'
+    key_labels:
+      - db
+      - event_type
+      - event_type_desc
+    values: [page_count]
+    query_ref: mssql_suspect_pages
+
+  - metric_name: mssql_suspect_pages_error_count
+    type: gauge
+    help: 'Sum of suspect_pages.error_count by database and event_type (how often SQL Server hit the bad page).'
+    key_labels:
+      - db
+      - event_type
+      - event_type_desc
+    values: [error_count]
+    query_ref: mssql_suspect_pages
+
+  - metric_name: mssql_suspect_pages_last_seen_age_seconds
+    type: gauge
+    help: 'Seconds since newest suspect_pages.last_update_date for this db/event_type. -1 if unknown.'
+    key_labels:
+      - db
+      - event_type
+      - event_type_desc
+    values: [last_seen_age_seconds]
+    query_ref: mssql_suspect_pages
+
+  - metric_name: mssql_suspect_pages_total
+    type: gauge
+    help: 'Total suspect_pages rows (all databases).'
+    values: [page_count]
+    query_ref: mssql_suspect_pages_total
+
+  - metric_name: mssql_checkdb_age_seconds
+    type: gauge
+    help: 'Seconds since dbi_dbccLastKnownGood from DBCC DBINFO. -1 if never / unknown.'
+    key_labels:
+      - db
+    values: [age_seconds]
+    query_ref: mssql_checkdb_age
+
+  - metric_name: mssql_checkdb_last_good_timestamp
+    type: gauge
+    help: 'Unix seconds of dbi_dbccLastKnownGood (local server time interpreted as UTC-naive). 0 if never / unknown.'
+    key_labels:
+      - db
+    values: [last_good_unix]
+    query_ref: mssql_checkdb_age
+
+  - metric_name: mssql_checkdb_never_run
+    type: gauge
+    help: '1 when dbi_dbccLastKnownGood is missing/epoch (CHECKDB never recorded), else 0.'
+    key_labels:
+      - db
+    values: [never_run]
+    query_ref: mssql_checkdb_age
+
+queries:
+  - query_name: mssql_suspect_pages
+    query: |
+      SELECT
+          ISNULL(DB_NAME(sp.database_id), CAST(sp.database_id AS nvarchar(20))) AS db,
+          CAST(sp.event_type AS nvarchar(10)) AS event_type,
+          CASE sp.event_type
+            WHEN 1 THEN N'823_or_824_other_than_bad_checksum_or_torn'
+            WHEN 2 THEN N'bad_checksum'
+            WHEN 3 THEN N'torn_page'
+            WHEN 4 THEN N'restored'
+            WHEN 5 THEN N'repaired'
+            WHEN 7 THEN N'deallocated'
+            ELSE N'other'
+          END AS event_type_desc,
+          CAST(COUNT(*) AS float) AS page_count,
+          CAST(SUM(CAST(sp.error_count AS bigint)) AS float) AS error_count,
+          CAST(
+            CASE
+              WHEN MAX(sp.last_update_date) IS NULL THEN -1.0
+              ELSE DATEDIFF(SECOND, MAX(sp.last_update_date), GETDATE())
+            END AS float
+          ) AS last_seen_age_seconds
+      FROM msdb.dbo.suspect_pages AS sp WITH (NOLOCK)
+      GROUP BY sp.database_id, sp.event_type;
+
+  - query_name: mssql_suspect_pages_total
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS page_count
+      FROM msdb.dbo.suspect_pages WITH (NOLOCK);
+
+  - query_name: mssql_checkdb_age
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_dbcc_info') IS NOT NULL DROP TABLE #mssql_dbcc_info;
+      CREATE TABLE #mssql_dbcc_info (
+          ParentObject nvarchar(255) NULL,
+          Object nvarchar(255) NULL,
+          Field nvarchar(255) NULL,
+          Value nvarchar(255) NULL,
+          DbName sysname NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name <> N'tempdb'
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          DELETE FROM #mssql_dbcc_info WHERE DbName IS NULL;
+          SET @sql = N'DBCC DBINFO(N''' + REPLACE(@db, '''', '''''') + N''') WITH TABLERESULTS, NO_INFOMSGS;';
+          BEGIN TRY
+              INSERT INTO #mssql_dbcc_info (ParentObject, Object, Field, Value)
+              EXEC (@sql);
+              UPDATE #mssql_dbcc_info
+              SET DbName = @db
+              WHERE DbName IS NULL;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT
+          d.name AS db,
+          CAST(
+            CASE
+              WHEN x.last_good IS NULL OR x.last_good <= '19000101' THEN -1.0
+              ELSE DATEDIFF(SECOND, x.last_good, GETDATE())
+            END AS float
+          ) AS age_seconds,
+          CAST(
+            CASE
+              WHEN x.last_good IS NULL OR x.last_good <= '19000101' THEN 0.0
+              ELSE DATEDIFF(SECOND, '19700101', x.last_good)
+            END AS float
+          ) AS last_good_unix,
+          CAST(
+            CASE
+              WHEN x.last_good IS NULL OR x.last_good <= '19000101' THEN 1.0
+              ELSE 0.0
+            END AS float
+          ) AS never_run
+      FROM sys.databases AS d WITH (NOLOCK)
+      LEFT JOIN (
+          SELECT
+              DbName,
+              MAX(TRY_CONVERT(datetime, Value)) AS last_good
+          FROM #mssql_dbcc_info
+          WHERE Field = N'dbi_dbccLastKnownGood'
+          GROUP BY DbName
+      ) AS x
+          ON x.DbName = d.name
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL
+        AND d.name <> N'tempdb';

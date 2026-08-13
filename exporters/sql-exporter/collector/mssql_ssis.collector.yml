@@ -1,0 +1,715 @@
+# SSIS catalog + SSISDB health monitoring.
+# Safe when SSISDB is absent (empty result sets).
+#
+#   GRANT VIEW SERVER STATE TO
+#   db_datareader on SSISDB recommended
+#
+# Agent running jobs: use mssql_job_running (not duplicated here).
+#
+collector_name: mssql_ssis
+
+min_interval: 60s
+
+metrics:
+  # --- existing health ---
+  - metric_name: mssql_ssisdb_file_size_mb
+    type: gauge
+    help: 'SSISDB file sizes (MB).'
+    key_labels:
+      - type_desc
+      - logical_name
+      - physical_name
+    values: [size_mb]
+    query_ref: mssql_ssisdb_files
+
+  - metric_name: mssql_ssisdb_log_used_percent
+    type: gauge
+    help: 'SSISDB percent log used.'
+    values: [used_percent]
+    query_ref: mssql_ssisdb_log
+
+  - metric_name: mssql_ssisdb_executions_24h
+    type: gauge
+    help: 'SSISDB execution counts last 24h by status.'
+    key_labels:
+      - status_desc
+    values: [execution_count]
+    query_ref: mssql_ssisdb_exec_24h
+
+  - metric_name: mssql_ssisdb_failed_24h
+    type: gauge
+    help: 'SSISDB failed/canceled/unexpected executions in last 24h.'
+    values: [failed_count]
+    query_ref: mssql_ssisdb_failed_count
+
+  # --- inventory (from former mssql_ssis) ---
+  - metric_name: mssql_ssis_folders
+    type: gauge
+    help: 'Number of SSISDB folders.'
+    values: [folder_count]
+    query_ref: mssql_ssis_inventory
+
+  - metric_name: mssql_ssis_projects
+    type: gauge
+    help: 'Number of SSISDB projects.'
+    values: [project_count]
+    query_ref: mssql_ssis_inventory
+
+  - metric_name: mssql_ssis_packages
+    type: gauge
+    help: 'Number of SSISDB packages.'
+    values: [package_count]
+    query_ref: mssql_ssis_inventory
+
+  - metric_name: mssql_ssis_environments
+    type: gauge
+    help: 'Number of SSISDB environments.'
+    values: [environment_count]
+    query_ref: mssql_ssis_inventory
+
+  - metric_name: mssql_ssis_executions_1h
+    type: gauge
+    help: 'SSISDB executions in last 1 hour grouped by status.'
+    key_labels:
+      - status_desc
+    values: [execution_count]
+    query_ref: mssql_ssis_executions_by_status_1h
+
+  - metric_name: mssql_ssis_running_count
+    type: gauge
+    help: 'Number of currently running SSISDB executions.'
+    values: [running_count]
+    query_ref: mssql_ssis_running_count
+
+  - metric_name: mssql_ssis_running_duration_seconds
+    type: gauge
+    help: 'Duration (seconds) of currently running SSISDB executions.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - execution_id
+      - caller_name
+    values: [duration_seconds]
+    query_ref: mssql_ssis_running
+
+  - metric_name: mssql_ssis_failed_duration_seconds
+    type: gauge
+    help: 'Duration (seconds) of failed/canceled/unexpected SSIS executions in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [duration_seconds]
+    query_ref: mssql_ssis_failed_recent
+
+  - metric_name: mssql_ssis_failed_status
+    type: gauge
+    help: 'Status code of failed/canceled/unexpected SSIS executions in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [status]
+    query_ref: mssql_ssis_failed_recent
+
+  - metric_name: mssql_ssis_failed_start_timestamp
+    type: gauge
+    help: 'Unix start time of failed/canceled/unexpected SSIS executions in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [start_unix]
+    query_ref: mssql_ssis_failed_recent
+
+  - metric_name: mssql_ssis_failed_age_seconds
+    type: gauge
+    help: 'Seconds since start_time of failed/canceled/unexpected SSIS executions in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [age_seconds]
+    query_ref: mssql_ssis_failed_recent
+
+  # --- failed alerting (1h/24h totals + per-package + last fail) ---
+  - metric_name: mssql_ssis_failed_total
+    type: gauge
+    help: 'Failed/canceled/unexpected SSIS executions in lookback window (status 3,4,6).'
+    key_labels:
+      - window
+    values: [failed_count]
+    query_ref: mssql_ssis_failed_total
+
+  - metric_name: mssql_ssis_failed_count
+    type: gauge
+    help: 'Failed SSIS executions per package in lookback window.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - window
+    values: [failed_count]
+    query_ref: mssql_ssis_failed_by_package
+
+  - metric_name: mssql_ssis_failed_last_age_seconds
+    type: gauge
+    help: 'Seconds since the most recent failed/canceled/unexpected execution per package (7d).'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [age_seconds]
+    query_ref: mssql_ssis_failed_last
+
+  - metric_name: mssql_ssis_failed_last_duration_seconds
+    type: gauge
+    help: 'Duration of the most recent failed/canceled/unexpected execution per package (7d).'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [duration_seconds]
+    query_ref: mssql_ssis_failed_last
+
+  - metric_name: mssql_ssis_failed_last_status
+    type: gauge
+    help: 'Status code of the most recent failed/canceled/unexpected execution per package (7d).'
+    key_labels:
+      - folder
+      - project
+      - package
+      - status_desc
+      - execution_id
+    values: [status]
+    query_ref: mssql_ssis_failed_last
+
+  - metric_name: mssql_ssis_failed_message_count_24h
+    type: gauge
+    help: 'Error event_messages (message_type=120) linked to failed executions in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - message_snip
+    values: [message_count]
+    query_ref: mssql_ssis_failed_messages
+
+  - metric_name: mssql_ssis_failed_message_last_start_timestamp
+    type: gauge
+    help: 'Unix start time of the most recent failed execution linked to this error message (24h).'
+    key_labels:
+      - folder
+      - project
+      - package
+      - message_snip
+    values: [last_start_unix]
+    query_ref: mssql_ssis_failed_messages
+
+  - metric_name: mssql_ssis_failed_message_last_age_seconds
+    type: gauge
+    help: 'Seconds since the most recent failed execution linked to this error message (24h).'
+    key_labels:
+      - folder
+      - project
+      - package
+      - message_snip
+    values: [last_age_seconds]
+    query_ref: mssql_ssis_failed_messages
+
+  - metric_name: mssql_ssis_succeeded_duration_seconds
+    type: gauge
+    help: 'Top succeeded SSIS executions by duration in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - execution_id
+    values: [duration_seconds]
+    query_ref: mssql_ssis_succeeded_top
+
+  - metric_name: mssql_ssis_operations_24h
+    type: gauge
+    help: 'SSISDB operations in last 24 hours grouped by type and status.'
+    key_labels:
+      - operation_type
+      - status_desc
+    values: [operation_count]
+    query_ref: mssql_ssis_operations_24h
+
+  - metric_name: mssql_ssis_operation_running_seconds
+    type: gauge
+    help: 'Currently running SSISDB operations duration (seconds).'
+    key_labels:
+      - operation_id
+      - operation_type
+      - object_name
+      - caller_name
+    values: [duration_seconds]
+    query_ref: mssql_ssis_operations_running
+
+  - metric_name: mssql_ssis_operation_running_start_timestamp
+    type: gauge
+    help: 'Unix start time of currently running SSISDB operations.'
+    key_labels:
+      - operation_id
+      - operation_type
+      - object_name
+      - caller_name
+    values: [start_unix]
+    query_ref: mssql_ssis_operations_running
+
+  - metric_name: mssql_ssis_event_errors_24h
+    type: gauge
+    help: 'SSISDB event_messages with error/warning in last 24h by package.'
+    key_labels:
+      - package
+      - message_type_desc
+    values: [message_count]
+    query_ref: mssql_ssis_event_errors_24h
+
+queries:
+  - query_name: mssql_ssisdb_files
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(60)) AS type_desc, CAST(N'' AS nvarchar(128)) AS logical_name,
+                 CAST(N'' AS nvarchar(260)) AS physical_name, CAST(NULL AS float) AS size_mb
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT mf.type_desc, mf.name AS logical_name, mf.physical_name,
+                 CAST(mf.size AS float) * 8.0 / 1024.0 AS size_mb
+          FROM sys.master_files AS mf WITH (NOLOCK)
+          WHERE mf.database_id = DB_ID(N'SSISDB');
+      END
+
+  - query_name: mssql_ssisdb_log
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(NULL AS float) AS used_percent WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT CAST(cntr_value AS float) AS used_percent
+          FROM sys.dm_os_performance_counters WITH (NOLOCK)
+          WHERE counter_name = N'Percent Log Used'
+            AND instance_name = N'SSISDB';
+      END
+
+  - query_name: mssql_ssisdb_exec_24h
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(50)) AS status_desc, CAST(NULL AS float) AS execution_count WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CASE status
+                WHEN 1 THEN N'created' WHEN 2 THEN N'running' WHEN 3 THEN N'canceled'
+                WHEN 4 THEN N'failed' WHEN 5 THEN N'pending' WHEN 6 THEN N'ended unexpectedly'
+                WHEN 7 THEN N'succeeded' WHEN 8 THEN N'stopping' WHEN 9 THEN N'completed'
+                ELSE CAST(status AS nvarchar(20))
+              END AS status_desc,
+              CAST(COUNT(*) AS float) AS execution_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+          GROUP BY status;
+      END
+
+  - query_name: mssql_ssisdb_failed_count
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(0 AS float) AS failed_count WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT CAST(COUNT(*) AS float) AS failed_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND status IN (3, 4, 6);
+      END
+
+  - query_name: mssql_ssis_inventory
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(0 AS float) AS folder_count, CAST(0 AS float) AS project_count,
+                 CAST(0 AS float) AS package_count, CAST(0 AS float) AS environment_count
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CAST((SELECT COUNT(*) FROM SSISDB.catalog.folders WITH (NOLOCK)) AS float) AS folder_count,
+              CAST((SELECT COUNT(*) FROM SSISDB.catalog.projects WITH (NOLOCK)) AS float) AS project_count,
+              CAST((SELECT COUNT(*) FROM SSISDB.catalog.packages WITH (NOLOCK)) AS float) AS package_count,
+              CAST((SELECT COUNT(*) FROM SSISDB.catalog.environments WITH (NOLOCK)) AS float) AS environment_count;
+      END
+
+  - query_name: mssql_ssis_executions_by_status_1h
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(50)) AS status_desc, CAST(NULL AS float) AS execution_count WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CASE status
+                WHEN 1 THEN N'created' WHEN 2 THEN N'running' WHEN 3 THEN N'canceled'
+                WHEN 4 THEN N'failed' WHEN 5 THEN N'pending' WHEN 6 THEN N'ended unexpectedly'
+                WHEN 7 THEN N'succeeded' WHEN 8 THEN N'stopping' WHEN 9 THEN N'completed'
+                ELSE CAST(status AS nvarchar(20))
+              END AS status_desc,
+              CAST(COUNT(*) AS float) AS execution_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -1, SYSDATETIMEOFFSET())
+          GROUP BY status;
+      END
+
+  - query_name: mssql_ssis_running_count
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(0 AS float) AS running_count WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT CAST(COUNT(*) AS float) AS running_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE status IN (2, 5, 8);
+      END
+
+  - query_name: mssql_ssis_running
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(20)) AS execution_id,
+                 CAST(N'' AS nvarchar(128)) AS caller_name, CAST(NULL AS float) AS duration_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (50)
+              ISNULL(folder_name, N'') AS folder,
+              ISNULL(project_name, N'') AS project,
+              ISNULL(package_name, N'') AS package,
+              CAST(execution_id AS nvarchar(20)) AS execution_id,
+              LEFT(ISNULL(caller_name, N''), 64) AS caller_name,
+              CAST(DATEDIFF(SECOND, start_time, SYSDATETIMEOFFSET()) AS float) AS duration_seconds
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE status IN (2, 5, 8)
+          ORDER BY start_time ASC;
+      END
+
+  - query_name: mssql_ssis_failed_recent
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(50)) AS status_desc,
+                 CAST(N'' AS nvarchar(20)) AS execution_id,
+                 CAST(NULL AS float) AS duration_seconds, CAST(NULL AS float) AS status,
+                 CAST(NULL AS float) AS start_unix, CAST(NULL AS float) AS age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (40)
+              ISNULL(folder_name, N'') AS folder,
+              ISNULL(project_name, N'') AS project,
+              ISNULL(package_name, N'') AS package,
+              CASE status
+                WHEN 3 THEN N'canceled' WHEN 4 THEN N'failed'
+                WHEN 6 THEN N'ended unexpectedly' ELSE CAST(status AS nvarchar(20))
+              END AS status_desc,
+              CAST(execution_id AS nvarchar(20)) AS execution_id,
+              CAST(DATEDIFF(SECOND, start_time, ISNULL(end_time, SYSDATETIMEOFFSET())) AS float) AS duration_seconds,
+              CAST(status AS float) AS status,
+              CAST(DATEDIFF(SECOND, {d '1970-01-01'}, CONVERT(datetime2, start_time)) AS float) AS start_unix,
+              CAST(DATEDIFF(SECOND, start_time, SYSDATETIMEOFFSET()) AS float) AS age_seconds
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND status IN (3, 4, 6)
+          ORDER BY start_time DESC;
+      END
+
+  - query_name: mssql_ssis_failed_total
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(10)) AS window, CAST(NULL AS float) AS failed_count WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              N'1h' AS window,
+              CAST(COUNT(*) AS float) AS failed_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -1, SYSDATETIMEOFFSET())
+            AND status IN (3, 4, 6)
+          UNION ALL
+          SELECT
+              N'24h' AS window,
+              CAST(COUNT(*) AS float) AS failed_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND status IN (3, 4, 6);
+      END
+
+  - query_name: mssql_ssis_failed_by_package
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(50)) AS status_desc,
+                 CAST(N'' AS nvarchar(10)) AS window, CAST(NULL AS float) AS failed_count
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(folder_name, N'') AS folder,
+              ISNULL(project_name, N'') AS project,
+              ISNULL(package_name, N'') AS package,
+              CASE status
+                WHEN 3 THEN N'canceled' WHEN 4 THEN N'failed'
+                WHEN 6 THEN N'ended unexpectedly' ELSE CAST(status AS nvarchar(20))
+              END AS status_desc,
+              N'1h' AS window,
+              CAST(COUNT(*) AS float) AS failed_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -1, SYSDATETIMEOFFSET())
+            AND status IN (3, 4, 6)
+          GROUP BY folder_name, project_name, package_name, status
+          UNION ALL
+          SELECT
+              ISNULL(folder_name, N'') AS folder,
+              ISNULL(project_name, N'') AS project,
+              ISNULL(package_name, N'') AS package,
+              CASE status
+                WHEN 3 THEN N'canceled' WHEN 4 THEN N'failed'
+                WHEN 6 THEN N'ended unexpectedly' ELSE CAST(status AS nvarchar(20))
+              END AS status_desc,
+              N'24h' AS window,
+              CAST(COUNT(*) AS float) AS failed_count
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND status IN (3, 4, 6)
+          GROUP BY folder_name, project_name, package_name, status;
+      END
+
+  - query_name: mssql_ssis_failed_last
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(50)) AS status_desc,
+                 CAST(N'' AS nvarchar(20)) AS execution_id,
+                 CAST(NULL AS float) AS age_seconds, CAST(NULL AS float) AS duration_seconds,
+                 CAST(NULL AS float) AS status
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          ;WITH ranked AS
+          (
+              SELECT
+                  ISNULL(folder_name, N'') AS folder,
+                  ISNULL(project_name, N'') AS project,
+                  ISNULL(package_name, N'') AS package,
+                  CASE status
+                    WHEN 3 THEN N'canceled' WHEN 4 THEN N'failed'
+                    WHEN 6 THEN N'ended unexpectedly' ELSE CAST(status AS nvarchar(20))
+                  END AS status_desc,
+                  CAST(execution_id AS nvarchar(20)) AS execution_id,
+                  start_time,
+                  end_time,
+                  status,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY folder_name, project_name, package_name
+                    ORDER BY start_time DESC, execution_id DESC
+                  ) AS rn
+              FROM SSISDB.catalog.executions WITH (NOLOCK)
+              WHERE start_time >= DATEADD(DAY, -7, SYSDATETIMEOFFSET())
+                AND status IN (3, 4, 6)
+          )
+          SELECT
+              folder,
+              project,
+              package,
+              status_desc,
+              execution_id,
+              CAST(DATEDIFF(SECOND, start_time, SYSDATETIMEOFFSET()) AS float) AS age_seconds,
+              CAST(DATEDIFF(SECOND, start_time, ISNULL(end_time, SYSDATETIMEOFFSET())) AS float) AS duration_seconds,
+              CAST(status AS float) AS status
+          FROM ranked
+          WHERE rn = 1;
+      END
+
+  - query_name: mssql_ssis_failed_messages
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(120)) AS message_snip,
+                 CAST(NULL AS float) AS message_count,
+                 CAST(NULL AS float) AS last_start_unix,
+                 CAST(NULL AS float) AS last_age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (40)
+              ISNULL(e.folder_name, N'') AS folder,
+              ISNULL(e.project_name, N'') AS project,
+              ISNULL(e.package_name, N'') AS package,
+              LEFT(
+                REPLACE(REPLACE(REPLACE(ISNULL(m.message, N''), CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+                120
+              ) AS message_snip,
+              CAST(COUNT(*) AS float) AS message_count,
+              CAST(DATEDIFF(SECOND, {d '1970-01-01'}, CONVERT(datetime2, MAX(e.start_time))) AS float) AS last_start_unix,
+              CAST(DATEDIFF(SECOND, MAX(e.start_time), SYSDATETIMEOFFSET()) AS float) AS last_age_seconds
+          FROM SSISDB.catalog.executions AS e WITH (NOLOCK)
+          INNER JOIN SSISDB.catalog.event_messages AS m WITH (NOLOCK)
+              ON m.operation_id = e.execution_id
+          WHERE e.start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND e.status IN (3, 4, 6)
+            AND m.message_type = 120
+          GROUP BY
+              e.folder_name,
+              e.project_name,
+              e.package_name,
+              LEFT(
+                REPLACE(REPLACE(REPLACE(ISNULL(m.message, N''), CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+                120
+              )
+          ORDER BY MAX(e.start_time) DESC, COUNT(*) DESC;
+      END
+
+  - query_name: mssql_ssis_succeeded_top
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(20)) AS execution_id,
+                 CAST(NULL AS float) AS duration_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (30)
+              ISNULL(folder_name, N'') AS folder,
+              ISNULL(project_name, N'') AS project,
+              ISNULL(package_name, N'') AS package,
+              CAST(execution_id AS nvarchar(20)) AS execution_id,
+              CAST(DATEDIFF(SECOND, start_time, end_time) AS float) AS duration_seconds
+          FROM SSISDB.catalog.executions WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND status = 7
+            AND end_time IS NOT NULL
+          ORDER BY DATEDIFF(SECOND, start_time, end_time) DESC;
+      END
+
+  - query_name: mssql_ssis_operations_24h
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(50)) AS operation_type, CAST(N'' AS nvarchar(50)) AS status_desc,
+                 CAST(NULL AS float) AS operation_count
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CASE operation_type
+                WHEN 1 THEN N'integrate' WHEN 2 THEN N'restore' WHEN 3 THEN N'deploy'
+                WHEN 101 THEN N'start_exec' WHEN 102 THEN N'stop_object'
+                WHEN 200 THEN N'validate' WHEN 202 THEN N'configure'
+                ELSE CAST(operation_type AS nvarchar(20))
+              END AS operation_type,
+              CASE status
+                WHEN 1 THEN N'created' WHEN 2 THEN N'running' WHEN 3 THEN N'canceled'
+                WHEN 4 THEN N'failed' WHEN 5 THEN N'pending' WHEN 6 THEN N'ended unexpectedly'
+                WHEN 7 THEN N'succeeded' WHEN 8 THEN N'stopping' WHEN 9 THEN N'completed'
+                ELSE CAST(status AS nvarchar(20))
+              END AS status_desc,
+              CAST(COUNT(*) AS float) AS operation_count
+          FROM SSISDB.catalog.operations WITH (NOLOCK)
+          WHERE start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+          GROUP BY operation_type, status;
+      END
+
+  - query_name: mssql_ssis_operations_running
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(20)) AS operation_id, CAST(N'' AS nvarchar(50)) AS operation_type,
+                 CAST(N'' AS nvarchar(260)) AS object_name, CAST(N'' AS nvarchar(128)) AS caller_name,
+                 CAST(NULL AS float) AS duration_seconds, CAST(NULL AS float) AS start_unix
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (30)
+              CAST(operation_id AS nvarchar(20)) AS operation_id,
+              CASE operation_type
+                WHEN 1 THEN N'integrate' WHEN 2 THEN N'restore' WHEN 3 THEN N'deploy'
+                WHEN 101 THEN N'start_exec' WHEN 102 THEN N'stop_object'
+                WHEN 200 THEN N'validate' WHEN 202 THEN N'configure'
+                ELSE CAST(operation_type AS nvarchar(20))
+              END AS operation_type,
+              LEFT(ISNULL(object_name, N''), 100) AS object_name,
+              LEFT(ISNULL(caller_name, N''), 64) AS caller_name,
+              CAST(DATEDIFF(SECOND, start_time, SYSDATETIMEOFFSET()) AS float) AS duration_seconds,
+              CAST(DATEDIFF(SECOND, {d '1970-01-01'}, CONVERT(datetime2, start_time)) AS float) AS start_unix
+          FROM SSISDB.catalog.operations WITH (NOLOCK)
+          WHERE status IN (2, 5, 8)
+          ORDER BY start_time ASC;
+      END
+
+  - query_name: mssql_ssis_event_errors_24h
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(30)) AS message_type_desc,
+                 CAST(NULL AS float) AS message_count
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (40)
+              ISNULL(package_name, N'') AS package,
+              CASE message_type
+                WHEN 120 THEN N'error'
+                WHEN 110 THEN N'warning'
+                ELSE CAST(message_type AS nvarchar(20))
+              END AS message_type_desc,
+              CAST(COUNT(*) AS float) AS message_count
+          FROM SSISDB.catalog.event_messages WITH (NOLOCK)
+          WHERE message_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND message_type IN (110, 120)
+          GROUP BY package_name, message_type
+          ORDER BY COUNT(*) DESC;
+      END

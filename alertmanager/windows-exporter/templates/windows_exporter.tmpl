@@ -1,0 +1,48 @@
+{{ define "email.windows_exporter.subject" -}}
+[{{ .CommonLabels.priority }}] {{ .CommonLabels.alertname }} — {{ .CommonLabels.instance }}
+{{- end }}
+
+{{ define "email.windows_exporter.html" }}
+<!DOCTYPE html>
+<html>
+<body style="font-family: Segoe UI, Arial, sans-serif; font-size: 14px; color: #222;">
+  <h2 style="margin-bottom: 8px;">
+    windows_exporter alert
+    {{ if eq .Status "firing" }}
+      <span style="color:#b00020;">FIRING</span>
+    {{ else }}
+      <span style="color:#0a7a32;">RESOLVED</span>
+    {{ end }}
+  </h2>
+
+  <table cellpadding="4" cellspacing="0" style="border-collapse: collapse;">
+    <tr><td><b>Priority</b></td><td>{{ .CommonLabels.priority }}</td></tr>
+    <tr><td><b>Severity</b></td><td>{{ .CommonLabels.severity }}</td></tr>
+    <tr><td><b>Profile</b></td><td>{{ .CommonLabels.alert_profile }}</td></tr>
+    <tr><td><b>Alert</b></td><td>{{ .CommonLabels.alertname }}</td></tr>
+    <tr><td><b>Instance</b></td><td>{{ .CommonLabels.instance }}</td></tr>
+    <tr><td><b>Job</b></td><td>{{ .CommonLabels.job }}</td></tr>
+  </table>
+
+  <h3 style="margin-top: 16px;">Alerts ({{ len .Alerts }})</h3>
+  {{ range .Alerts }}
+  <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 8px;">
+    <div><b>{{ .Labels.alertname }}</b> — {{ .Status }}</div>
+    <div>{{ .Annotations.summary }}</div>
+    <div style="color:#555;">{{ .Annotations.description }}</div>
+    {{ if .Annotations.runbook }}
+    <div style="margin-top: 4px;"><b>Runbook:</b> {{ .Annotations.runbook }}</div>
+    {{ end }}
+    <div style="margin-top: 4px; font-size: 12px; color:#666;">
+      Starts: {{ .StartsAt }}
+      {{ if .EndsAt }}| Ends: {{ .EndsAt }}{{ end }}
+    </div>
+  </div>
+  {{ end }}
+</body>
+</html>
+{{ end }}
+
+{{ define "sms.windows_exporter.text" -}}
+[{{ .CommonLabels.priority }}][{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} on {{ .CommonLabels.instance }} — {{ .CommonAnnotations.summary }}
+{{- end }}

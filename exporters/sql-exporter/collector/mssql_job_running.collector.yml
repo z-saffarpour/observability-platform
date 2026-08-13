@@ -1,0 +1,124 @@
+# Currently running SQL Agent jobs (+ Agent service state).
+# Inventory / last outcome → mssql_job_inventory
+# History → mssql_job_history | Failures (alerts) → mssql_job_failed
+#
+#   SELECT on msdb.dbo.sysjobactivity, sysjobs, sysjobsteps, syscategories, syssessions
+#   VIEW SERVER STATE for dm_server_services (Agent status)
+#   Note: sysjobactivity.last_executed_step_id is the last *completed* step;
+#   current step is inferred via that step's on_success_action.
+#
+collector_name: mssql_job_running
+
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_sqlagent_running
+    type: gauge
+    help: '1 if SQL Server Agent service status_desc is Running, else 0. Empty if dm_server_services unavailable.'
+    values: [is_running]
+    query_ref: mssql_sqlagent_service
+
+  - metric_name: mssql_job_running_count
+    type: gauge
+    help: 'Number of currently running SQL Agent jobs.'
+    values: [running_count]
+    query_ref: mssql_job_running_count
+
+  - metric_name: mssql_job_running_seconds
+    type: gauge
+    help: 'Seconds since start for currently running SQL Agent jobs.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - step_id
+      - step_name
+    values: [running_seconds]
+    query_ref: mssql_job_running_jobs
+
+  - metric_name: mssql_job_running_start_timestamp
+    type: gauge
+    help: 'Unix seconds (UTC-naive from SQL local datetime) when the currently running job started (sysjobactivity.start_execution_date).'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - step_id
+      - step_name
+    values: [start_unix]
+    query_ref: mssql_job_running_jobs
+
+  - metric_name: mssql_job_running_step
+    type: gauge
+    help: 'Currently executing step_id for running jobs (0 if unknown). Derived from last completed step + on_success flow.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - step_id
+      - step_name
+    values: [step_id_value]
+    query_ref: mssql_job_running_jobs
+
+queries:
+  - query_name: mssql_sqlagent_service
+    query: |
+      SELECT TOP (1)
+          CAST(CASE WHEN status_desc = N'Running' THEN 1 ELSE 0 END AS float) AS is_running
+      FROM sys.dm_server_services WITH (NOLOCK)
+      WHERE servicename LIKE N'SQL Server Agent%';
+
+  - query_name: mssql_job_running_count
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS running_count
+      FROM msdb.dbo.sysjobactivity AS ja WITH (NOLOCK)
+      WHERE ja.session_id = (SELECT MAX(session_id) FROM msdb.dbo.syssessions WITH (NOLOCK))
+        AND ja.start_execution_date IS NOT NULL
+        AND ja.stop_execution_date IS NULL;
+
+  # last_executed_step_id = last *completed* step, not the step currently running.
+  # Infer current step from that step's on_success_action (3=next, 4=goto).
+  - query_name: mssql_job_running_jobs
+    query: |
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          CAST(ISNULL(cur.step_id, 0) AS nvarchar(20)) AS step_id,
+          ISNULL(cur.step_name, N'') AS step_name,
+          CAST(DATEDIFF(SECOND, ja.start_execution_date, GETDATE()) AS float) AS running_seconds,
+          CAST(DATEDIFF(SECOND, { D '1970-01-01' }, ja.start_execution_date) AS float) AS start_unix,
+          CAST(ISNULL(cur.step_id, 0) AS float) AS step_id_value
+      FROM msdb.dbo.sysjobactivity AS ja WITH (NOLOCK)
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON ja.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      LEFT JOIN msdb.dbo.sysjobsteps AS done WITH (NOLOCK)
+          ON done.job_id = ja.job_id
+         AND done.step_id = ja.last_executed_step_id
+      OUTER APPLY (
+          SELECT TOP (1)
+              s.step_id,
+              s.step_name
+          FROM msdb.dbo.sysjobsteps AS s WITH (NOLOCK)
+          WHERE s.job_id = ja.job_id
+            AND s.step_id = CASE
+                WHEN ja.last_executed_step_id IS NULL THEN
+                    (SELECT MIN(s0.step_id)
+                     FROM msdb.dbo.sysjobsteps AS s0 WITH (NOLOCK)
+                     WHERE s0.job_id = ja.job_id)
+                WHEN done.on_success_action = 3 THEN
+                    (SELECT MIN(s1.step_id)
+                     FROM msdb.dbo.sysjobsteps AS s1 WITH (NOLOCK)
+                     WHERE s1.job_id = ja.job_id
+                       AND s1.step_id > done.step_id)
+                WHEN done.on_success_action = 4 THEN
+                    done.on_success_step_id
+                ELSE
+                    done.step_id
+            END
+      ) AS cur
+      WHERE ja.session_id = (SELECT MAX(session_id) FROM msdb.dbo.syssessions WITH (NOLOCK))
+        AND ja.start_execution_date IS NOT NULL
+        AND ja.stop_execution_date IS NULL;

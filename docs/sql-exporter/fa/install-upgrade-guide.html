@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>راهنمای نصب، ارتقا و حذف sql_exporter</title>
+  <style>
+    :root {
+      --bg: #f6f4ef;
+      --surface: #fffdf8;
+      --text: #1f2a2e;
+      --muted: #5a6a70;
+      --accent: #0b6e6e;
+      --accent-soft: #d9efef;
+      --border: #d7d0c4;
+      --code-bg: #1e2930;
+      --code-fg: #e8eef2;
+      --thead: #e8f3f3;
+      --shadow: 0 10px 30px rgba(31, 42, 46, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+      background:
+        radial-gradient(circle at top left, #e7f4f4 0, transparent 40%),
+        linear-gradient(180deg, #f8f6f1 0%, var(--bg) 100%);
+      color: var(--text);
+      line-height: 1.75;
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.75rem 1.5rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+
+    header.hero h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.45rem, 2.4vw, 2rem);
+      color: var(--accent);
+      line-height: 1.35;
+    }
+
+    header.hero p { margin: 0.35rem 0; color: var(--muted); }
+
+    .badge {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-top: 0.75rem;
+    }
+
+    nav.toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    nav.toc h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.05rem;
+    }
+
+    nav.toc ol {
+      margin: 0;
+      padding-inline-start: 1.25rem;
+    }
+
+    nav.toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    nav.toc a:hover { text-decoration: underline; }
+
+    main section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.35rem 1.4rem;
+      margin-bottom: 1.1rem;
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 0.85rem;
+      font-size: 1.25rem;
+      color: #0a4f4f;
+      border-bottom: 2px solid var(--accent-soft);
+      padding-bottom: 0.35rem;
+    }
+
+    h3 {
+      margin: 1.15rem 0 0.55rem;
+      font-size: 1.05rem;
+      color: #234;
+    }
+
+    p { margin: 0.55rem 0; }
+
+    ul, ol { margin: 0.4rem 0 0.7rem; padding-inline-start: 1.3rem; }
+
+    a { color: var(--accent); }
+
+    code, kbd {
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      font-size: 0.92em;
+      background: #eef3f4;
+      border: 1px solid #d7e0e3;
+      border-radius: 5px;
+      padding: 0.05rem 0.35rem;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border-radius: 10px;
+      padding: 0.95rem 1rem;
+      overflow-x: auto;
+      direction: ltr;
+      text-align: left;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      font-size: 0.9rem;
+      white-space: pre;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.6rem 0 0.9rem;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.65rem;
+      vertical-align: top;
+      text-align: right;
+    }
+
+    th {
+      background: var(--thead);
+      color: #0a4f4f;
+      font-weight: 700;
+    }
+
+    tr:nth-child(even) td { background: #fbfaf7; }
+
+    .note {
+      background: #fff8e8;
+      border: 1px solid #edd9a5;
+      border-radius: 10px;
+      padding: 0.7rem 0.9rem;
+      color: #5a4a22;
+      margin: 0.7rem 0;
+    }
+
+    footer {
+      margin-top: 1.5rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .wrap { max-width: none; padding: 0; }
+      header.hero, main section, nav.toc {
+        box-shadow: none;
+        border-color: #ccc;
+      }
+      pre { white-space: pre-wrap; }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>راهنمای نصب، ارتقا و حذف <code>sql_exporter</code></h1>
+      <p>این سند مراحل <strong>نصب اولیه</strong> و <strong>ارتقای نسخه</strong>ی <code>sql_exporter</code> روی سرورهای SQL Server را پوشش می‌دهد.</p>
+      <p>برای جزئیات کانفیگ، پروفایل collector و عیب‌یابی ببینید:
+        <a href="install-config-guide.md">راهنمای نصب و کانفیگ</a>
+      </p>
+      <p>منبع Markdown: <a href="install-upgrade-guide.md">install-upgrade-guide.md</a>
+        · English HTML: <a href="../en/install-upgrade-guide.html">en/install-upgrade-guide.html</a>
+      </p>
+      <span class="badge">نسخه مستند: 0.24.4</span>
+    </header>
+
+    <nav class="toc" aria-label="فهرست مطالب">
+      <h2>فهرست</h2>
+      <ol>
+        <li><a href="#which-script">کدام اسکریپت را استفاده کنم؟</a></li>
+        <li><a href="#prereqs">پیش‌نیازها</a></li>
+        <li><a href="#access">دسترسی‌های لازم</a></li>
+        <li><a href="#install">نصب اولیه (ریموت)</a></li>
+        <li><a href="#upgrade">ارتقا (ریموت)</a></li>
+        <li><a href="#uninstall">حذف ریموت</a></li>
+        <li><a href="#manual">نصب / ارتقای دستی</a></li>
+        <li><a href="#health">چک سلامت</a></li>
+        <li><a href="#troubleshoot">عیب‌یابی سریع</a></li>
+        <li><a href="#rollout">ترتیب پیشنهادی Rollout</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="which-script">
+        <h2>کدام اسکریپت را استفاده کنم؟</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>هدف</th><th>اسکریپت</th><th>توضیح</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>نصب تازه یا نصب/به‌روزرسانی سرویس از صفر</td>
+                <td><code>scripts/powershell/sql-exporter/Install-SqlExporterRemote.ps1</code></td>
+                <td>سرویس را می‌سازد یا به‌روز می‌کند؛ مسیر نصب پیش‌فرض را می‌داند</td>
+              </tr>
+              <tr>
+                <td>ارتقای نسخه روی نصب موجود</td>
+                <td><code>scripts/powershell/sql-exporter/Upgrade-SqlExporterRemote.ps1</code></td>
+                <td>مسیر exe را از سرویس تشخیص می‌دهد؛ بکاپ می‌گیرد؛ در خطا rollback می‌کند</td>
+              </tr>
+              <tr>
+                <td>حذف سرویس و در صورت نیاز فایل‌ها</td>
+                <td><code>scripts/powershell/sql-exporter/Uninstall-SqlExporterRemote.ps1</code></td>
+                <td>تشخیص ServiceBase/NSSM؛ بکاپ ZIP پیش‌فرض؛ پشتیبانی از <code>-WhatIf</code></td>
+              </tr>
+              <tr>
+                <td>فقط کانفیگ / پروفایل (بدون تعویض باینری)</td>
+                <td><code>scripts/powershell/sql-exporter/Deploy-SqlExporterConfig.ps1</code></td>
+                <td><code>sql_exporter.yml</code> (و در صورت <code>-Profile</code>، <code>profiles\</code>) را deploy می‌کند</td>
+              </tr>
+              <tr>
+                <td>فقط همگام‌سازی فایل‌های collector</td>
+                <td><code>scripts/powershell/sql-exporter/Deploy-Collectors.ps1</code></td>
+                <td><code>-Layout Collector</code> (پیش‌فرض) یا <code>-Layout Root</code></td>
+              </tr>
+              <tr>
+                <td>Export داشبوردهای Grafana → repo</td>
+                <td><code>scripts/powershell/sql-exporter/Export-GrafanaDashboards.ps1</code></td>
+                <td>داشبوردهای زنده <code>sqlx-*</code> را در <code>grafana/dashboards/</code> می‌نویسد</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>اسکریپت‌های Install / Upgrade / Deploy-Config از <strong>WinRM</strong> استفاده می‌کنند. <code>Deploy-Collectors</code> هم برای stop/start سرویس از WinRM استفاده می‌کند. <code>Export-GrafanaDashboards</code> به API گرافانا وصل می‌شود (<code>GRAFANA_URL</code> + <code>GRAFANA_SERVICE_ACCOUNT_TOKEN</code>).</p>
+        <h3>Layoutهای Deploy-Collectors</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th><code>-Layout</code></th><th>رفتار</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Collector</code> (پیش‌فرض)</td>
+                <td>کپی به <code>collector\</code> ریموت؛ حذف <code>*.collector.yml</code> از ریشه</td>
+              </tr>
+              <tr>
+                <td><code>Root</code></td>
+                <td>کپی به ریشه نصب؛ حذف کامل پوشه <code>collector\</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code>.\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Computers sql-host-01 -Layout Collector
+.\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Computers sql-host-01 -Layout Root</code></pre>
+      </section>
+
+      <section id="prereqs">
+        <h2>پیش‌نیازها</h2>
+        <ul>
+          <li>دسترسی WinRM / PowerShell Remoting به سرور مقصد</li>
+          <li>حسابی با حق نصب/مدیریت سرویس ویندوز روی مقصد</li>
+          <li>فایل‌های پکیج در ریشه پروژه:
+            <ul>
+              <li><code>sql_exporter.exe</code></li>
+              <li><code>sql_exporter.yml</code></li>
+              <li><code>web-config.yml</code></li>
+              <li><code>collector/*.collector.yml</code></li>
+              <li><code>profiles/*.yml</code></li>
+            </ul>
+          </li>
+          <li>دسترسی SQL برای حساب اجرای سرویس (<code>VIEW SERVER STATE</code> و <code>VIEW ANY DEFINITION</code> در حداقل حالت)</li>
+          <li>پورت scrape باز برای Prometheus (پیش‌فرض upstream: <strong>9399</strong>)</li>
+        </ul>
+        <pre><code># تست WinRM قبل از نصب
+Test-WSMan -ComputerName sql-host-01</code></pre>
+      </section>
+
+      <section id="access">
+        <h2>دسترسی‌های لازم</h2>
+        <p>ماتریس دسترسی، ایجاد ACL/Firewall/حقوق حساب، سپس audit؛ مجوز SQL جداگانه با اسکریپت T-SQL:</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Test-SqlExporterRequiredAccess.ps1 -ShowRequirements
+.\scripts\powershell\sql-exporter\Set-SqlExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20 -WhatIf
+.\scripts\powershell\sql-exporter\Set-SqlExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20
+.\scripts\powershell\sql-exporter\Test-SqlExporterRequiredAccess.ps1
+.\scripts\powershell\sql-exporter\Set-SqlExporterRequiredAccess.ps1 `
+  -ComputerName sql-host-01 `
+  -Credential (Get-Credential) `
+  -ServiceAccount 'DOMAIN\SqlExporterAccount' `
+  -PrometheusRemoteAddress 10.10.10.20 `
+  -GrantLogonAsService</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>نقش</th><th>دسترسی</th><th>ابزار</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>اپراتور نصب/ارتقا</td><td>Administrator روی مقصد</td><td>حساب WinRM</td></tr>
+              <tr><td>کلاینت استقرار</td><td>WinRM / PowerShell Remoting</td><td><code>Install-</code> / <code>Upgrade-</code> / <code>Deploy-*</code></td></tr>
+              <tr><td>سرویس ویندوز</td><td>Read روی مسیر نصب و <code>web-config.yml</code></td><td><code>Set-SqlExporterRequiredAccess.ps1</code></td></tr>
+              <tr><td>سرویس → SQL Server</td><td><code>VIEW SERVER STATE</code>، <code>VIEW ANY DEFINITION</code> (+ اختیاری msdb/SSISDB/DBهای کاربر)</td><td><code>scripts/sql/Create-SqlExporterLogin.sql</code></td></tr>
+              <tr><td>Prometheus</td><td>TCP/<strong>9399</strong> (+ Basic Auth در صورت فعال بودن)</td><td>Firewall در <code>Set-…RequiredAccess.ps1</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>Set-SqlExporterRequiredAccess.ps1</code> دسترسی ویندوز/شبکه را ایجاد می‌کند؛ <code>Test-SqlExporterRequiredAccess.ps1</code> نتیجه را بررسی می‌کند. مجوزهای داخل SQL Server با <code>Create-SqlExporterLogin.sql</code> (به‌عنوان sysadmin) داده می‌شوند.</p>
+        <p>جزئیات GRANTها: <a href="install-config-guide.md">راهنمای نصب و کانفیگ — دسترسی‌ها</a>.</p>
+      </section>
+
+      <section id="install">
+        <h2>نصب اولیه (ریموت — پیشنهادی)</h2>
+
+        <h3>۱) Dry-run با WhatIf</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 -Computers sql-host-01,sql-host-02 -WhatIf</code></pre>
+
+        <h3>۲) اجرای واقعی</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+        <h3>۲ب) نصب با پروفایل collector</h3>
+        <p>همان UX ویندوز اکسپورتر (<code>-Profile sql-server.yml</code>). پروفایل‌های SQL Exporter در <code>profiles/</code> هستند (مثلاً <code>oltp.yml</code>، <code>dwh.yml</code>):</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers OKDC34017 `
+  -Profile oltp.yml `
+  -RemoteCredential (Get-Credential)</code></pre>
+        <p>پوشه <code>profiles\</code> کپی می‌شود و فهرست <code>collectors:</code> پروفایل داخل <code>sql_exporter.yml</code> نوشته می‌شود.</p>
+
+        <h3>۳) حساب سرویس (اختیاری)</h3>
+        <p>پیش‌فرض: <code>LocalSystem</code></p>
+        <p>با credential دامنه:</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ServiceAccountMode Credential `
+  -ServiceCredential (Get-Credential 'DOMAIN\SqlExporterAccount')</code></pre>
+        <p>با gMSA:</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ServiceAccountMode gMSA `
+  -ServiceAccount 'DOMAIN\SqlExporterAccount$'</code></pre>
+
+        <h3>آنچه نصب می‌کند</h3>
+        <ul>
+          <li>مسیر پیش‌فرض نصب: <code>C:\Program Files\Observability\PrometheusExporters\sql-exporter</code></li>
+          <li>نام سرویس: <code>prometheus_sql_exporter</code></li>
+          <li>فایل‌ها: <code>sql_exporter.exe</code>، <code>sql_exporter.yml</code>، <code>web-config.yml</code>، <code>profiles\</code>، و پوشه <code>collector\</code> (مگر <code>-SkipCollectors</code>)</li>
+          <li>Listen پیش‌فرض: <code>:9399</code></li>
+        </ul>
+
+        <h3>پارامترهای مهم نصب</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>پارامتر</th><th>پیش‌فرض</th><th>کاربرد</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>-Computers</code></td><td>لیست سرورهای نمونه در اسکریپت</td><td>هدف‌ها</td></tr>
+              <tr><td><code>-SourceRoot</code></td><td>ریشه پروژه</td><td>منبع پکیج</td></tr>
+              <tr><td><code>-InstallRoot</code></td><td>مسیر Program Files بالا</td><td>مسیر نصب روی مقصد</td></tr>
+              <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>نام سرویس ویندوز</td></tr>
+              <tr><td><code>-ListenAddress</code></td><td><code>:9399</code></td><td>آدرس/پورت scrape</td></tr>
+              <tr><td><code>-Profile</code></td><td>(خالی)</td><td>اعمال collectors از <code>profiles/&lt;name&gt;.yml</code> داخل <code>sql_exporter.yml</code></td></tr>
+              <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td>نوع حساب سرویس</td></tr>
+              <tr><td><code>-RemoteCredential</code></td><td>(خالی)</td><td>اعتبار WinRM</td></tr>
+              <tr><td><code>-SkipCollectors</code></td><td>خاموش</td><td>عدم کپی پوشه collector</td></tr>
+              <tr><td><code>-ServiceMode</code></td><td><code>ServiceBase</code></td><td>روش میزبانی سرویس: <code>ServiceBase</code> یا <code>NSSM</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="upgrade">
+        <h2>ارتقا (ریموت)</h2>
+        <p>وقتی سرویس از قبل روی سرور هست و می‌خواهید به نسخه پکیج فعلی (مثلاً <strong>0.24.4</strong>) برسید، از اسکریپت ارتقا استفاده کنید.</p>
+
+        <h3>رفتار اسکریپت ارتقا</h3>
+        <ol>
+          <li>نسخه باینری منبع را با <code>-ExpectedVersion</code> مقایسه می‌کند</li>
+          <li>مسیر <code>sql_exporter.exe</code> را از سرویس تشخیص می‌دهد (Native یا NSSM)</li>
+          <li>از <code>sql_exporter.exe</code>، <code>sql_exporter.yml</code>، <code>web-config.yml</code>، <code>collector\</code> و <code>profiles\</code> بکاپ می‌گیرد</li>
+          <li>سرویس را متوقف می‌کند، باینری/web-config/collectors/profiles را جایگزین می‌کند، نسخه را تأیید می‌کند، سرویس را استارت می‌کند</li>
+          <li>بدون <code>-Profile</code>، collectors داخل <code>sql_exporter.yml</code> ریموت دست‌نخورده می‌ماند؛ با <code>-Profile</code> فقط collectors اعمال می‌شود و DSN حفظ می‌شود</li>
+          <li>اگر استارت یا تأیید نسخه شکست بخورد، فایل‌ها را از بکاپ برمی‌گرداند</li>
+          <li>بکاپ‌های قدیمی‌تر از <code>-KeepBackups</code> را پاک می‌کند (پیش‌فرض: ۵)</li>
+        </ol>
+        <p>مسیر بکاپ نمونه:</p>
+        <pre><code>&lt;InstallPath&gt;\_backup\upgrade_&lt;oldVersion&gt;_yyyyMMdd_HHmmss\</code></pre>
+
+        <h3>۱) Dry-run</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 -Computers sql-host-01,sql-host-02 -WhatIf</code></pre>
+
+        <h3>۲) ارتقای واقعی</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+        <h3>۲ب) ارتقا و تنظیم پروفایل collector</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers OKDC34017 `
+  -Profile oltp.yml `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+        <h3>۳) اگر مسیر exe از سرویس پیدا نشد</h3>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -InstallRoot 'D:\Monitoring\sql_exporter'</code></pre>
+
+        <h3>پارامترهای مهم ارتقا</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>پارامتر</th><th>پیش‌فرض</th><th>کاربرد</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>-Computers</code></td><td>لیست نمونه در اسکریپت</td><td>هدف‌ها</td></tr>
+              <tr><td><code>-SourceRoot</code></td><td>ریشه پروژه</td><td>منبع پکیج</td></tr>
+              <tr><td><code>-ExpectedVersion</code></td><td><code>0.24.4</code></td><td>نسخه مورد انتظار باینری</td></tr>
+              <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>نام سرویس</td></tr>
+              <tr><td><code>-InstallRoot</code></td><td>(خالی = تشخیص خودکار)</td><td>اجبار مسیر نصب</td></tr>
+              <tr><td><code>-Profile</code></td><td>(خالی)</td><td>اعمال collectors از <code>profiles/&lt;name&gt;.yml</code>؛ بدون آن کانفیگ ریموت حفظ می‌شود</td></tr>
+              <tr><td><code>-RemoteCredential</code></td><td>(خالی)</td><td>اعتبار WinRM</td></tr>
+              <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>مهلت stop/start سرویس</td></tr>
+              <tr><td><code>-KeepBackups</code></td><td><code>5</code></td><td>تعداد بکاپ‌های نگه داشته‌شده</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>خروجی وضعیت</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Status</th><th>معنی</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>Upgraded</code></td><td>نسخه عوض شد</td></tr>
+              <tr><td><code>Refreshed</code></td><td>همان نسخه؛ فایل‌ها/collectorها تازه شدند</td></tr>
+              <tr><td><code>WhatIf</code></td><td>فقط شبیه‌سازی</td></tr>
+              <tr><td><code>Failed</code></td><td>خطا؛ در صورت امکان rollback انجام شده</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="uninstall">
+        <h2>حذف ریموت</h2>
+        <p>اسکریپت نوع ServiceBase یا NSSM را تشخیص می‌دهد، سرویس <code>prometheus_sql_exporter</code> را حذف می‌کند و در صورت عدم استفاده از <code>-KeepFiles</code> مسیر <code>C:\Program Files\Observability\PrometheusExporters\sql-exporter</code> را نیز پاک می‌کند. اگر <code>-SkipBackup</code> داده نشود، ZIP بکاپ در <code>C:\ProgramData\Observability\PrometheusExporters\uninstall-backups</code> ساخته می‌شود. Event Source به‌صورت پیش‌فرض حفظ خواهد شد.</p>
+        <pre><code># شبیه‌سازی
+.\scripts\powershell\sql-exporter\Uninstall-SqlExporterRemote.ps1 `
+  -Computers sql-host-01,sql-host-02 -WhatIf
+
+# حذف سرویس و فایل‌ها
+.\scripts\powershell\sql-exporter\Uninstall-SqlExporterRemote.ps1 `
+  -Computers sql-host-01,sql-host-02 `
+  -ServiceMode Preserve `
+  -RemoteCredential (Get-Credential)
+
+# فقط حذف سرویس
+.\scripts\powershell\sql-exporter\Uninstall-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 -KeepFiles</code></pre>
+        <div class="note">سوییچ‌های اختیاری حذف: <code>-SkipBackup</code> و <code>-RemoveEventSource</code>.</div>
+      </section>
+
+      <section id="manual">
+        <h2>نصب / ارتقای دستی (بدون WinRM)</h2>
+        <div class="note">فقط وقتی دسترسی ریموت ندارید.</div>
+
+        <h3>نصب دستی</h3>
+        <ol>
+          <li>پوشه پکیج را روی سرور کپی کنید.</li>
+          <li><code>data_source_name</code> را در <code>sql_exporter.yml</code> تنظیم کنید.</li>
+          <li>دسترسی‌های SQL را بدهید (جزئیات: <a href="install-config-guide.md">install-config-guide</a>).</li>
+          <li>سرویس ویندوز را بسازید یا از اسکریپت نصب با <code>-Computers</code> محلی معادل استفاده کنید.</li>
+          <li>قبل از شروع سرویس:</li>
+        </ol>
+        <pre><code>.\sql_exporter.exe "-config.file=sql_exporter.yml" -config.check</code></pre>
+
+        <h3>ارتقای دستی</h3>
+        <ol>
+          <li>سرویس را Stop کنید.</li>
+          <li>از پوشه نصب بکاپ بگیرید.</li>
+          <li><code>sql_exporter.exe</code> (و در صورت نیاز <code>collector\</code> / ymlها) را جایگزین کنید.</li>
+          <li>نسخه را چک کنید:</li>
+        </ol>
+        <pre><code>.\sql_exporter.exe --version</code></pre>
+        <ol start="5">
+          <li>سرویس را Start کنید. اگر بالا نیامد، از بکاپ برگردانید.</li>
+        </ol>
+      </section>
+
+      <section id="health">
+        <h2>چک سلامت بعد از نصب یا ارتقا</h2>
+        <ol>
+          <li>وضعیت سرویس:</li>
+        </ol>
+        <pre><code>Get-Service prometheus_sql_exporter</code></pre>
+        <ol start="2">
+          <li>نسخه:</li>
+        </ol>
+        <pre><code>&amp; 'C:\Program Files\Observability\PrometheusExporters\sql-exporter\sql_exporter.exe' --version</code></pre>
+        <ol start="3">
+          <li>متریک‌ها:</li>
+        </ol>
+        <pre><code>http://HOSTNAME:9399/metrics</code></pre>
+        <p>اگر Basic Auth در <code>web-config.yml</code> فعال باشد، باید با username/password تست کنید. راهنمای ساخت hash و تنظیم Prometheus: <a href="install-config-guide.md">راهنمای نصب و کانفیگ</a> (بخش «پورت scrape و Basic Auth»).</p>
+        <p>باید حداقل این‌ها را ببینید:</p>
+        <ul>
+          <li><code>mssql_up</code></li>
+          <li><code>mssql_hostname</code></li>
+          <li><code>mssql_product_version</code></li>
+        </ul>
+        <ol start="4">
+          <li>در Prometheus هدف scrape باید <code>up=1</code> باشد.</li>
+        </ol>
+      </section>
+
+      <section id="troubleshoot">
+        <h2>عیب‌یابی سریع استقرار</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>مشکل</th><th>بررسی</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>WinRM وصل نمی‌شود</td><td>Remoting، فایروال، credential؛ <code>Test-WSMan</code>؛ <code>Test-SqlExporterRequiredAccess.ps1</code></td></tr>
+              <tr><td>سرویس Start نمی‌شود</td><td>Event Viewer، <code>config.check</code>، مسیر ImagePath؛ برای حساب سفارشی <code>-GrantLogonAsService</code></td></tr>
+              <tr><td>ارتقا مسیر exe را پیدا نمی‌کند</td><td><code>-InstallRoot</code> را بدهید</td></tr>
+              <tr><td>بعد از ارتقا متریک نیست</td><td>پورت 9399، <code>sql_exporter.yml</code>، دسترسی SQL، Basic Auth / scrape job؛ <code>Test-SqlExporterRequiredAccess.ps1</code></td></tr>
+              <tr><td>خطای دسترسی SQL / متریک خالی</td><td><code>Create-SqlExporterLogin.sql</code>؛ جدول دسترسی collectorها در <a href="install-config-guide.md">install-config-guide</a></td></tr>
+              <tr><td>Rollback خودکار</td><td>پیام خطا در خروجی اسکریپت + پوشه <code>_backup</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="rollout">
+        <h2>ترتیب پیشنهادی Rollout</h2>
+        <ol>
+          <li>یک سرور غیرحساس را با <code>-WhatIf</code> سپس اجرای واقعی تست کنید.</li>
+          <li>سلامت <code>/metrics</code> و scrape Prometheus را تأیید کنید.</li>
+          <li>بقیه سرورها را از روی <code>servers.txt</code> بچرخانید.</li>
+          <li>برای تغییر کانفیگ/پروفایل بدون تعویض باینری، از <code>Deploy-SqlExporterConfig.ps1</code> (با یا بدون <code>-Profile</code>) و <a href="install-config-guide.md">راهنمای کانفیگ</a> استفاده کنید.</li>
+          <li>برای فقط به‌روزرسانی YAMLهای collector از <code>Deploy-Collectors.ps1</code> با <code>-Layout Collector</code> یا <code>-Layout Root</code> استفاده کنید.</li>
+        </ol>
+      </section>
+    </main>
+
+    <footer>
+      منبع Markdown:
+      <a href="install-upgrade-guide.md">install-upgrade-guide.md</a>
+      · نسخه HTML همگام با راهنمای فعلی
+    </footer>
+  </div>
+</body>
+</html>

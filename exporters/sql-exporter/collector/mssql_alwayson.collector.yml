@@ -1,0 +1,781 @@
+# Always On Availability Groups — comprehensive monitoring.
+#
+# Includes:
+#   - Primary/Secondary pair lag (legacy mssql_alwayson_data_loss + explicit gauges)
+#   - Per-replica DB queues: log_send / redo / filestream + rates
+#   - Replica connected/sync/operational health
+#   - AG-level synchronization health
+#
+# Permissions: VIEW SERVER STATE, VIEW ANY DEFINITION
+# Safe when instance is not in an AG (empty result sets).
+#
+collector_name: mssql_alwayson
+
+min_interval: 30s
+
+metrics:
+  # -------------------------------------------------------------------------
+  # Legacy multi-value metric (keep for existing Grafana panels)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_data_loss
+    type: gauge
+    help: 'Always On lag/queues/timestamps per primary-secondary database pair. redo_queue_size is bytes (legacy); prefer redo_queue_size_kb.'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - primary_connected_state
+      - server_secondary
+      - secondary_connected_state
+      - synchronization_state_desc
+      - synchronization_health_desc
+      - availability_mode_desc
+    value_label: operation
+    values:
+      - Estimated_data_loss_second
+      - secondary_lag_seconds
+      - redo_queue_size
+      - redo_queue_size_kb
+      - log_send_queue_size_kb
+      - redo_rate_kb_s
+      - log_send_rate_kb_s
+      - filestream_send_rate_kb_s
+      - redo_queue_remaining_seconds
+      - log_send_queue_remaining_seconds
+      - is_suspended
+      - primary_last_commit_datetime
+      - secondary_last_commit_datetime
+      - secondary_last_hardened_datetime
+      - secondary_last_redone_datetime
+      - secondary_last_sent_datetime
+      - secondary_last_received_datetime
+    query_ref: mssql_alwayson_pair
+
+  # -------------------------------------------------------------------------
+  # Pair-level explicit gauges
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_estimated_data_loss_seconds
+    type: gauge
+    help: 'Estimated data loss seconds (primary last_commit - secondary last_commit).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+      - availability_mode_desc
+    values: [Estimated_data_loss_second]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_secondary_lag_seconds
+    type: gauge
+    help: 'secondary_lag_seconds from dm_hadr_database_replica_states.'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+      - availability_mode_desc
+    values: [secondary_lag_seconds]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_redo_queue_kb
+    type: gauge
+    help: 'Secondary redo_queue_size (KB).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [redo_queue_size_kb]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_log_send_queue_kb
+    type: gauge
+    help: 'log_send_queue_size (KB) for the secondary pair.'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [log_send_queue_size_kb]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_log_send_rate_kb_s
+    type: gauge
+    help: 'log_send_rate (KB/s) for the secondary pair. Use with log_send_queue_kb for send-queue pressure (no separate growth metric).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [log_send_rate_kb_s]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_redo_rate_kb_s
+    type: gauge
+    help: 'redo_rate (KB/s) for the secondary pair.'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [redo_rate_kb_s]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_redo_queue_growth_kb_s
+    type: gauge
+    help: 'Approx redo queue growth KB/s = max(log_send_rate - redo_rate, 0).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [redo_queue_growth_kb_s]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_commit_latency_ms
+    type: gauge
+    help: 'Commit visibility lag proxy in ms (primary last_commit vs secondary last_hardened).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [commit_latency_ms]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_filestream_send_rate_kb_s
+    type: gauge
+    help: 'filestream_send_rate (KB/s) for the secondary pair.'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [filestream_send_rate_kb_s]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_redo_queue_remaining_seconds
+    type: gauge
+    help: 'Approx seconds to drain redo queue (queue_kb / redo_rate_kb_s).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [redo_queue_remaining_seconds]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_log_send_queue_remaining_seconds
+    type: gauge
+    help: 'Approx seconds to drain log send queue (queue_kb / log_send_rate_kb_s).'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+    values: [log_send_queue_remaining_seconds]
+    query_ref: mssql_alwayson_pair
+
+  - metric_name: mssql_alwayson_is_suspended
+    type: gauge
+    help: '1 if data movement is suspended on the secondary database.'
+    key_labels:
+      - availability_group_name
+      - server_primary
+      - db
+      - server_secondary
+      - suspend_reason_desc
+    values: [is_suspended]
+    query_ref: mssql_alwayson_pair
+
+  # -------------------------------------------------------------------------
+  # Per-replica database state (local + remote rows visible to this instance)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_replica_db_log_send_queue_kb
+    type: gauge
+    help: 'Per-replica log_send_queue_size (KB).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [log_send_queue_size_kb]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_replica_db_log_send_rate_kb_s
+    type: gauge
+    help: 'Per-replica log_send_rate (KB/s).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [log_send_rate_kb_s]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_replica_db_redo_queue_kb
+    type: gauge
+    help: 'Per-replica redo_queue_size (KB).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [redo_queue_size_kb]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_replica_db_redo_rate_kb_s
+    type: gauge
+    help: 'Per-replica redo_rate (KB/s).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [redo_rate_kb_s]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_replica_db_secondary_lag_seconds
+    type: gauge
+    help: 'Per-replica secondary_lag_seconds.'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [secondary_lag_seconds]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_replica_db_synchronization_health
+    type: gauge
+    help: 'Per-replica DB synchronization_health (0=NOT_HEALTHY,1=PARTIALLY,2=HEALTHY).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+      - synchronization_health_desc
+    values: [synchronization_health]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_replica_db_is_suspended
+    type: gauge
+    help: 'Per-replica DB is_suspended flag.'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - suspend_reason_desc
+    values: [is_suspended]
+    query_ref: mssql_alwayson_replica_db
+
+  # -------------------------------------------------------------------------
+  # Replica-level health
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_replica_connected_state
+    type: gauge
+    help: 'Replica connected_state (0=DISCONNECTED,1=CONNECTED).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - role_desc
+      - availability_mode_desc
+      - failover_mode_desc
+      - connected_state_desc
+      - synchronization_health_desc
+      - operational_state_desc
+    values: [connected_state]
+    query_ref: mssql_alwayson_replicas
+
+  - metric_name: mssql_alwayson_disconnected_seconds
+    type: gauge
+    help: 'Seconds since last connection error when replica is disconnected, else 0.'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - role_desc
+      - connected_state_desc
+    values: [disconnected_seconds]
+    query_ref: mssql_alwayson_replicas
+
+  - metric_name: mssql_alwayson_replica_synchronization_health
+    type: gauge
+    help: 'Replica synchronization_health (0/1/2).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - role_desc
+      - availability_mode_desc
+      - failover_mode_desc
+      - connected_state_desc
+      - synchronization_health_desc
+      - operational_state_desc
+    values: [synchronization_health]
+    query_ref: mssql_alwayson_replicas
+
+  - metric_name: mssql_alwayson_replica_operational_state
+    type: gauge
+    help: 'Replica operational_state (NULL on remote sometimes; local usually set).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - role_desc
+      - availability_mode_desc
+      - failover_mode_desc
+      - connected_state_desc
+      - synchronization_health_desc
+      - operational_state_desc
+    values: [operational_state]
+    query_ref: mssql_alwayson_replicas
+
+  - metric_name: mssql_alwayson_replica_role
+    type: gauge
+    help: 'Replica role (0=RESOLVING,1=PRIMARY,2=SECONDARY).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - role_desc
+      - availability_mode_desc
+      - failover_mode_desc
+      - connected_state_desc
+      - synchronization_health_desc
+      - operational_state_desc
+    values: [role]
+    query_ref: mssql_alwayson_replicas
+
+  # -------------------------------------------------------------------------
+  # AG-level health
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_group_synchronization_health
+    type: gauge
+    help: 'AG synchronization_health (0/1/2).'
+    key_labels:
+      - availability_group_name
+      - primary_replica
+      - primary_recovery_health_desc
+      - synchronization_health_desc
+    values: [synchronization_health]
+    query_ref: mssql_alwayson_groups
+
+  - metric_name: mssql_alwayson_group_primary_recovery_health
+    type: gauge
+    help: 'AG primary_recovery_health.'
+    key_labels:
+      - availability_group_name
+      - primary_replica
+      - primary_recovery_health_desc
+      - synchronization_health_desc
+    values: [primary_recovery_health]
+    query_ref: mssql_alwayson_groups
+
+  # -------------------------------------------------------------------------
+  # Failover readiness + synchronization_state
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_is_failover_ready
+    type: gauge
+    help: '1 if database replica is failover-ready (dm_hadr_database_replica_cluster_states).'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [is_failover_ready]
+    query_ref: mssql_alwayson_replica_db
+
+  - metric_name: mssql_alwayson_synchronization_state
+    type: gauge
+    help: 'synchronization_state: 0=NOT SYNCHRONIZING,1=SYNCHRONIZING,2=SYNCHRONIZED,3=REVERTING,4=INITIALIZING.'
+    key_labels:
+      - availability_group_name
+      - replica_server
+      - db
+      - role_desc
+      - is_local
+      - synchronization_state_desc
+    values: [synchronization_state]
+    query_ref: mssql_alwayson_replica_db
+
+  # -------------------------------------------------------------------------
+  # Seeding progress (empty when no active seeding)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_alwayson_seeding_transferred_bytes
+    type: gauge
+    help: 'Bytes transferred for active physical seeding.'
+    key_labels:
+      - local_database_name
+      - remote_machine_name
+      - role_desc
+      - internal_state_desc
+    values: [transferred_size_bytes]
+    query_ref: mssql_alwayson_seeding
+
+  - metric_name: mssql_alwayson_seeding_database_size_bytes
+    type: gauge
+    help: 'Total database size bytes for active physical seeding.'
+    key_labels:
+      - local_database_name
+      - remote_machine_name
+      - role_desc
+      - internal_state_desc
+    values: [database_size_bytes]
+    query_ref: mssql_alwayson_seeding
+
+  - metric_name: mssql_alwayson_seeding_percent
+    type: gauge
+    help: 'Approximate seeding percent complete (transferred/database_size*100).'
+    key_labels:
+      - local_database_name
+      - remote_machine_name
+      - role_desc
+      - internal_state_desc
+    values: [seeding_percent]
+    query_ref: mssql_alwayson_seeding
+
+queries:
+  # -----------------------------------------------------------------------
+  # Primary ↔ Secondary pairs
+  # -----------------------------------------------------------------------
+  - query_name: mssql_alwayson_pair
+    query: |
+      IF NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(256)) AS availability_group_name,
+              CAST(N'' AS nvarchar(256)) AS server_primary,
+              CAST(N'' AS nvarchar(128)) AS db,
+              CAST(N'' AS nvarchar(60)) AS primary_connected_state,
+              CAST(N'' AS nvarchar(256)) AS server_secondary,
+              CAST(N'' AS nvarchar(60)) AS secondary_connected_state,
+              CAST(N'' AS nvarchar(60)) AS synchronization_state_desc,
+              CAST(N'' AS nvarchar(60)) AS synchronization_health_desc,
+              CAST(N'' AS nvarchar(60)) AS availability_mode_desc,
+              CAST(N'' AS nvarchar(60)) AS suspend_reason_desc,
+              CAST(NULL AS float) AS Estimated_data_loss_second,
+              CAST(NULL AS float) AS secondary_lag_seconds,
+              CAST(NULL AS float) AS redo_queue_size,
+              CAST(NULL AS float) AS redo_queue_size_kb,
+              CAST(NULL AS float) AS log_send_queue_size_kb,
+              CAST(NULL AS float) AS redo_rate_kb_s,
+              CAST(NULL AS float) AS log_send_rate_kb_s,
+              CAST(NULL AS float) AS filestream_send_rate_kb_s,
+              CAST(NULL AS float) AS redo_queue_growth_kb_s,
+              CAST(NULL AS float) AS commit_latency_ms,
+              CAST(NULL AS float) AS redo_queue_remaining_seconds,
+              CAST(NULL AS float) AS log_send_queue_remaining_seconds,
+              CAST(NULL AS float) AS is_suspended,
+              CAST(NULL AS float) AS primary_last_commit_datetime,
+              CAST(NULL AS float) AS secondary_last_commit_datetime,
+              CAST(NULL AS float) AS secondary_last_hardened_datetime,
+              CAST(NULL AS float) AS secondary_last_redone_datetime,
+              CAST(NULL AS float) AS secondary_last_sent_datetime,
+              CAST(NULL AS float) AS secondary_last_received_datetime
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          ;WITH ag_db AS (
+              SELECT
+                  ag.name AS availability_group_name,
+                  ar.replica_server_name,
+                  ar.availability_mode_desc,
+                  ars.role_desc,
+                  ars.connected_state_desc,
+                  DB_NAME(drs.database_id) AS db,
+                  drs.last_commit_time,
+                  drs.last_hardened_time,
+                  drs.last_redone_time,
+                  drs.last_sent_time,
+                  drs.last_received_time,
+                  drs.redo_queue_size AS redo_queue_size_kb,
+                  drs.log_send_queue_size AS log_send_queue_size_kb,
+                  drs.redo_rate AS redo_rate_kb_s,
+                  drs.log_send_rate AS log_send_rate_kb_s,
+                  drs.filestream_send_rate AS filestream_send_rate_kb_s,
+                  drs.secondary_lag_seconds,
+                  drs.synchronization_state_desc,
+                  drs.synchronization_health_desc,
+                  CAST(drs.is_suspended AS int) AS is_suspended,
+                  ISNULL(drs.suspend_reason_desc, N'') AS suspend_reason_desc
+              FROM sys.dm_hadr_database_replica_states AS drs
+              INNER JOIN sys.availability_replicas AS ar
+                  ON drs.replica_id = ar.replica_id
+              INNER JOIN sys.dm_hadr_availability_replica_states AS ars
+                  ON ar.group_id = ars.group_id
+                 AND ar.replica_id = ars.replica_id
+              INNER JOIN sys.availability_groups AS ag
+                  ON ar.group_id = ag.group_id
+          ),
+          primary_side AS (
+              SELECT * FROM ag_db WHERE role_desc = N'PRIMARY'
+          ),
+          secondary_side AS (
+              SELECT * FROM ag_db WHERE role_desc = N'SECONDARY'
+          )
+          SELECT
+              ISNULL(p.availability_group_name, s.availability_group_name) AS availability_group_name,
+              ISNULL(p.replica_server_name, N'') AS server_primary,
+              ISNULL(p.db, s.db) AS db,
+              ISNULL(p.connected_state_desc, N'') AS primary_connected_state,
+              ISNULL(s.replica_server_name, N'') AS server_secondary,
+              ISNULL(s.connected_state_desc, N'') AS secondary_connected_state,
+              ISNULL(s.synchronization_state_desc, N'') AS synchronization_state_desc,
+              ISNULL(s.synchronization_health_desc, N'') AS synchronization_health_desc,
+              ISNULL(COALESCE(s.availability_mode_desc, p.availability_mode_desc), N'') AS availability_mode_desc,
+              ISNULL(s.suspend_reason_desc, N'') AS suspend_reason_desc,
+              CAST(
+                  CASE
+                    WHEN p.last_commit_time IS NULL OR s.last_commit_time IS NULL THEN 0
+                    WHEN p.last_commit_time >= s.last_commit_time
+                      THEN DATEDIFF(SECOND, s.last_commit_time, p.last_commit_time)
+                    ELSE 0
+                  END AS float
+              ) AS Estimated_data_loss_second,
+              CAST(ISNULL(s.secondary_lag_seconds, 0) AS float) AS secondary_lag_seconds,
+              CAST(ISNULL(s.redo_queue_size_kb, 0) AS float) * 1024.0 AS redo_queue_size,
+              CAST(ISNULL(s.redo_queue_size_kb, 0) AS float) AS redo_queue_size_kb,
+              CAST(ISNULL(s.log_send_queue_size_kb, 0) AS float) AS log_send_queue_size_kb,
+              CAST(ISNULL(s.redo_rate_kb_s, 0) AS float) AS redo_rate_kb_s,
+              CAST(ISNULL(s.log_send_rate_kb_s, 0) AS float) AS log_send_rate_kb_s,
+              CAST(ISNULL(s.filestream_send_rate_kb_s, 0) AS float) AS filestream_send_rate_kb_s,
+              CAST(
+                  CASE
+                    WHEN ISNULL(s.log_send_rate_kb_s, 0) - ISNULL(s.redo_rate_kb_s, 0) <= 0 THEN 0
+                    ELSE ISNULL(s.log_send_rate_kb_s, 0) - ISNULL(s.redo_rate_kb_s, 0)
+                  END AS float
+              ) AS redo_queue_growth_kb_s,
+              CAST(
+                  CASE
+                    WHEN p.last_commit_time IS NULL OR s.last_hardened_time IS NULL THEN 0
+                    WHEN p.last_commit_time > s.last_hardened_time
+                      THEN DATEDIFF_BIG(MILLISECOND, s.last_hardened_time, p.last_commit_time)
+                    ELSE 0
+                  END AS float
+              ) AS commit_latency_ms,
+              CAST(
+                  CASE WHEN ISNULL(s.redo_rate_kb_s, 0) <= 0 THEN 0
+                       ELSE ISNULL(s.redo_queue_size_kb, 0) * 1.0 / s.redo_rate_kb_s
+                  END AS float
+              ) AS redo_queue_remaining_seconds,
+              CAST(
+                  CASE WHEN ISNULL(s.log_send_rate_kb_s, 0) <= 0 THEN 0
+                       ELSE ISNULL(s.log_send_queue_size_kb, 0) * 1.0 / s.log_send_rate_kb_s
+                  END AS float
+              ) AS log_send_queue_remaining_seconds,
+              CAST(ISNULL(s.is_suspended, 0) AS float) AS is_suspended,
+              CAST(CASE WHEN p.last_commit_time IS NULL THEN 0
+                        ELSE DATEDIFF_BIG(SECOND, {D '1970-01-01'}, p.last_commit_time) END AS float)
+                  AS primary_last_commit_datetime,
+              CAST(CASE WHEN s.last_commit_time IS NULL THEN 0
+                        ELSE DATEDIFF_BIG(SECOND, {D '1970-01-01'}, s.last_commit_time) END AS float)
+                  AS secondary_last_commit_datetime,
+              CAST(CASE WHEN s.last_hardened_time IS NULL THEN 0
+                        ELSE DATEDIFF_BIG(SECOND, {D '1970-01-01'}, s.last_hardened_time) END AS float)
+                  AS secondary_last_hardened_datetime,
+              CAST(CASE WHEN s.last_redone_time IS NULL THEN 0
+                        ELSE DATEDIFF_BIG(SECOND, {D '1970-01-01'}, s.last_redone_time) END AS float)
+                  AS secondary_last_redone_datetime,
+              CAST(CASE WHEN s.last_sent_time IS NULL THEN 0
+                        ELSE DATEDIFF_BIG(SECOND, {D '1970-01-01'}, s.last_sent_time) END AS float)
+                  AS secondary_last_sent_datetime,
+              CAST(CASE WHEN s.last_received_time IS NULL THEN 0
+                        ELSE DATEDIFF_BIG(SECOND, {D '1970-01-01'}, s.last_received_time) END AS float)
+                  AS secondary_last_received_datetime
+          FROM primary_side AS p
+          FULL OUTER JOIN secondary_side AS s
+              ON p.availability_group_name = s.availability_group_name
+             AND p.db = s.db
+          WHERE ISNULL(p.db, s.db) IS NOT NULL;
+      END
+
+  # -----------------------------------------------------------------------
+  # Flat per-replica database rows
+  # -----------------------------------------------------------------------
+  - query_name: mssql_alwayson_replica_db
+    query: |
+      IF NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(256)) AS availability_group_name,
+              CAST(N'' AS nvarchar(256)) AS replica_server,
+              CAST(N'' AS nvarchar(128)) AS db,
+              CAST(N'' AS nvarchar(60)) AS role_desc,
+              CAST(N'' AS nvarchar(5)) AS is_local,
+              CAST(N'' AS nvarchar(60)) AS synchronization_state_desc,
+              CAST(N'' AS nvarchar(60)) AS synchronization_health_desc,
+              CAST(N'' AS nvarchar(60)) AS suspend_reason_desc,
+              CAST(NULL AS float) AS log_send_queue_size_kb,
+              CAST(NULL AS float) AS log_send_rate_kb_s,
+              CAST(NULL AS float) AS redo_queue_size_kb,
+              CAST(NULL AS float) AS redo_rate_kb_s,
+              CAST(NULL AS float) AS secondary_lag_seconds,
+              CAST(NULL AS float) AS synchronization_health,
+              CAST(NULL AS float) AS is_suspended,
+              CAST(NULL AS float) AS is_failover_ready,
+              CAST(NULL AS float) AS synchronization_state
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(ag.name, N'') AS availability_group_name,
+              ISNULL(ar.replica_server_name, N'') AS replica_server,
+              ISNULL(DB_NAME(drs.database_id), N'') AS db,
+              ISNULL(ars.role_desc, N'') AS role_desc,
+              CAST(drs.is_local AS nvarchar(5)) AS is_local,
+              ISNULL(drs.synchronization_state_desc, N'') AS synchronization_state_desc,
+              ISNULL(drs.synchronization_health_desc, N'') AS synchronization_health_desc,
+              ISNULL(drs.suspend_reason_desc, N'') AS suspend_reason_desc,
+              CAST(ISNULL(drs.log_send_queue_size, 0) AS float) AS log_send_queue_size_kb,
+              CAST(ISNULL(drs.log_send_rate, 0) AS float) AS log_send_rate_kb_s,
+              CAST(ISNULL(drs.redo_queue_size, 0) AS float) AS redo_queue_size_kb,
+              CAST(ISNULL(drs.redo_rate, 0) AS float) AS redo_rate_kb_s,
+              CAST(ISNULL(drs.secondary_lag_seconds, 0) AS float) AS secondary_lag_seconds,
+              CAST(ISNULL(drs.synchronization_health, 0) AS float) AS synchronization_health,
+              CAST(ISNULL(drs.is_suspended, 0) AS float) AS is_suspended,
+              CAST(ISNULL(drcs.is_failover_ready, 0) AS float) AS is_failover_ready,
+              CAST(ISNULL(drs.synchronization_state, 0) AS float) AS synchronization_state
+          FROM sys.dm_hadr_database_replica_states AS drs
+          INNER JOIN sys.availability_replicas AS ar
+              ON drs.replica_id = ar.replica_id
+          INNER JOIN sys.dm_hadr_availability_replica_states AS ars
+              ON ar.replica_id = ars.replica_id
+          INNER JOIN sys.availability_groups AS ag
+              ON ar.group_id = ag.group_id
+          LEFT JOIN sys.dm_hadr_database_replica_cluster_states AS drcs
+              ON drs.replica_id = drcs.replica_id
+             AND drs.group_database_id = drcs.group_database_id;
+      END
+
+  # -----------------------------------------------------------------------
+  # Physical seeding progress
+  # -----------------------------------------------------------------------
+  - query_name: mssql_alwayson_seeding
+    query: |
+      IF NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS local_database_name,
+              CAST(N'' AS nvarchar(256)) AS remote_machine_name,
+              CAST(N'' AS nvarchar(60)) AS role_desc,
+              CAST(N'' AS nvarchar(60)) AS internal_state_desc,
+              CAST(NULL AS float) AS transferred_size_bytes,
+              CAST(NULL AS float) AS database_size_bytes,
+              CAST(NULL AS float) AS seeding_percent
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(local_database_name, N'') AS local_database_name,
+              ISNULL(remote_machine_name, N'') AS remote_machine_name,
+              ISNULL(role_desc, N'') AS role_desc,
+              ISNULL(internal_state_desc, N'') AS internal_state_desc,
+              CAST(ISNULL(transferred_size_bytes, 0) AS float) AS transferred_size_bytes,
+              CAST(ISNULL(database_size_bytes, 0) AS float) AS database_size_bytes,
+              CAST(
+                CASE
+                  WHEN ISNULL(database_size_bytes, 0) <= 0 THEN 0
+                  ELSE (CAST(ISNULL(transferred_size_bytes, 0) AS float) * 100.0)
+                       / CAST(database_size_bytes AS float)
+                END AS float
+              ) AS seeding_percent
+          FROM sys.dm_hadr_physical_seeding_stats;
+      END
+
+  # -----------------------------------------------------------------------
+  # Replica states
+  # -----------------------------------------------------------------------
+  - query_name: mssql_alwayson_replicas
+    query: |
+      IF NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(256)) AS availability_group_name,
+              CAST(N'' AS nvarchar(256)) AS replica_server,
+              CAST(N'' AS nvarchar(60)) AS role_desc,
+              CAST(N'' AS nvarchar(60)) AS availability_mode_desc,
+              CAST(N'' AS nvarchar(60)) AS failover_mode_desc,
+              CAST(N'' AS nvarchar(60)) AS connected_state_desc,
+              CAST(N'' AS nvarchar(60)) AS synchronization_health_desc,
+              CAST(N'' AS nvarchar(60)) AS operational_state_desc,
+              CAST(NULL AS float) AS connected_state,
+              CAST(NULL AS float) AS synchronization_health,
+              CAST(NULL AS float) AS operational_state,
+                CAST(NULL AS float) AS role,
+                CAST(NULL AS float) AS disconnected_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(ag.name, N'') AS availability_group_name,
+              ISNULL(ar.replica_server_name, N'') AS replica_server,
+              ISNULL(ars.role_desc, N'') AS role_desc,
+              ISNULL(ar.availability_mode_desc, N'') AS availability_mode_desc,
+              ISNULL(ar.failover_mode_desc, N'') AS failover_mode_desc,
+              ISNULL(ars.connected_state_desc, N'') AS connected_state_desc,
+              ISNULL(ars.synchronization_health_desc, N'') AS synchronization_health_desc,
+              ISNULL(ars.operational_state_desc, N'') AS operational_state_desc,
+              CAST(ISNULL(ars.connected_state, 0) AS float) AS connected_state,
+              CAST(ISNULL(ars.synchronization_health, 0) AS float) AS synchronization_health,
+              CAST(COALESCE(CAST(ars.operational_state AS int), -1) AS float) AS operational_state,
+              CAST(ISNULL(ars.role, 0) AS float) AS role,
+              CAST(
+                CASE
+                  WHEN ISNULL(ars.connected_state, 0) = 0
+                    THEN DATEDIFF(SECOND, ISNULL(ars.last_connect_error_timestamp, DATEADD(SECOND, -1, GETDATE())), GETDATE())
+                  ELSE 0
+                END AS float
+              ) AS disconnected_seconds
+          FROM sys.availability_groups AS ag
+          INNER JOIN sys.availability_replicas AS ar
+              ON ag.group_id = ar.group_id
+          INNER JOIN sys.dm_hadr_availability_replica_states AS ars
+              ON ar.replica_id = ars.replica_id;
+      END
+
+  # -----------------------------------------------------------------------
+  # AG group states
+  # -----------------------------------------------------------------------
+  - query_name: mssql_alwayson_groups
+    query: |
+      IF NOT EXISTS (SELECT 1 FROM sys.availability_groups)
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(256)) AS availability_group_name,
+              CAST(N'' AS nvarchar(256)) AS primary_replica,
+              CAST(N'' AS nvarchar(60)) AS primary_recovery_health_desc,
+              CAST(N'' AS nvarchar(60)) AS synchronization_health_desc,
+              CAST(NULL AS float) AS synchronization_health,
+              CAST(NULL AS float) AS primary_recovery_health
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT
+              ISNULL(ag.name, N'') AS availability_group_name,
+              ISNULL(ags.primary_replica, N'') AS primary_replica,
+              ISNULL(ags.primary_recovery_health_desc, N'') AS primary_recovery_health_desc,
+              ISNULL(ags.synchronization_health_desc, N'') AS synchronization_health_desc,
+              CAST(ISNULL(ags.synchronization_health, 0) AS float) AS synchronization_health,
+              CAST(ISNULL(ags.primary_recovery_health, 0) AS float) AS primary_recovery_health
+          FROM sys.availability_groups AS ag
+          INNER JOIN sys.dm_hadr_availability_group_states AS ags
+              ON ag.group_id = ags.group_id;
+      END

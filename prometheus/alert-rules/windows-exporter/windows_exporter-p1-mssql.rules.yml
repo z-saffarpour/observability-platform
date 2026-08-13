@@ -1,0 +1,87 @@
+groups:
+  - name: windows_exporter.p1.mssql
+    rules:
+      - alert: MssqlBufferCacheLow
+        expr: |
+          instance_mssql:buffer_cache_hit_ratio:rate5m < 0.95
+          and rate(windows_mssql_bufman_buffer_cache_lookups[5m]) > 10
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL buffer cache hit ratio low on {{ $labels.instance }}"
+          description: "Buffer cache hit ratio is {{ $value | humanizePercentage }} for 15 minutes."
+          runbook: "Correlate with PLE, page reads, and max server memory."
+
+      - alert: MssqlPageLifeExpectancyLow
+        expr: windows_mssql_bufman_page_life_expectancy_seconds < 300
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL page life expectancy low on {{ $labels.instance }}"
+          description: "PLE is {{ $value }}s (default threshold 300s). Tune for NUMA/large memory hosts."
+          runbook: "Look for memory pressure, large scans, and buffer pool churn."
+
+      - alert: MssqlDeadlocks
+        expr: increase(windows_mssql_locks_deadlocks[15m]) > 0
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL deadlocks detected on {{ $labels.instance }}"
+          description: "{{ $value }} deadlock(s) in the last 15 minutes (resource {{ $labels.resource }})."
+          runbook: "Capture deadlock graph / extended events and review conflicting queries."
+
+      - alert: MssqlBlockedProcesses
+        expr: windows_mssql_genstats_blocked_processes > 0
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL blocked processes on {{ $labels.instance }}"
+          description: "{{ $value }} blocked process(es) for ten minutes."
+          runbook: "Identify head blocker via DMVs and check long transactions."
+
+      - alert: MssqlPendingMemoryGrants
+        expr: windows_mssql_memmgr_pending_memory_grants > 0
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL pending memory grants on {{ $labels.instance }}"
+          description: "{{ $value }} query(s) waiting for memory grants."
+          runbook: "Review RESOURCE_SEMAPHORE waits and large sort/hash queries."
+
+      - alert: MssqlLogUsedHigh
+        expr: windows_mssql_databases_log_used_percent > 85
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL log usage high on {{ $labels.instance }} database {{ $labels.database }}"
+          description: "Transaction log used percent is {{ $value | humanize }}% (warning > 85)."
+          runbook: "Check log reuse wait type before it reaches the critical threshold."
+
+      - alert: MssqlFreeListStalls
+        expr: increase(windows_mssql_bufman_free_list_stalls[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: mssql
+        annotations:
+          summary: "SQL free list stalls on {{ $labels.instance }}"
+          description: "Buffer free list stalls increased in the last 15 minutes."
+          runbook: "Indicates severe buffer/IO pressure; check page reads and disk latency."

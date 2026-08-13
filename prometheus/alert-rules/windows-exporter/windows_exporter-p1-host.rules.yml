@@ -1,0 +1,78 @@
+groups:
+  - name: windows_exporter.p1.host
+    rules:
+      - alert: WindowsHighCPU
+        expr: instance:windows_cpu_utilisation:rate5m > 0.85
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "Average CPU utilization has exceeded 85% for 15 minutes."
+          runbook: "Correlate with windows_process_cpu_time_total and SQL batch requests."
+
+      - alert: WindowsLowAvailableMemory
+        expr: instance:windows_memory_available_ratio < 0.10
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "Low available memory on {{ $labels.instance }}"
+          description: "Available memory has remained below 10% for ten minutes."
+          runbook: "Check SQL memory target, working sets, and external consumers."
+
+      - alert: WindowsDiskSpaceLow
+        expr: instance_volume:windows_disk_free_ratio < 0.10
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }} volume {{ $labels.volume }}"
+          description: "Free space has remained below 10% for 15 minutes."
+          runbook: "Plan growth or cleanup before the critical 5% threshold."
+
+      - alert: WindowsDiskReadLatencyHigh
+        expr: |
+          instance_volume:windows_logical_disk_read_latency_seconds:rate5m > 0.05
+          and rate(windows_logical_disk_reads_total[5m]) > 1
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "High disk read latency on {{ $labels.instance }} volume {{ $labels.volume }}"
+          description: "Average read latency is above 50ms for 15 minutes."
+          runbook: "Check storage queue depth, antivirus scans, and SQL IO waits."
+
+      - alert: WindowsDiskWriteLatencyHigh
+        expr: |
+          instance_volume:windows_logical_disk_write_latency_seconds:rate5m > 0.05
+          and rate(windows_logical_disk_writes_total[5m]) > 1
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "High disk write latency on {{ $labels.instance }} volume {{ $labels.volume }}"
+          description: "Average write latency is above 50ms for 15 minutes."
+          runbook: "Check log/tempdb placement, storage latency, and checkpoint spikes."
+
+      - alert: WindowsCommitChargeHigh
+        expr: instance:windows_memory_commit_ratio > 0.90
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "High commit charge on {{ $labels.instance }}"
+          description: "Committed memory is above 90% of the commit limit."
+          runbook: "Review pagefile and process private bytes before reaching critical."

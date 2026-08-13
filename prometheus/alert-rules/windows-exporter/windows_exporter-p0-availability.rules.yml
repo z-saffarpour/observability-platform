@@ -1,0 +1,66 @@
+groups:
+  - name: windows_exporter.p0.availability
+    rules:
+      - alert: WindowsExporterDown
+        expr: up{job=~"windows.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+        annotations:
+          summary: "windows_exporter is unavailable on {{ $labels.instance }}"
+          description: "Prometheus has failed to scrape the Windows target for five minutes."
+          runbook: "Check service state, port 9182, firewall, and scrape auth."
+
+      - alert: WindowsExporterCollectorFailed
+        expr: windows_exporter_collector_success == 0
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+        annotations:
+          summary: "Collector {{ $labels.collector }} failed on {{ $labels.instance }}"
+          description: "The collector has reported failure for ten minutes. Metrics from this collector may be missing or stale."
+          runbook: "Inspect windows_exporter event log and collector permissions."
+
+      - alert: DataPlatformServiceNotRunning
+        expr: |
+          windows_service_state{
+            state="running",
+            name=~"(?i)(MSSQLSERVER|SQLSERVERAGENT|MSSQL\\$.+|SQLAgent\\$.+|MSSQLServerOLAPService|MSOLAP\\$.+|PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*|ClusSvc)"
+          } == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: data-platform
+        annotations:
+          summary: "Service {{ $labels.name }} is not running on {{ $labels.instance }}"
+          description: "A monitored SQL Server, SSAS, PBIRS, or Cluster service has not been running for three minutes."
+          runbook: "Check Windows Services, cluster ownership, and recent Event Log errors."
+
+      - alert: MssqlCollectorFailed
+        expr: windows_mssql_collector_success == 0
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "MSSQL collector {{ $labels.collector }} failed on {{ $labels.instance }}"
+          description: "A windows_exporter MSSQL sub-collector has failed for ten minutes."
+          runbook: "Verify SQL instance is up and the exporter service account can read SQL performance counters."
+
+      - alert: WindowsTimeSkewCritical
+        expr: abs(windows_time_computed_time_offset_seconds) > 5
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: host
+        annotations:
+          summary: "Clock skew on {{ $labels.instance }}"
+          description: "Windows time offset is {{ $value | humanize }}s (threshold 5s). Kerberos, Always On, and certificate auth can fail."
+          runbook: "Check W32Time / NTP source and domain time hierarchy."
