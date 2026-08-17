@@ -68,23 +68,40 @@ queries:
       WHILE @@FETCH_STATUS = 0
       BEGIN
           SET @sql = N'
+          ;WITH index_frag AS (
+              SELECT
+                  ips.object_id,
+                  ips.index_id,
+                  ips.index_type_desc,
+                  ips.alloc_unit_type_desc,
+                  SUM(CONVERT(bigint, ips.page_count)) AS page_count,
+                  SUM(CONVERT(float, ips.avg_fragmentation_in_percent) * CONVERT(float, ips.page_count))
+                      / NULLIF(SUM(CONVERT(float, ips.page_count)), 0.0) AS avg_fragmentation_percent
+              FROM ' + QUOTENAME(@db) + N'.sys.dm_db_index_physical_stats(DB_ID(@db_in), NULL, NULL, NULL, N''LIMITED'') AS ips
+              WHERE ips.index_id > 0
+              GROUP BY
+                  ips.object_id,
+                  ips.index_id,
+                  ips.index_type_desc,
+                  ips.alloc_unit_type_desc
+              HAVING SUM(CONVERT(bigint, ips.page_count)) >= 10000
+                 AND SUM(CONVERT(float, ips.avg_fragmentation_in_percent) * CONVERT(float, ips.page_count))
+                       / NULLIF(SUM(CONVERT(float, ips.page_count)), 0.0) >= 30
+          )
           INSERT INTO #frag (db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc, avg_fragmentation_percent, page_count)
           SELECT TOP (15)
               @db_in,
-              OBJECT_SCHEMA_NAME(ips.object_id, DB_ID(@db_in)),
-              OBJECT_NAME(ips.object_id, DB_ID(@db_in)),
+              OBJECT_SCHEMA_NAME(f.object_id, DB_ID(@db_in)),
+              OBJECT_NAME(f.object_id, DB_ID(@db_in)),
               i.name,
-              ips.index_type_desc,
-              ips.alloc_unit_type_desc,
-              ips.avg_fragmentation_in_percent,
-              ips.page_count
-          FROM ' + QUOTENAME(@db) + N'.sys.dm_db_index_physical_stats(DB_ID(@db_in), NULL, NULL, NULL, N''LIMITED'') AS ips
+              f.index_type_desc,
+              f.alloc_unit_type_desc,
+              f.avg_fragmentation_percent,
+              f.page_count
+          FROM index_frag AS f
           INNER JOIN ' + QUOTENAME(@db) + N'.sys.indexes AS i WITH (NOLOCK)
-              ON ips.object_id = i.object_id AND ips.index_id = i.index_id
-          WHERE ips.page_count >= 10000
-            AND ips.avg_fragmentation_in_percent >= 30
-            AND ips.index_id > 0
-          ORDER BY ips.avg_fragmentation_in_percent DESC;';
+              ON f.object_id = i.object_id AND f.index_id = i.index_id
+          ORDER BY f.avg_fragmentation_percent DESC;';
 
           BEGIN TRY
               EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
