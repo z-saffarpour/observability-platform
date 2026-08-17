@@ -245,7 +245,17 @@ queries:
           cleanup_threshold float NOT NULL
       );
 
-      BEGIN TRY
+      IF OBJECT_ID(N'msdb.dbo.cdc_jobs', N'U') IS NULL
+         OR OBJECT_ID(N'msdb.dbo.sysjobs', N'V') IS NULL
+         OR OBJECT_ID(N'msdb.dbo.sysjobactivity', N'V') IS NULL
+      BEGIN
+          SELECT db, job_type, job_enabled, job_running,
+                 polling_interval_seconds, continuous_enabled, retention_minutes, cleanup_threshold
+          FROM #mssql_cdc_jobs;
+      END
+      ELSE
+      BEGIN
+          DECLARE @cdc_jobs_sql nvarchar(max) = N'
           INSERT INTO #mssql_cdc_jobs
           SELECT
               d.name AS db,
@@ -259,22 +269,26 @@ queries:
                     AND ja.start_execution_date IS NOT NULL
                     AND ja.stop_execution_date IS NULL
               ) THEN 1 ELSE 0 END AS float) AS job_running,
-              CAST(CASE WHEN cj.job_type = N'capture' THEN cj.pollinginterval ELSE -1 END AS float),
-              CAST(CASE WHEN cj.job_type = N'capture' THEN cj.continuous ELSE -1 END AS float),
-              CAST(CASE WHEN cj.job_type = N'cleanup' THEN cj.retention ELSE -1 END AS float),
-              CAST(CASE WHEN cj.job_type = N'cleanup' THEN cj.threshold ELSE -1 END AS float)
+              CAST(CASE WHEN cj.job_type = N''capture'' THEN cj.pollinginterval ELSE -1 END AS float),
+              CAST(CASE WHEN cj.job_type = N''capture'' THEN cj.continuous ELSE -1 END AS float),
+              CAST(CASE WHEN cj.job_type = N''cleanup'' THEN cj.retention ELSE -1 END AS float),
+              CAST(CASE WHEN cj.job_type = N''cleanup'' THEN cj.threshold ELSE -1 END AS float)
           FROM msdb.dbo.cdc_jobs AS cj WITH (NOLOCK)
           INNER JOIN sys.databases AS d WITH (NOLOCK)
             ON d.database_id = cj.database_id
           LEFT JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
-            ON j.job_id = cj.job_id;
-      END TRY
-      BEGIN CATCH
-      END CATCH;
+            ON j.job_id = cj.job_id;';
 
-      SELECT db, job_type, job_enabled, job_running,
-             polling_interval_seconds, continuous_enabled, retention_minutes, cleanup_threshold
-      FROM #mssql_cdc_jobs;
+          BEGIN TRY
+              EXEC sys.sp_executesql @cdc_jobs_sql;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          SELECT db, job_type, job_enabled, job_running,
+                 polling_interval_seconds, continuous_enabled, retention_minutes, cleanup_threshold
+          FROM #mssql_cdc_jobs;
+      END
 
   - query_name: mssql_change_tracking_database_state
     query: |

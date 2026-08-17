@@ -60,45 +60,55 @@ queries:
           END
           ELSE
           BEGIN
-              SET @path =
-                  LEFT(@path, LEN(@path) - CHARINDEX(N'\', REVERSE(@path)) + 1)
-                  + N'AlwaysOn_health*.xel';
-
-              ;WITH flaps AS
-              (
-                  SELECT
-                      ISNULL(
+              BEGIN TRY
+                  ;WITH flaps AS
+                  (
+                      SELECT
+                          ISNULL(
+                              x.event_data.value(N'(event/data[@name="availability_group_name"]/value)[1]', N'nvarchar(256)'),
+                              N''
+                          ) AS availability_group_name,
+                          ISNULL(ar.replica_server_name, N'') AS replica_server,
+                          CAST(COUNT_BIG(*) AS float) AS sync_state_flaps_24h
+                      FROM sys.fn_xe_file_target_read_file(@path, NULL, NULL, NULL) AS f
+                      CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS x
+                      LEFT JOIN sys.availability_replicas AS ar
+                          ON ar.replica_id = TRY_CONVERT(
+                              uniqueidentifier,
+                              x.event_data.value(N'(event/data[@name="availability_replica_id"]/value)[1]', N'nvarchar(64)')
+                          )
+                      WHERE f.object_name = N'availability_replica_state_change'
+                        AND x.event_data.value(N'(event/@timestamp)[1]', N'datetime2')
+                            >= DATEADD(HOUR, -24, SYSUTCDATETIME())
+                      GROUP BY
                           x.event_data.value(N'(event/data[@name="availability_group_name"]/value)[1]', N'nvarchar(256)'),
-                          N''
-                      ) AS availability_group_name,
+                          ar.replica_server_name
+                  )
+                  SELECT
+                      ISNULL(ag.name, N'') AS availability_group_name,
                       ISNULL(ar.replica_server_name, N'') AS replica_server,
-                      CAST(COUNT_BIG(*) AS float) AS sync_state_flaps_24h
-                  FROM sys.fn_xe_file_target_read_file(@path, NULL, NULL, NULL) AS f
-                  CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS x
-                  LEFT JOIN sys.availability_replicas AS ar
-                      ON ar.replica_id = TRY_CONVERT(
-                          uniqueidentifier,
-                          x.event_data.value(N'(event/data[@name="availability_replica_id"]/value)[1]', N'nvarchar(64)')
-                      )
-                  WHERE f.object_name = N'availability_replica_state_change'
-                    AND x.event_data.value(N'(event/@timestamp)[1]', N'datetime2')
-                        >= DATEADD(HOUR, -24, SYSUTCDATETIME())
-                  GROUP BY
-                      x.event_data.value(N'(event/data[@name="availability_group_name"]/value)[1]', N'nvarchar(256)'),
-                      ar.replica_server_name
-              )
-              SELECT
-                  ISNULL(ag.name, N'') AS availability_group_name,
-                  ISNULL(ar.replica_server_name, N'') AS replica_server,
-                  ISNULL(ars.role_desc, N'') AS role_desc,
-                  CAST(ISNULL(f.sync_state_flaps_24h, 0) AS float) AS sync_state_flaps_24h
-              FROM sys.availability_groups AS ag
-              INNER JOIN sys.availability_replicas AS ar
-                  ON ag.group_id = ar.group_id
-              INNER JOIN sys.dm_hadr_availability_replica_states AS ars
-                  ON ar.replica_id = ars.replica_id
-              LEFT JOIN flaps AS f
-                  ON f.availability_group_name = ag.name
-                 AND f.replica_server = ar.replica_server_name;
+                      ISNULL(ars.role_desc, N'') AS role_desc,
+                      CAST(ISNULL(f.sync_state_flaps_24h, 0) AS float) AS sync_state_flaps_24h
+                  FROM sys.availability_groups AS ag
+                  INNER JOIN sys.availability_replicas AS ar
+                      ON ag.group_id = ar.group_id
+                  INNER JOIN sys.dm_hadr_availability_replica_states AS ars
+                      ON ar.replica_id = ars.replica_id
+                  LEFT JOIN flaps AS f
+                      ON f.availability_group_name = ag.name
+                     AND f.replica_server = ar.replica_server_name;
+              END TRY
+              BEGIN CATCH
+                  SELECT
+                      ISNULL(ag.name, N'') AS availability_group_name,
+                      ISNULL(ar.replica_server_name, N'') AS replica_server,
+                      ISNULL(ars.role_desc, N'') AS role_desc,
+                      CAST(-1 AS float) AS sync_state_flaps_24h
+                  FROM sys.availability_groups AS ag
+                  INNER JOIN sys.availability_replicas AS ar
+                      ON ag.group_id = ar.group_id
+                  INNER JOIN sys.dm_hadr_availability_replica_states AS ars
+                      ON ar.replica_id = ars.replica_id;
+              END CATCH
           END
       END

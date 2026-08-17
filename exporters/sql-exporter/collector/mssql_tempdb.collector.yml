@@ -62,13 +62,13 @@ metrics:
 
   - metric_name: mssql_tempdb_version_cleanup_rate_mb_s
     type: gauge
-    help: 'tempdb version cleanup rate (MB/s) from DMV snapshot values.'
+    help: 'tempdb version cleanup rate (MB/s) from SQLServer:Transactions perf counter.'
     values: [version_cleanup_rate_mb_s]
     query_ref: mssql_tempdb_version_store
 
   - metric_name: mssql_tempdb_version_generation_rate_mb_s
     type: gauge
-    help: 'tempdb version generation rate (MB/s) from DMV snapshot values.'
+    help: 'tempdb version generation rate (MB/s) from SQLServer:Transactions perf counter.'
     values: [version_generation_rate_mb_s]
     query_ref: mssql_tempdb_version_store
 
@@ -200,11 +200,38 @@ queries:
 
   - query_name: mssql_tempdb_version_store
     query: |
-      SELECT
-          CAST(SUM(version_store_size_kb) AS float) / 1024.0 AS version_store_mb,
-          CAST(SUM(version_cleanup_rate_kb_per_sec) AS float) / 1024.0 AS version_cleanup_rate_mb_s,
-          CAST(SUM(version_generation_rate_kb_per_sec) AS float) / 1024.0 AS version_generation_rate_mb_s
-      FROM sys.dm_tran_version_store_space_usage WITH (NOLOCK);
+      IF OBJECT_ID(N'sys.dm_tran_version_store_space_usage', N'V') IS NULL
+      BEGIN
+          SELECT
+              CAST(SUM(version_store_reserved_page_count) AS float) * 8.0 / 1024.0 AS version_store_mb,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Cleanup rate (KB/s)'
+                 AND instance_name = N'') AS version_cleanup_rate_mb_s,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Generation rate (KB/s)'
+                 AND instance_name = N'') AS version_generation_rate_mb_s
+          FROM tempdb.sys.dm_db_file_space_usage WITH (NOLOCK);
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CAST(SUM(reserved_space_kb) AS float) / 1024.0 AS version_store_mb,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Cleanup rate (KB/s)'
+                 AND instance_name = N'') AS version_cleanup_rate_mb_s,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Generation rate (KB/s)'
+                 AND instance_name = N'') AS version_generation_rate_mb_s
+          FROM sys.dm_tran_version_store_space_usage WITH (NOLOCK);
+      END
 
   - query_name: mssql_tempdb_top_sessions
     query: |
