@@ -110,7 +110,8 @@ queries:
       INNER JOIN msdb.dbo.sysjobs AS myJob WITH (NOLOCK)
           ON myJobActivityMonitor.job_id = myJob.job_id
       INNER JOIN msdb.dbo.syscategories AS myCategory WITH (NOLOCK)
-          ON myCategory.category_id = myJob.category_id;
+          ON myCategory.category_id = myJob.category_id
+      WHERE myJobActivityMonitor.server_id = 0;
 
   - query_name: mssql_job_inventory
     query: |
@@ -141,33 +142,39 @@ queries:
       INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
           ON js.job_id = j.job_id
       LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
-          ON j.category_id = c.category_id;
+          ON j.category_id = c.category_id
+      WHERE js.server_id = 0;
 
   - query_name: mssql_job_next_run
     query: |
-      SELECT
-          ISNULL(j.name, N'') AS job_name,
-          ISNULL(c.name, N'') AS category_name,
-          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
-          CAST(
-            DATEDIFF(
-              SECOND,
-              GETDATE(),
+      ;WITH schedules AS
+      (
+          SELECT
+              js.job_id,
               TRY_CONVERT(datetime,
                 STUFF(STUFF(RIGHT('00000000' + CAST(js.next_run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
                 + ' '
                 + STUFF(STUFF(RIGHT('000000' + CAST(js.next_run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
-              )
-            ) AS float
-          ) AS next_run_age_seconds
-      FROM msdb.dbo.sysjobschedules AS js WITH (NOLOCK)
+              ) AS next_run_dt
+          FROM msdb.dbo.sysjobschedules AS js WITH (NOLOCK)
+          WHERE js.next_run_date > 0
+      ),
+      next_runs AS
+      (
+          SELECT
+              job_id,
+              MIN(next_run_dt) AS next_run_dt
+          FROM schedules
+          WHERE next_run_dt IS NOT NULL
+          GROUP BY job_id
+      )
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          CAST(DATEDIFF(SECOND, GETDATE(), nr.next_run_dt) AS float) AS next_run_age_seconds
+      FROM next_runs AS nr
       INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
-          ON js.job_id = j.job_id
+          ON nr.job_id = j.job_id
       LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
-          ON j.category_id = c.category_id
-      WHERE js.next_run_date > 0
-        AND TRY_CONVERT(datetime,
-              STUFF(STUFF(RIGHT('00000000' + CAST(js.next_run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
-              + ' '
-              + STUFF(STUFF(RIGHT('000000' + CAST(js.next_run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
-            ) IS NOT NULL;
+          ON j.category_id = c.category_id;
