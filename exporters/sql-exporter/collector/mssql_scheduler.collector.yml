@@ -1,0 +1,130 @@
+# Scheduler / SOS worker pressure and CPU topology.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_scheduler
+
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_scheduler_runnable_tasks
+    type: gauge
+    help: 'Runnable tasks waiting for CPU on visible online schedulers.'
+    key_labels:
+      - scheduler_id
+      - cpu_id
+    values: [runnable_tasks_count]
+    query_ref: mssql_schedulers
+
+  - metric_name: mssql_scheduler_current_tasks
+    type: gauge
+    help: 'Current tasks bound to visible online schedulers.'
+    key_labels:
+      - scheduler_id
+      - cpu_id
+    values: [current_tasks_count]
+    query_ref: mssql_schedulers
+
+  - metric_name: mssql_scheduler_active_workers
+    type: gauge
+    help: 'Active workers on visible online schedulers.'
+    key_labels:
+      - scheduler_id
+      - cpu_id
+    values: [active_workers_count]
+    query_ref: mssql_schedulers
+
+  - metric_name: mssql_scheduler_work_queue
+    type: gauge
+    help: 'Work queue length on visible online schedulers (worker starvation signal).'
+    key_labels:
+      - scheduler_id
+      - cpu_id
+    values: [work_queue_count]
+    query_ref: mssql_schedulers
+
+  - metric_name: mssql_scheduler_pending_disk_io
+    type: gauge
+    help: 'Pending disk I/O count on visible online schedulers.'
+    key_labels:
+      - scheduler_id
+      - cpu_id
+    values: [pending_disk_io_count]
+    query_ref: mssql_schedulers
+
+  - metric_name: mssql_scheduler_load_factor
+    type: gauge
+    help: 'Scheduler load_factor (higher = busier).'
+    key_labels:
+      - scheduler_id
+      - cpu_id
+    values: [load_factor]
+    query_ref: mssql_schedulers
+
+  - metric_name: mssql_scheduler_total_runnable
+    type: gauge
+    help: 'Sum of runnable_tasks_count across visible online schedulers.'
+    values: [total_runnable]
+    query_ref: mssql_scheduler_totals
+
+  - metric_name: mssql_scheduler_total_work_queue
+    type: gauge
+    help: 'Sum of work_queue_count across visible online schedulers.'
+    values: [total_work_queue]
+    query_ref: mssql_scheduler_totals
+
+  - metric_name: mssql_scheduler_online_count
+    type: gauge
+    help: 'Count of VISIBLE ONLINE schedulers.'
+    values: [online_count]
+    query_ref: mssql_scheduler_totals
+
+  - metric_name: mssql_os_cpu_count
+    type: gauge
+    help: 'Logical CPU count from sys.dm_os_sys_info.'
+    values: [cpu_count]
+    query_ref: mssql_sys_info
+
+  - metric_name: mssql_os_hyperthread_ratio
+    type: gauge
+    help: 'Hyperthread ratio from sys.dm_os_sys_info.'
+    values: [hyperthread_ratio]
+    query_ref: mssql_sys_info
+
+  - metric_name: mssql_os_physical_memory_kb
+    type: gauge
+    help: 'physical_memory_kb from sys.dm_os_sys_info.'
+    values: [physical_memory_kb]
+    query_ref: mssql_sys_info
+
+queries:
+  - query_name: mssql_schedulers
+    query: |
+      SELECT
+          CAST(scheduler_id AS nvarchar(20)) AS scheduler_id,
+          CAST(cpu_id AS nvarchar(20)) AS cpu_id,
+          CAST(runnable_tasks_count AS float) AS runnable_tasks_count,
+          CAST(current_tasks_count AS float) AS current_tasks_count,
+          CAST(active_workers_count AS float) AS active_workers_count,
+          CAST(work_queue_count AS float) AS work_queue_count,
+          CAST(pending_disk_io_count AS float) AS pending_disk_io_count,
+          CAST(load_factor AS float) AS load_factor
+      FROM sys.dm_os_schedulers WITH (NOLOCK)
+      WHERE status = N'VISIBLE ONLINE';
+
+  - query_name: mssql_scheduler_totals
+    query: |
+      SELECT
+          CAST(SUM(runnable_tasks_count) AS float) AS total_runnable,
+          CAST(SUM(work_queue_count) AS float) AS total_work_queue,
+          CAST(COUNT(*) AS float) AS online_count
+      FROM sys.dm_os_schedulers WITH (NOLOCK)
+      WHERE status = N'VISIBLE ONLINE';
+
+  - query_name: mssql_sys_info
+    query: |
+      SELECT
+          CAST(cpu_count AS float) AS cpu_count,
+          CAST(hyperthread_ratio AS float) AS hyperthread_ratio,
+          CAST(physical_memory_kb AS float) AS physical_memory_kb
+      FROM sys.dm_os_sys_info WITH (NOLOCK);

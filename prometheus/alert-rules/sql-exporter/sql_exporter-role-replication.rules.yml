@@ -1,0 +1,17 @@
+# Role pack — Replication
+groups:
+  - name: sql_exporter.role.replication
+    interval: 60s
+    rules:
+      - alert: SqlReplicationBacklog
+        expr: mssql_replication_pending_commands > 10000 or mssql_replication_distributor_latency_seconds > 300
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: replication
+          collector: mssql_replication
+        annotations:
+          summary: "SQL Server replication backlog or latency is high"
+          description: "Replication for {{ $labels.publisher_db }} has sustained backlog or latency."
+          runbook: "Check distribution/logreader agents, pending commands, and network to subscribers."

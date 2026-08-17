@@ -1,0 +1,17 @@
+# P0 — Critical SQL Agent job failure
+groups:
+  - name: sql_exporter.p0.jobs
+    interval: 30s
+    rules:
+      - alert: SqlAgentJobFailed
+        expr: mssql_job_failed_current > 0
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: jobs
+          collector: mssql_job_failed
+        annotations:
+          summary: "SQL Agent job failure detected"
+          description: "Job {{ $labels.job_name }} is currently reported as failed."
+          runbook: "Open job history, fix the failing step, and re-run if safe. Filter non-critical jobs if needed."

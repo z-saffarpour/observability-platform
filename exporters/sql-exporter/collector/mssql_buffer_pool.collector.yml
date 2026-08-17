@@ -1,0 +1,109 @@
+# Buffer pool / buffer manager health.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+# Notes:
+#   - Counters ending in /sec are cumulative PERF_COUNTER_BULK_COUNT — use rate() in PromQL.
+#   - Per-database pages scan sys.dm_os_buffer_descriptors (heavier on large buffer pools).
+#
+collector_name: mssql_buffer_pool
+
+min_interval: 180s
+
+metrics:
+  - metric_name: mssql_buffer_pool_page_life_expectancy
+    type: gauge
+    help: 'Page life expectancy (seconds), including NUMA node instances when present.'
+    key_labels:
+      - numa_node
+    values: [cntr_value]
+    query_ref: mssql_buffer_ple
+
+  - metric_name: mssql_buffer_pool_cache_hit_ratio
+    type: gauge
+    help: 'Buffer cache hit ratio percent (0-100), computed from hit ratio / base.'
+    values: [hit_ratio_pct]
+    query_ref: mssql_buffer_hit_ratio
+
+  - metric_name: mssql_buffer_pool_counter
+    type: gauge
+    help: 'Selected Buffer Manager performance counters. Counters ending in /sec are cumulative bulk counts — use rate() in PromQL.'
+    key_labels:
+      - counter
+    values: [cntr_value]
+    query_ref: mssql_buffer_counters
+
+  - metric_name: mssql_buffer_pool_database_pages
+    type: gauge
+    help: 'Cached pages in the buffer pool per database (8 KB pages). Label db=_Free is free buffer pages (database_id 32767).'
+    key_labels:
+      - db
+    values: [page_count]
+    query_ref: mssql_buffer_by_db
+
+  - metric_name: mssql_buffer_pool_database_dirty_pages
+    type: gauge
+    help: 'Dirty (modified) cached pages in the buffer pool per database (8 KB pages).'
+    key_labels:
+      - db
+    values: [dirty_page_count]
+    query_ref: mssql_buffer_by_db
+
+queries:
+  - query_name: mssql_buffer_ple
+    query: |
+      SELECT
+          CASE WHEN RTRIM(instance_name) = N'' THEN N'_Total' ELSE RTRIM(instance_name) END AS numa_node,
+          CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE (counter_name = N'Page life expectancy' AND object_name LIKE N'%Buffer Node%')
+         OR (counter_name = N'Page life expectancy' AND object_name LIKE N'%Buffer Manager%');
+
+  - query_name: mssql_buffer_hit_ratio
+    query: |
+      SELECT
+          CAST(100.0 * a.cntr_value / NULLIF(b.cntr_value, 0) AS float) AS hit_ratio_pct
+      FROM sys.dm_os_performance_counters AS a WITH (NOLOCK)
+      INNER JOIN sys.dm_os_performance_counters AS b WITH (NOLOCK)
+          ON b.object_name = a.object_name
+         AND RTRIM(b.counter_name) = N'Buffer cache hit ratio base'
+         AND (b.instance_name = N'' OR b.instance_name = N'_Total')
+      WHERE a.object_name LIKE N'%Buffer Manager%'
+        AND RTRIM(a.counter_name) = N'Buffer cache hit ratio'
+        AND (a.instance_name = N'' OR a.instance_name = N'_Total');
+
+  - query_name: mssql_buffer_counters
+    query: |
+      SELECT
+          RTRIM(counter_name) AS counter,
+          CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Buffer Manager%'
+        AND counter_name IN (
+          N'Database pages',
+          N'Free pages',
+          N'Stolen pages',
+          N'Target pages',
+          N'Total pages',
+          N'Page lookups/sec',
+          N'Page reads/sec',
+          N'Page writes/sec',
+          N'Lazy writes/sec',
+          N'Checkpoint pages/sec',
+          N'Readahead pages/sec',
+          N'Free list stalls/sec'
+        )
+        AND (instance_name = N'' OR instance_name = N'_Total');
+
+  - query_name: mssql_buffer_by_db
+    query: |
+      SELECT
+          CASE
+              WHEN bd.database_id = 32767 THEN N'_Free'
+              WHEN DB_NAME(bd.database_id) IS NULL THEN N'_dbid_' + CAST(bd.database_id AS nvarchar(11))
+              ELSE DB_NAME(bd.database_id)
+          END AS db,
+          CAST(COUNT_BIG(*) AS float) AS page_count,
+          CAST(SUM(CASE WHEN bd.is_modified = 1 THEN 1 ELSE 0 END) AS float) AS dirty_page_count
+      FROM sys.dm_os_buffer_descriptors AS bd WITH (NOLOCK)
+      GROUP BY bd.database_id;

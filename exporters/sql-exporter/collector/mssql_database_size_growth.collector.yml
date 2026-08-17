@@ -1,0 +1,82 @@
+# Database data/log size and used space — growth tracking via Prometheus.
+#
+#   GRANT VIEW ANY DEFINITION TO
+#   GRANT VIEW SERVER STATE TO
+#
+# Note: mf.size/growth are int (8KB pages). Always cast before SUM/multiply
+# to avoid arithmetic overflow on large databases.
+#
+collector_name: mssql_database_size_growth
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_database_data_size_mb
+    type: gauge
+    help: 'Total data file size (MB) per database.'
+    key_labels:
+      - db
+      - state_desc
+      - recovery_model_desc
+    values: [data_size_mb]
+    query_ref: mssql_database_sizes
+
+  - metric_name: mssql_database_log_size_mb
+    type: gauge
+    help: 'Total log file size (MB) per database.'
+    key_labels:
+      - db
+      - state_desc
+      - recovery_model_desc
+    values: [log_size_mb]
+    query_ref: mssql_database_sizes
+
+  - metric_name: mssql_database_file_size_mb
+    type: gauge
+    help: 'Per-file size (MB) for growth analysis.'
+    key_labels:
+      - db
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+      - growth_mb
+      - is_percent_growth
+    values: [size_mb]
+    query_ref: mssql_database_files
+
+queries:
+  - query_name: mssql_database_sizes
+    query: |
+      SELECT
+          d.name AS db,
+          d.state_desc AS state_desc,
+          d.recovery_model_desc AS recovery_model_desc,
+          SUM(CASE WHEN mf.type_desc = N'ROWS' THEN CAST(mf.size AS float) ELSE 0.0 END) * 8.0 / 1024.0 AS data_size_mb,
+          SUM(CASE WHEN mf.type_desc = N'LOG'  THEN CAST(mf.size AS float) ELSE 0.0 END) * 8.0 / 1024.0 AS log_size_mb
+      FROM sys.databases AS d WITH (NOLOCK)
+      INNER JOIN sys.master_files AS mf WITH (NOLOCK)
+          ON d.database_id = mf.database_id
+      WHERE d.state = 0
+      GROUP BY d.name, d.state_desc, d.recovery_model_desc;
+
+  - query_name: mssql_database_files
+    query: |
+      SELECT
+          DB_NAME(mf.database_id) AS db,
+          CAST(mf.file_id AS nvarchar(20)) AS file_id,
+          mf.type_desc AS type_desc,
+          mf.name AS logical_name,
+          mf.physical_name AS physical_name,
+          CAST(
+            CASE
+              WHEN mf.is_percent_growth = 1 THEN CAST(mf.growth AS float)
+              ELSE CAST(mf.growth AS float) * 8.0 / 1024.0
+            END AS nvarchar(32)
+          ) AS growth_mb,
+          CAST(mf.is_percent_growth AS nvarchar(5)) AS is_percent_growth,
+          CAST(mf.size AS float) * 8.0 / 1024.0 AS size_mb
+      FROM sys.master_files AS mf WITH (NOLOCK)
+      INNER JOIN sys.databases AS d WITH (NOLOCK)
+          ON mf.database_id = d.database_id
+      WHERE d.state = 0;

@@ -1,0 +1,82 @@
+# P2 — Medium performance / capacity signals
+groups:
+  - name: sql_exporter.p2.performance
+    interval: 60s
+    rules:
+      - alert: SqlConnectionCountHigh
+        expr: sum without(status) (mssql_sessions_by_status) > 500
+        for: 10m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: performance
+          collector: mssql_connections_detail
+        annotations:
+          summary: "SQL Server session count is high"
+          description: "Session count is {{ $value }}; tune the sample threshold for this instance."
+          runbook: "Review idle sessions, connection pooling, and application leaks."
+
+      - alert: SqlParallelismQueueHigh
+        expr: mssql_parallelism_waiting_tasks > 10
+        for: 10m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: performance
+          collector: mssql_parallelism
+        annotations:
+          summary: "Parallelism-related waiting tasks are high"
+          description: "Wait {{ $labels.wait_type }} has {{ $value }} waiting tasks."
+          runbook: "Review MAXDOP, Cost Threshold for Parallelism, and CX* waits."
+
+      - alert: SqlPlanCacheSingleUseRatioHigh
+        expr: mssql_plan_cache_single_use_ratio > 0.5
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: performance
+          collector: mssql_plan_cache
+        annotations:
+          summary: "Plan cache single-use ratio is high"
+          description: "Single-use plan ratio is {{ $value | humanizePercentage }}."
+          runbook: "Check ad-hoc workloads, optimize for ad hoc workloads, and parameterization."
+
+      - alert: SqlResourceGovernorPressure
+        expr: mssql_resource_governor_pool_memgrant_waiter_count > 0 or mssql_resource_governor_group_queued_requests > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: performance
+          collector: mssql_resource_governor
+        annotations:
+          summary: "Resource Governor workload is queued"
+          description: "Pool {{ $labels.pool }} workload group {{ $labels.workload_group }} has sustained pressure."
+          runbook: "Review RG pool limits and queued requests; ignore if RG is unused."
+
+      - alert: SqlLongTransaction
+        expr: mssql_long_transaction_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: performance
+          collector: mssql_transactions_long
+        annotations:
+          summary: "Long-running SQL transaction"
+          description: "Transaction in {{ $labels.db }} has been open for {{ $value | humanizeDuration }}."
+          runbook: "Find open tran sessions; check impact on log reuse and blocking."
+
+      - alert: SqlWaitPressureHigh
+        expr: mssql_waits_nonbenign_percent > 80
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: performance
+          collector: mssql_waits
+        annotations:
+          summary: "Non-benign waits dominate SQL Server wait time"
+          description: "Non-benign waits account for {{ $value | humanize }}% of cumulative wait time."
+          runbook: "Break down top wait classes and correlate with CPU/IO/blocking."

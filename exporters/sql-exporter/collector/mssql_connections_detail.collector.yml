@@ -1,0 +1,224 @@
+# Client connection breakdown — shared for DWH and OLTP.
+# Status / login / program / host / db + open-tran and long-idle (pool leak) signals.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_connections_detail
+
+# Grouped session counts; 60s is enough on busy hosts.
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_sessions_by_status
+    type: gauge
+    help: 'User sessions grouped by status.'
+    key_labels:
+      - status
+    values: [session_count]
+    query_ref: mssql_sessions_by_status
+
+  - metric_name: mssql_sessions_by_login
+    type: gauge
+    help: 'Top logins by session count.'
+    key_labels:
+      - login_name
+      - status
+    values: [session_count]
+    query_ref: mssql_sessions_by_login
+
+  - metric_name: mssql_sessions_by_program
+    type: gauge
+    help: 'Top programs by session count.'
+    key_labels:
+      - program_name
+      - status
+    values: [session_count]
+    query_ref: mssql_sessions_by_program
+
+  - metric_name: mssql_sessions_by_host
+    type: gauge
+    help: 'Top client hosts by session count.'
+    key_labels:
+      - host_name
+      - status
+    values: [session_count]
+    query_ref: mssql_sessions_by_host
+
+  - metric_name: mssql_sessions_by_db
+    type: gauge
+    help: 'Sessions grouped by database.'
+    key_labels:
+      - db
+      - status
+    values: [session_count]
+    query_ref: mssql_sessions_by_db
+
+  - metric_name: mssql_sessions_open_tran_total
+    type: gauge
+    help: 'User sessions with open_transaction_count > 0.'
+    values: [session_count]
+    query_ref: mssql_sessions_open_tran_total
+
+  - metric_name: mssql_sessions_open_tran
+    type: gauge
+    help: 'Top logins/databases with open transactions.'
+    key_labels:
+      - login_name
+      - db
+    values: [session_count]
+    query_ref: mssql_sessions_open_tran
+
+  - metric_name: mssql_sessions_idle_bucket
+    type: gauge
+    help: 'Sleeping user sessions grouped by idle age bucket.'
+    key_labels:
+      - idle_bucket
+    values: [session_count]
+    query_ref: mssql_sessions_idle_bucket
+
+  - metric_name: mssql_sessions_idle_long
+    type: gauge
+    help: 'Top sleeping sessions idle >= 5 minutes (connection pool waste).'
+    key_labels:
+      - login_name
+      - program_name
+      - host_name
+    values: [session_count]
+    query_ref: mssql_sessions_idle_long
+
+  - metric_name: mssql_sessions_idle_long_max_seconds
+    type: gauge
+    help: 'Max idle seconds among sleeping sessions idle >= 5 minutes.'
+    key_labels:
+      - login_name
+      - program_name
+      - host_name
+    values: [max_idle_seconds]
+    query_ref: mssql_sessions_idle_long
+
+queries:
+  - query_name: mssql_sessions_by_status
+    query: |
+      SELECT
+          ISNULL(status, N'') AS status,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+      GROUP BY status;
+
+  - query_name: mssql_sessions_by_login
+    query: |
+      SELECT TOP (30)
+          ISNULL(login_name, N'') AS login_name,
+          ISNULL(status, N'') AS status,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+      GROUP BY login_name, status
+      ORDER BY COUNT(*) DESC;
+
+  - query_name: mssql_sessions_by_program
+    query: |
+      SELECT TOP (30)
+          LEFT(ISNULL(program_name, N''), 64) AS program_name,
+          ISNULL(status, N'') AS status,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+      GROUP BY LEFT(ISNULL(program_name, N''), 64), status
+      ORDER BY COUNT(*) DESC;
+
+  - query_name: mssql_sessions_by_host
+    query: |
+      SELECT TOP (30)
+          LEFT(ISNULL(host_name, N''), 64) AS host_name,
+          ISNULL(status, N'') AS status,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+      GROUP BY LEFT(ISNULL(host_name, N''), 64), status
+      ORDER BY COUNT(*) DESC;
+
+  - query_name: mssql_sessions_by_db
+    query: |
+      SELECT TOP (40)
+          ISNULL(DB_NAME(database_id), N'') AS db,
+          ISNULL(status, N'') AS status,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+      GROUP BY DB_NAME(database_id), status
+      ORDER BY COUNT(*) DESC;
+
+  - query_name: mssql_sessions_open_tran_total
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+        AND open_transaction_count > 0;
+
+  - query_name: mssql_sessions_open_tran
+    query: |
+      SELECT TOP (30)
+          ISNULL(login_name, N'') AS login_name,
+          ISNULL(DB_NAME(database_id), N'') AS db,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+        AND open_transaction_count > 0
+      GROUP BY login_name, DB_NAME(database_id)
+      ORDER BY COUNT(*) DESC;
+
+  - query_name: mssql_sessions_idle_bucket
+    query: |
+      SELECT
+          CASE
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 60
+                  THEN N'lt_1m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 300
+                  THEN N'1_5m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 1800
+                  THEN N'5_30m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 3600
+                  THEN N'30_60m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 14400
+                  THEN N'1_4h'
+              ELSE N'gt_4h'
+          END AS idle_bucket,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+        AND status = N'sleeping'
+      GROUP BY
+          CASE
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 60
+                  THEN N'lt_1m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 300
+                  THEN N'1_5m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 1800
+                  THEN N'5_30m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 3600
+                  THEN N'30_60m'
+              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 14400
+                  THEN N'1_4h'
+              ELSE N'gt_4h'
+          END;
+
+  - query_name: mssql_sessions_idle_long
+    query: |
+      SELECT TOP (30)
+          ISNULL(login_name, N'') AS login_name,
+          LEFT(ISNULL(program_name, N''), 64) AS program_name,
+          LEFT(ISNULL(host_name, N''), 64) AS host_name,
+          CAST(COUNT(*) AS float) AS session_count,
+          CAST(MAX(DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME())) AS float)
+              AS max_idle_seconds
+      FROM sys.dm_exec_sessions WITH (NOLOCK)
+      WHERE is_user_process = 1
+        AND status = N'sleeping'
+        AND DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) >= 300
+      GROUP BY
+          login_name,
+          LEFT(ISNULL(program_name, N''), 64),
+          LEFT(ISNULL(host_name, N''), 64)
+      ORDER BY COUNT(*) DESC;

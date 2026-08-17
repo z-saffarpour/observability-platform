@@ -1,0 +1,131 @@
+# Log Shipping monitor metrics (msdb.dbo.log_shipping_monitor_*).
+#
+#   GRANT SELECT ON msdb.dbo.log_shipping_monitor_primary TO
+#   GRANT SELECT ON msdb.dbo.log_shipping_monitor_secondary TO
+#
+# Empty-safe when Log Shipping is not configured (no monitor rows).
+#
+collector_name: mssql_log_shipping
+
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_log_shipping_secondary_lag_seconds
+    type: gauge
+    help: 'Secondary last_restored_latency converted to seconds (monitor reports minutes).'
+    key_labels:
+      - primary_server
+      - primary_database
+      - secondary_server
+      - secondary_database
+    values: [lag_seconds]
+    query_ref: mssql_log_shipping_secondary
+
+  - metric_name: mssql_log_shipping_last_restored_age_seconds
+    type: gauge
+    help: 'Seconds since last_restored_date on the secondary monitor row.'
+    key_labels:
+      - primary_server
+      - primary_database
+      - secondary_server
+      - secondary_database
+    values: [restored_age_seconds]
+    query_ref: mssql_log_shipping_secondary
+
+  - metric_name: mssql_log_shipping_copy_lag_seconds
+    type: gauge
+    help: 'Seconds since last_copied_date on the secondary monitor row.'
+    key_labels:
+      - primary_server
+      - primary_database
+      - secondary_server
+      - secondary_database
+    values: [copy_lag_seconds]
+    query_ref: mssql_log_shipping_secondary
+
+  - metric_name: mssql_log_shipping_restore_threshold_minutes
+    type: gauge
+    help: 'Configured restore_threshold (minutes) from secondary monitor.'
+    key_labels:
+      - primary_server
+      - primary_database
+      - secondary_server
+      - secondary_database
+    values: [restore_threshold_minutes]
+    query_ref: mssql_log_shipping_secondary
+
+  - metric_name: mssql_log_shipping_primary_last_backup_age_seconds
+    type: gauge
+    help: 'Seconds since last_backup_date on the primary monitor row.'
+    key_labels:
+      - primary_server
+      - primary_database
+    values: [backup_age_seconds]
+    query_ref: mssql_log_shipping_primary
+
+  - metric_name: mssql_log_shipping_backup_threshold_minutes
+    type: gauge
+    help: 'Configured backup_threshold (minutes) from primary monitor.'
+    key_labels:
+      - primary_server
+      - primary_database
+    values: [backup_threshold_minutes]
+    query_ref: mssql_log_shipping_primary
+
+queries:
+  - query_name: mssql_log_shipping_secondary
+    query: |
+      IF OBJECT_ID(N'msdb.dbo.log_shipping_monitor_secondary', N'U') IS NULL
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS primary_server,
+              CAST(N'' AS nvarchar(128)) AS primary_database,
+              CAST(N'' AS nvarchar(128)) AS secondary_server,
+              CAST(N'' AS nvarchar(128)) AS secondary_database,
+              CAST(NULL AS float) AS lag_seconds,
+              CAST(NULL AS float) AS restored_age_seconds,
+              CAST(NULL AS float) AS copy_lag_seconds,
+              CAST(NULL AS float) AS restore_threshold_minutes
+          WHERE 1 = 0;
+      ELSE
+          SELECT
+              ISNULL(primary_server, N'') AS primary_server,
+              ISNULL(primary_database, N'') AS primary_database,
+              ISNULL(secondary_server, N'') AS secondary_server,
+              ISNULL(secondary_database, N'') AS secondary_database,
+              CAST(ISNULL(last_restored_latency, 0) * 60.0 AS float) AS lag_seconds,
+              CAST(
+                CASE
+                  WHEN last_restored_date IS NULL THEN -1
+                  ELSE DATEDIFF(SECOND, last_restored_date, GETDATE())
+                END AS float
+              ) AS restored_age_seconds,
+              CAST(
+                CASE
+                  WHEN last_copied_date IS NULL THEN -1
+                  ELSE DATEDIFF(SECOND, last_copied_date, GETDATE())
+                END AS float
+              ) AS copy_lag_seconds,
+              CAST(ISNULL(restore_threshold, 0) AS float) AS restore_threshold_minutes
+          FROM msdb.dbo.log_shipping_monitor_secondary WITH (NOLOCK);
+
+  - query_name: mssql_log_shipping_primary
+    query: |
+      IF OBJECT_ID(N'msdb.dbo.log_shipping_monitor_primary', N'U') IS NULL
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS primary_server,
+              CAST(N'' AS nvarchar(128)) AS primary_database,
+              CAST(NULL AS float) AS backup_age_seconds,
+              CAST(NULL AS float) AS backup_threshold_minutes
+          WHERE 1 = 0;
+      ELSE
+          SELECT
+              ISNULL(primary_server, N'') AS primary_server,
+              ISNULL(primary_database, N'') AS primary_database,
+              CAST(
+                CASE
+                  WHEN last_backup_date IS NULL THEN -1
+                  ELSE DATEDIFF(SECOND, last_backup_date, GETDATE())
+                END AS float
+              ) AS backup_age_seconds,
+              CAST(ISNULL(backup_threshold, 0) AS float) AS backup_threshold_minutes
+          FROM msdb.dbo.log_shipping_monitor_primary WITH (NOLOCK);

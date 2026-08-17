@@ -1,0 +1,215 @@
+groups:
+  - name: windows_exporter.role.ssas
+    rules:
+      - alert: SsasInstanceDown
+        expr: ssas_up == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS {{ $labels.ssas_instance }} is unavailable on {{ $labels.instance }}"
+          description: "The SSAS DMV collector cannot connect. Check the service, endpoint and collector account permissions."
+
+      - alert: SsasMetricsCollectorStale
+        expr: time() - ssas_collector_last_run_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS metrics are stale on {{ $labels.instance }}"
+          description: "The scheduled collector has not produced metrics for more than five minutes."
+
+      - alert: SsasServiceStopped
+        expr: ssas_service_running == 0
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS service {{ $labels.service }} stopped on {{ $labels.instance }}"
+          description: "The Windows service is not running."
+
+      - alert: SsasEndpointUnreachable
+        expr: ssas_endpoint_up == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS endpoint {{ $labels.endpoint }} is unreachable"
+          description: "TCP connectivity failed independently of the XMLA/DMV probe."
+
+      - alert: SsasReadOnlyProbeFailed
+        expr: ssas_readonly_probe_success == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS authenticated probe failed for {{ $labels.ssas_instance }}"
+          description: "The collector account could not open a real ADOMD connection."
+
+      - alert: SsasPanicMode
+        expr: ssas_panic_mode == 1
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS entered panic mode"
+          description: "The Reliability performance counter reports panic mode."
+
+      - alert: SsasMetricsPartialFailure
+        expr: ssas_collector_errors > 0
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS collector has partial errors on {{ $labels.instance }}"
+          description: "One or more optional DMV/AMO sections failed. Security or processing metrics may be incomplete."
+
+      - alert: SsasDatabaseProcessingStale
+        expr: ssas_database_processing_stale == 1
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS database {{ $labels.database }} processing is stale"
+          description: "LastProcessed is absent or older than the configured collector threshold."
+
+      - alert: SsasProcessingOverdue
+        expr: |
+          ssas_last_successful_processing_timestamp_seconds > 0
+          and time() - ssas_last_successful_processing_timestamp_seconds > 86400
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "No successful SSAS processing in the expected interval"
+          description: "No successful processing xEvent has been observed for more than 24 hours. Tune this threshold to the model schedule."
+
+      - alert: SsasProcessingDurationIncreased
+        expr: |
+          ssas_last_processing_duration_seconds > 1.5 * avg_over_time(ssas_last_processing_duration_seconds[7d])
+          and ssas_last_processing_duration_seconds > 60
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS processing duration significantly increased"
+          description: "The latest duration is over 150% of its seven-day average."
+
+      - alert: SsasBackupStale
+        expr: |
+          ssas_last_backup_timestamp_seconds > 0
+          and time() - ssas_last_backup_timestamp_seconds > 172800
+        for: 30m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS backup is stale"
+          description: "No successful backup has been observed for more than 48 hours."
+
+      - alert: SsasMemoryPressure
+        expr: ssas_memory_usage_kilobytes / ssas_memory_limit_high_kilobytes > 0.9
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS memory pressure is high"
+          description: "SSAS memory usage is above 90% of the configured high limit."
+
+      - alert: SsasThreadPoolQueueGrowing
+        expr: max_over_time(ssas_thread_pool_queue_length[10m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS thread pool queue is elevated"
+          description: "A parsing, query or processing thread pool queue exceeded 10 jobs."
+
+      - alert: SsasQueryFailures
+        expr: |
+          increase(ssas_query_failures_total[15m]) > 5
+          or increase(ssas_query_errors_total[15m]) > 5
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS query failures increased"
+          description: "Performance counters or xEvents report more than five query errors in 15 minutes."
+
+      - alert: SsasProcessingFailures
+        expr: increase(ssas_processing_failures_total[30m]) > 0
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS processing failed"
+          description: "At least one processing/refresh failure was captured in the last 30 minutes."
+
+      - alert: SsasPerformanceMetricsStale
+        expr: time() - ssas_performance_collector_last_run_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS performance metrics are stale"
+          description: "The local Performance Counter collector has not completed for more than five minutes."
+
+      - alert: SsasLoginFailures
+        expr: increase(ssas_login_failures_total[15m]) > 5
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: ssas
+        annotations:
+          summary: "Repeated SSAS login failures"
+          description: "More than five failed logins were detected in 15 minutes; inspect the SIEM JSONL stream."
+
+      - alert: SsasPrivilegedAccessChanged
+        expr: increase(ssas_privileged_access_changes_total[15m]) > 0
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS privileged access changed"
+          description: "A permission or privileged role change was captured by xEvents."
+
+      - alert: SsasUnexpectedHighPrivilegeGrowth
+        expr: ssas_high_privilege_logins > (max_over_time(ssas_high_privilege_logins[7d]) offset 7d)
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: ssas
+        annotations:
+          summary: "SSAS high-privilege principal count increased"
+          description: "Review server administrators and database roles with Administrator/Refresh permissions."

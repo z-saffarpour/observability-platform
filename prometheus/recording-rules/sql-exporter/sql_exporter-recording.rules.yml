@@ -1,0 +1,48 @@
+groups:
+  - name: sql_exporter.recording
+    interval: 30s
+    rules:
+      - record: mssql:transactions_per_second:rate5m
+        expr: rate(mssql_transactions[5m])
+
+      - record: mssql:batch_requests_per_second:rate5m
+        expr: rate(mssql_batch_requests[5m])
+
+      - record: mssql:deadlocks_per_second:rate5m
+        expr: rate(mssql_deadlocks[5m])
+
+      - record: mssql:file_read_bytes_per_second:rate5m
+        expr: rate(mssql_file_io_read_bytes[5m])
+
+      - record: mssql:file_write_bytes_per_second:rate5m
+        expr: rate(mssql_file_io_write_bytes[5m])
+
+      - record: mssql:file_reads_per_second:rate5m
+        expr: rate(mssql_file_io_num_of_reads[5m])
+
+      - record: mssql:file_writes_per_second:rate5m
+        expr: rate(mssql_file_io_num_of_writes[5m])
+
+      - record: mssql:wait_time_ms_per_second:rate5m
+        expr: rate(mssql_wait_time_ms[5m])
+
+      - record: mssql:index_reads:total
+        expr: mssql_index_usage_seeks + mssql_index_usage_scans + mssql_index_usage_lookups
+
+      - record: mssql:resource_governor_pool_cpu_ms_per_second:rate5m
+        expr: rate(mssql_resource_governor_pool_cpu_usage_ms_total[5m])
+
+      - record: mssql:resource_governor_group_requests_per_second:rate5m
+        expr: rate(mssql_resource_governor_group_requests_total[5m])
+
+      - record: mssql:replication_pending_commands:max
+        expr: max without(subscriber_db, agent_name, subscription_type) (mssql_replication_pending_commands)
+
+      - record: mssql:database_free_space_percent
+        expr: 100 - mssql_database_space_used_percent
+
+      - record: mssql:tempdb_total_used_mb
+        expr: sum without(file_id, logical_name, physical_name) (mssql_tempdb_file_used_mb)
+
+      - record: mssql:active_sessions:sum
+        expr: sum without(status) (mssql_sessions_by_status)

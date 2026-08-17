@@ -1,0 +1,943 @@
+# SQL Server Service Broker health, backlog, transport, activation and forwarding.
+# Safe on instances where Service Broker is not configured.
+# Required: VIEW ANY DATABASE, CONNECT and VIEW DATABASE STATE on broker databases.
+# Server-level DMVs / perf counters: VIEW SERVER STATE (pre-2022) or VIEW SERVER PERFORMANCE STATE (2022+).
+
+collector_name: mssql_service_broker
+
+min_interval: 60s
+
+metrics:
+  # --- Database inventory / configuration ---
+  - metric_name: mssql_service_broker_enabled
+    type: gauge
+    help: '1 when Service Broker is enabled for the database.'
+    key_labels: [db]
+    values: [broker_enabled]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_database_accessible
+    type: gauge
+    help: '1 when collector could read Service Broker metadata in the database.'
+    key_labels: [db]
+    values: [collector_accessible]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_queues
+    type: gauge
+    help: 'Number of user Service Broker queues in the database.'
+    key_labels: [db]
+    values: [queue_count]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_services
+    type: gauge
+    help: 'Number of user Service Broker services in the database.'
+    key_labels: [db]
+    values: [service_count]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_honor_broker_priority
+    type: gauge
+    help: '1 when HONOR_BROKER_PRIORITY is ON for the database.'
+    key_labels: [db]
+    values: [honor_broker_priority]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_info
+    type: gauge
+    help: 'Service Broker identity marker (value always 1) labeled with service_broker_guid.'
+    key_labels: [db, broker_guid]
+    values: [info]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_routes
+    type: gauge
+    help: 'Number of Service Broker routes in the database (including AutoCreatedLocal).'
+    key_labels: [db]
+    values: [route_count]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_remote_bindings
+    type: gauge
+    help: 'Number of remote service bindings in the database.'
+    key_labels: [db]
+    values: [remote_binding_count]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_conversation_groups
+    type: gauge
+    help: 'Reserved; currently always -1 (conversation_groups scan removed to avoid scrape timeouts on large DBs).'
+    key_labels: [db]
+    values: [conversation_group_count]
+    query_ref: mssql_service_broker_database
+
+  - metric_name: mssql_service_broker_conversation_groups_orphaned
+    type: gauge
+    help: 'Reserved; currently always -1 (orphaned-group scan removed to avoid scrape timeouts on large DBs).'
+    key_labels: [db]
+    values: [orphaned_group_count]
+    query_ref: mssql_service_broker_database
+
+  # --- Queue configuration / backlog / activation ---
+  - metric_name: mssql_service_broker_queue_receive_enabled
+    type: gauge
+    help: '1 when RECEIVE is enabled for the queue; 0 commonly indicates poison-message handling disabled it.'
+    key_labels: [db, schema, queue]
+    values: [receive_enabled]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_enqueue_enabled
+    type: gauge
+    help: '1 when enqueue is enabled for the queue.'
+    key_labels: [db, schema, queue]
+    values: [enqueue_enabled]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_activation_enabled
+    type: gauge
+    help: '1 when internal activation is enabled for the queue.'
+    key_labels: [db, schema, queue]
+    values: [activation_enabled]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_retention_enabled
+    type: gauge
+    help: '1 when message retention is enabled; partition row_count may include retained messages.'
+    key_labels: [db, schema, queue]
+    values: [retention_enabled]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_poison_handling_enabled
+    type: gauge
+    help: '1 when poison message handling is enabled for the queue (SQL Server 2012+).'
+    key_labels: [db, schema, queue]
+    values: [poison_handling_enabled]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_max_readers
+    type: gauge
+    help: 'MAX_QUEUE_READERS configured for internal activation.'
+    key_labels: [db, schema, queue]
+    values: [max_readers]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_activation_procedure_configured
+    type: gauge
+    help: '1 when an activation stored procedure is configured on the queue.'
+    key_labels: [db, schema, queue]
+    values: [activation_procedure_configured]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_messages
+    type: gauge
+    help: 'Current number of messages waiting in the queue (from partition stats).'
+    key_labels: [db, schema, queue]
+    values: [message_count]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_monitor_state
+    type: gauge
+    help: 'Queue monitor state: 0=not present, 1=inactive, 2=notified, 3=receives_occurring, 4=unknown.'
+    key_labels: [db, schema, queue, state]
+    values: [monitor_state]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_tasks_waiting
+    type: gauge
+    help: 'Number of sessions waiting in RECEIVE for this queue.'
+    key_labels: [db, schema, queue]
+    values: [tasks_waiting]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_activated_tasks
+    type: gauge
+    help: 'Number of currently activated procedures for this queue (sys.dm_broker_activated_tasks).'
+    key_labels: [db, schema, queue]
+    values: [activated_tasks]
+    query_ref: mssql_service_broker_activated_tasks
+
+  - metric_name: mssql_service_broker_queue_last_activation_age_seconds
+    type: gauge
+    help: 'Seconds since the queue monitor last activated a stored procedure; -1 if never or unavailable.'
+    key_labels: [db, schema, queue]
+    values: [last_activation_age_seconds]
+    query_ref: mssql_service_broker_queue
+
+  - metric_name: mssql_service_broker_queue_oldest_message_age_seconds
+    type: gauge
+    help: 'Age in seconds of the oldest queued message; 0 when empty, -1 when peek failed.'
+    key_labels: [db, schema, queue]
+    values: [oldest_message_age_seconds]
+    query_ref: mssql_service_broker_queue
+
+  # --- Transmission queue (aggregate + per-service) ---
+  - metric_name: mssql_service_broker_transmission_messages
+    type: gauge
+    help: 'Messages waiting in sys.transmission_queue.'
+    key_labels: [db]
+    values: [message_count]
+    query_ref: mssql_service_broker_transmission
+
+  - metric_name: mssql_service_broker_transmission_errors
+    type: gauge
+    help: 'Transmission messages currently carrying a non-empty transmission_status error.'
+    key_labels: [db]
+    values: [error_count]
+    query_ref: mssql_service_broker_transmission
+
+  - metric_name: mssql_service_broker_transmission_conversation_errors
+    type: gauge
+    help: 'Transmission messages with is_conversation_error = 1.'
+    key_labels: [db]
+    values: [conversation_error_count]
+    query_ref: mssql_service_broker_transmission
+
+  - metric_name: mssql_service_broker_transmission_bytes
+    type: gauge
+    help: 'Total bytes of message bodies pending in sys.transmission_queue.'
+    key_labels: [db]
+    values: [byte_count]
+    query_ref: mssql_service_broker_transmission
+
+  - metric_name: mssql_service_broker_transmission_oldest_age_seconds
+    type: gauge
+    help: 'Age in seconds of the oldest pending transmission message; 0 when empty.'
+    key_labels: [db]
+    values: [oldest_age_seconds]
+    query_ref: mssql_service_broker_transmission
+
+  - metric_name: mssql_service_broker_transmission_by_service
+    type: gauge
+    help: 'Transmission backlog messages grouped by destination service and status class (pending|error).'
+    key_labels: [db, to_service, status_class]
+    values: [message_count]
+    query_ref: mssql_service_broker_transmission_detail
+
+  - metric_name: mssql_service_broker_transmission_bytes_by_service
+    type: gauge
+    help: 'Transmission backlog bytes grouped by destination service and status class.'
+    key_labels: [db, to_service, status_class]
+    values: [byte_count]
+    query_ref: mssql_service_broker_transmission_detail
+
+  - metric_name: mssql_service_broker_transmission_oldest_age_by_service
+    type: gauge
+    help: 'Oldest transmission message age by destination service and status class.'
+    key_labels: [db, to_service, status_class]
+    values: [oldest_age_seconds]
+    query_ref: mssql_service_broker_transmission_detail
+
+  # --- Conversation endpoints ---
+  - metric_name: mssql_service_broker_conversation_endpoints
+    type: gauge
+    help: 'Conversation endpoint count by state and initiator flag (0=target, 1=initiator).'
+    key_labels: [db, state, is_initiator]
+    values: [endpoint_count]
+    query_ref: mssql_service_broker_conversation
+
+  - metric_name: mssql_service_broker_conversation_lifetime_remaining_seconds
+    type: gauge
+    help: 'Minimum remaining dialog lifetime in seconds for endpoints in the state (negative if expired).'
+    key_labels: [db, state, is_initiator]
+    values: [min_lifetime_remaining_seconds]
+    query_ref: mssql_service_broker_conversation
+
+  # --- Endpoint (instance transport) ---
+  - metric_name: mssql_service_broker_endpoint_info
+    type: gauge
+    help: 'Service Broker endpoint marker (value 1) with name/state/auth labels.'
+    key_labels: [endpoint, state, connection_auth]
+    values: [info]
+    query_ref: mssql_service_broker_endpoint
+
+  - metric_name: mssql_service_broker_endpoint_started
+    type: gauge
+    help: '1 when the Service Broker endpoint state is STARTED.'
+    key_labels: [endpoint]
+    values: [is_started]
+    query_ref: mssql_service_broker_endpoint
+
+  - metric_name: mssql_service_broker_endpoint_forwarding_enabled
+    type: gauge
+    help: '1 when MESSAGE_FORWARDING is enabled on the Service Broker endpoint.'
+    key_labels: [endpoint]
+    values: [forwarding_enabled]
+    query_ref: mssql_service_broker_endpoint
+
+  - metric_name: mssql_service_broker_endpoint_forwarding_size_mb
+    type: gauge
+    help: 'MESSAGE_FORWARDING_SIZE configured on the endpoint, in megabytes.'
+    key_labels: [endpoint]
+    values: [forwarding_size_mb]
+    query_ref: mssql_service_broker_endpoint
+
+  - metric_name: mssql_service_broker_endpoint_encryption_enabled
+    type: gauge
+    help: '1 when the TCP endpoint backing Service Broker has encryption enabled.'
+    key_labels: [endpoint]
+    values: [encryption_enabled]
+    query_ref: mssql_service_broker_endpoint
+
+  - metric_name: mssql_service_broker_endpoint_port
+    type: gauge
+    help: 'TCP port of the Service Broker endpoint; -1 when unavailable.'
+    key_labels: [endpoint]
+    values: [port]
+    query_ref: mssql_service_broker_endpoint
+
+  # --- Network connections ---
+  - metric_name: mssql_service_broker_connections
+    type: gauge
+    help: 'Service Broker network connections by connection and login state.'
+    key_labels: [connection_state, login_state]
+    values: [connection_count]
+    query_ref: mssql_service_broker_connections
+
+  - metric_name: mssql_service_broker_connection_send_flow_controlled
+    type: gauge
+    help: 'Connections currently send-flow-controlled.'
+    key_labels: [connection_state, login_state]
+    values: [send_flow_controlled]
+    query_ref: mssql_service_broker_connections
+
+  - metric_name: mssql_service_broker_connection_receive_flow_controlled
+    type: gauge
+    help: 'Connections currently receive-flow-controlled.'
+    key_labels: [connection_state, login_state]
+    values: [receive_flow_controlled]
+    query_ref: mssql_service_broker_connections
+
+  - metric_name: mssql_service_broker_connection_bytes_sent_total
+    type: counter
+    help: 'Cumulative bytes sent on Service Broker connections (raw; use rate/increase).'
+    key_labels: [connection_state, login_state]
+    values: [bytes_sent]
+    query_ref: mssql_service_broker_connections
+
+  - metric_name: mssql_service_broker_connection_bytes_received_total
+    type: counter
+    help: 'Cumulative bytes received on Service Broker connections (raw; use rate/increase).'
+    key_labels: [connection_state, login_state]
+    values: [bytes_received]
+    query_ref: mssql_service_broker_connections
+
+  - metric_name: mssql_service_broker_connection_fragments_sent_total
+    type: counter
+    help: 'Cumulative Service Broker fragments sent (raw; use rate/increase).'
+    key_labels: [connection_state, login_state]
+    values: [fragments_sent]
+    query_ref: mssql_service_broker_connections
+
+  - metric_name: mssql_service_broker_connection_fragments_received_total
+    type: counter
+    help: 'Cumulative Service Broker fragments received (raw; use rate/increase).'
+    key_labels: [connection_state, login_state]
+    values: [fragments_received]
+    query_ref: mssql_service_broker_connections
+
+  # --- Forwarding in-flight ---
+  - metric_name: mssql_service_broker_forwarded_messages
+    type: gauge
+    help: 'Messages currently held for forwarding (sys.dm_broker_forwarded_messages).'
+    values: [message_count]
+    query_ref: mssql_service_broker_forwarded
+
+  - metric_name: mssql_service_broker_forwarded_min_hops_remaining
+    type: gauge
+    help: 'Minimum hops_remaining among currently forwarded messages; -1 when none.'
+    values: [min_hops_remaining]
+    query_ref: mssql_service_broker_forwarded
+
+  - metric_name: mssql_service_broker_forwarded_max_time_consumed
+    type: gauge
+    help: 'Maximum time_consumed among currently forwarded messages; 0 when none.'
+    values: [max_time_consumed]
+    query_ref: mssql_service_broker_forwarded
+
+  # --- Activation / statistics / transport performance counters ---
+  - metric_name: mssql_service_broker_activation_tasks_running
+    type: gauge
+    help: 'Broker Activation Tasks Running (per database instance_name).'
+    key_labels: [db]
+    values: [cntr_value]
+    query_ref: mssql_service_broker_activation_counters
+
+  - metric_name: mssql_service_broker_activation_task_limit_reached_total
+    type: counter
+    help: 'Broker Activation Task Limit Reached cumulative (raw; use rate/increase).'
+    key_labels: [db]
+    values: [cntr_value]
+    query_ref: mssql_service_broker_activation_task_limit
+
+  - metric_name: mssql_service_broker_activation_tasks_started
+    type: gauge
+    help: 'Broker Activation Tasks Started/sec raw cntr_value (use rate() if treating as accumulating).'
+    key_labels: [db]
+    values: [cntr_value]
+    query_ref: mssql_service_broker_activation_tasks_started
+
+  - metric_name: mssql_service_broker_activation_tasks_aborted
+    type: gauge
+    help: 'Broker Activation Tasks Aborted/sec raw cntr_value.'
+    key_labels: [db]
+    values: [cntr_value]
+    query_ref: mssql_service_broker_activation_tasks_aborted
+
+  - metric_name: mssql_service_broker_activation_procedures_invoked
+    type: gauge
+    help: 'Broker Activation Stored Procedures Invoked/sec raw cntr_value.'
+    key_labels: [db]
+    values: [cntr_value]
+    query_ref: mssql_service_broker_activation_procs
+
+  - metric_name: mssql_service_broker_enqueued_transmission_msgs
+    type: gauge
+    help: 'Broker Statistics Enqueued Transmission Msgs/sec raw cntr_value.'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_enqueued_tx
+
+  - metric_name: mssql_service_broker_dequeued_transmission_msgs
+    type: gauge
+    help: 'Broker Statistics Dequeued Transmission Msgs/sec raw cntr_value.'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_dequeued_tx
+
+  - metric_name: mssql_service_broker_sql_sends_total
+    type: counter
+    help: 'Broker Statistics SQL SEND Total (raw; use rate/increase).'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_sql_send
+
+  - metric_name: mssql_service_broker_sql_receives_total
+    type: counter
+    help: 'Broker Statistics SQL RECEIVE Total (raw; use rate/increase).'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_sql_receive
+
+  - metric_name: mssql_service_broker_forwarded_pending_messages
+    type: gauge
+    help: 'Broker Statistics Forwarded Pending Msg Count.'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_fwd_pending_count
+
+  - metric_name: mssql_service_broker_forwarded_pending_bytes
+    type: gauge
+    help: 'Broker Statistics Forwarded Pending Msg Bytes.'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_fwd_pending_bytes
+
+  - metric_name: mssql_service_broker_forwarded_discarded_total
+    type: counter
+    help: 'Broker Statistics Forwarded Msg Discarded Total (raw; use rate/increase).'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_fwd_discarded
+
+  - metric_name: mssql_service_broker_forwarded_messages_total
+    type: counter
+    help: 'Broker Statistics Forwarded Messages Total (raw; use rate/increase).'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_stats_fwd_messages
+
+  - metric_name: mssql_service_broker_transport_fragment_sends
+    type: gauge
+    help: 'Broker/DBM Transport Message Fragment Sends/sec raw cntr_value.'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_transport_sends
+
+  - metric_name: mssql_service_broker_transport_fragment_receives
+    type: gauge
+    help: 'Broker/DBM Transport Message Fragment Receives/sec raw cntr_value.'
+    values: [cntr_value]
+    query_ref: mssql_service_broker_transport_receives
+
+  # --- Certificate expiry (dialog / endpoint security) ---
+  - metric_name: mssql_service_broker_certificate_expiry_days
+    type: gauge
+    help: 'Days until certificate expiry used by Service Broker endpoint or present in broker databases; negative if expired, -1 if unknown.'
+    key_labels: [db, certificate]
+    values: [expiry_days]
+    query_ref: mssql_service_broker_certificates
+
+queries:
+  - query_name: mssql_service_broker_database
+    query: |
+      -- Lightweight inventory only (queues/services/routes/bindings).
+      -- Do NOT scan conversation_groups here; that can time out on large AX/SSB databases
+      -- and drops the entire query (no mssql_service_broker_enabled series).
+      CREATE TABLE #broker_db (
+        db sysname,
+        broker_enabled float,
+        collector_accessible float,
+        queue_count float,
+        service_count float,
+        honor_broker_priority float,
+        broker_guid nvarchar(36),
+        info float,
+        route_count float,
+        remote_binding_count float,
+        conversation_group_count float,
+        orphaned_group_count float
+      );
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+        SELECT name FROM sys.databases WITH (NOLOCK)
+        WHERE database_id > 4 AND state = 0 AND source_database_id IS NULL AND HAS_DBACCESS(name) = 1;
+      OPEN dbs; FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          INSERT #broker_db
+          SELECT @name,
+                 CAST(d.is_broker_enabled AS float),
+                 1,
+                 CAST((SELECT COUNT(*) FROM sys.service_queues WHERE is_ms_shipped = 0) AS float),
+                 CAST((SELECT COUNT(*) FROM sys.services WHERE is_ms_shipped = 0) AS float),
+                 CAST(d.is_honor_broker_priority AS float),
+                 CONVERT(nvarchar(36), d.service_broker_guid),
+                 1,
+                 CAST((SELECT COUNT(*) FROM sys.routes) AS float),
+                 CAST((SELECT COUNT(*) FROM sys.remote_service_bindings) AS float),
+                 -1,
+                 -1
+          FROM sys.databases d WITH (NOLOCK)
+          WHERE d.database_id = DB_ID();';
+        BEGIN TRY
+          EXEC sys.sp_executesql @sql, N'@name sysname', @name=@db;
+        END TRY
+        BEGIN CATCH
+          INSERT #broker_db
+          SELECT @db,
+                 CAST(d.is_broker_enabled AS float),
+                 0, -1, -1,
+                 CAST(d.is_honor_broker_priority AS float),
+                 CONVERT(nvarchar(36), d.service_broker_guid),
+                 1, -1, -1, -1, -1
+          FROM sys.databases d WITH (NOLOCK) WHERE d.name = @db;
+        END CATCH;
+        FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs; DEALLOCATE dbs;
+      SELECT db, broker_enabled, collector_accessible, queue_count, service_count,
+             honor_broker_priority, broker_guid, info, route_count, remote_binding_count,
+             conversation_group_count, orphaned_group_count
+      FROM #broker_db;
+
+  - query_name: mssql_service_broker_queue
+    query: |
+      CREATE TABLE #broker_queue (
+        db sysname, [schema] sysname, queue sysname,
+        receive_enabled float, enqueue_enabled float, activation_enabled float,
+        retention_enabled float, poison_handling_enabled float, max_readers float,
+        activation_procedure_configured float, message_count float,
+        state nvarchar(32), monitor_state float, tasks_waiting float,
+        last_activation_age_seconds float, oldest_message_age_seconds float
+      );
+      DECLARE @db sysname, @schema sysname, @queue sysname, @sql nvarchar(max), @age float;
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+        SELECT name FROM sys.databases WITH (NOLOCK)
+        WHERE database_id > 4 AND state = 0 AND is_broker_enabled = 1
+          AND source_database_id IS NULL AND HAS_DBACCESS(name) = 1;
+      OPEN dbs; FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          INSERT #broker_queue
+          SELECT @name, SCHEMA_NAME(q.schema_id), q.name,
+                 CAST(q.is_receive_enabled AS float),
+                 CAST(q.is_enqueue_enabled AS float),
+                 CAST(q.is_activation_enabled AS float),
+                 CAST(q.is_retention_enabled AS float),
+                 CAST(ISNULL(q.is_poison_message_handling_enabled, 1) AS float),
+                 CAST(ISNULL(q.max_readers, 0) AS float),
+                 CAST(CASE WHEN NULLIF(q.activation_procedure, N'''') IS NULL THEN 0 ELSE 1 END AS float),
+                 CAST(ISNULL(ps.row_count, 0) AS float),
+                 COALESCE(qm.state, N''NOT_PRESENT''),
+                 CAST(CASE WHEN qm.state IS NULL THEN 0 WHEN qm.state = N''INACTIVE'' THEN 1
+                           WHEN qm.state = N''NOTIFIED'' THEN 2 WHEN qm.state = N''RECEIVES_OCCURRING'' THEN 3
+                           ELSE 4 END AS float),
+                 CAST(ISNULL(qm.tasks_waiting, 0) AS float),
+                 CAST(CASE WHEN qm.last_activated_time IS NULL THEN -1
+                           ELSE DATEDIFF(SECOND, qm.last_activated_time, GETDATE()) END AS float),
+                 CAST(CASE WHEN ISNULL(ps.row_count, 0) = 0 THEN 0 ELSE -1 END AS float)
+          FROM sys.service_queues q
+          LEFT JOIN (
+            SELECT object_id, SUM(row_count) AS row_count
+            FROM sys.dm_db_partition_stats GROUP BY object_id
+          ) ps ON ps.object_id = q.object_id
+          LEFT JOIN sys.dm_broker_queue_monitors qm
+            ON qm.database_id = DB_ID() AND qm.queue_id = q.object_id
+          WHERE q.is_ms_shipped = 0;';
+        BEGIN TRY EXEC sys.sp_executesql @sql, N'@name sysname', @name=@db; END TRY BEGIN CATCH END CATCH;
+        FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs; DEALLOCATE dbs;
+
+      DECLARE qage CURSOR LOCAL FAST_FORWARD FOR
+        SELECT db, [schema], queue FROM #broker_queue WHERE message_count > 0;
+      OPEN qage; FETCH NEXT FROM qage INTO @db, @schema, @queue;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @age = -1;
+        SET @sql = N'SELECT TOP (1) @o = CAST(DATEDIFF(SECOND, message_enqueue_time, GETDATE()) AS float)
+                     FROM ' + QUOTENAME(@db) + N'.' + QUOTENAME(@schema) + N'.' + QUOTENAME(@queue) + N' WITH (NOLOCK)
+                     WHERE message_enqueue_time IS NOT NULL
+                     ORDER BY message_enqueue_time ASC;';
+        BEGIN TRY
+          EXEC sys.sp_executesql @sql, N'@o float OUTPUT', @o=@age OUTPUT;
+          UPDATE #broker_queue
+            SET oldest_message_age_seconds = ISNULL(@age, -1)
+          WHERE db = @db AND [schema] = @schema AND queue = @queue;
+        END TRY
+        BEGIN CATCH
+          UPDATE #broker_queue
+            SET oldest_message_age_seconds = -1
+          WHERE db = @db AND [schema] = @schema AND queue = @queue;
+        END CATCH;
+        FETCH NEXT FROM qage INTO @db, @schema, @queue;
+      END
+      CLOSE qage; DEALLOCATE qage;
+
+      SELECT db, [schema], queue, receive_enabled, enqueue_enabled, activation_enabled,
+             retention_enabled, poison_handling_enabled, max_readers,
+             activation_procedure_configured, message_count, state, monitor_state,
+             tasks_waiting, last_activation_age_seconds, oldest_message_age_seconds
+      FROM #broker_queue;
+
+  - query_name: mssql_service_broker_activated_tasks
+    query: |
+      BEGIN TRY
+        IF OBJECT_ID(N'sys.dm_broker_activated_tasks') IS NULL
+          SELECT CAST(NULL AS sysname) AS db, CAST(NULL AS sysname) AS [schema],
+                 CAST(NULL AS sysname) AS queue, CAST(NULL AS float) AS activated_tasks
+          WHERE 1 = 0;
+        ELSE
+          SELECT
+            DB_NAME(t.database_id) AS db,
+            OBJECT_SCHEMA_NAME(t.queue_id, t.database_id) AS [schema],
+            OBJECT_NAME(t.queue_id, t.database_id) AS queue,
+            CAST(COUNT_BIG(*) AS float) AS activated_tasks
+          FROM sys.dm_broker_activated_tasks t WITH (NOLOCK)
+          WHERE DB_NAME(t.database_id) IS NOT NULL
+            AND OBJECT_NAME(t.queue_id, t.database_id) IS NOT NULL
+          GROUP BY t.database_id, t.queue_id;
+      END TRY
+      BEGIN CATCH
+        SELECT CAST(NULL AS sysname) AS db, CAST(NULL AS sysname) AS [schema],
+               CAST(NULL AS sysname) AS queue, CAST(NULL AS float) AS activated_tasks
+        WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_service_broker_transmission
+    query: |
+      CREATE TABLE #broker_tx (
+        db sysname, message_count float, error_count float, conversation_error_count float,
+        byte_count float, oldest_age_seconds float
+      );
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+        SELECT name FROM sys.databases WITH (NOLOCK)
+        WHERE database_id > 4 AND state = 0 AND is_broker_enabled = 1
+          AND source_database_id IS NULL AND HAS_DBACCESS(name) = 1;
+      OPEN dbs; FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @sql = N'USE ' + QUOTENAME(@db) + N'; INSERT #broker_tx
+          SELECT @name,
+                 CAST(COUNT(*) AS float),
+                 CAST(ISNULL(SUM(CASE WHEN NULLIF(transmission_status, N'''') IS NOT NULL THEN 1 ELSE 0 END), 0) AS float),
+                 CAST(ISNULL(SUM(CASE WHEN is_conversation_error = 1 THEN 1 ELSE 0 END), 0) AS float),
+                 CAST(ISNULL(SUM(CONVERT(float, DATALENGTH(message_body))), 0) AS float),
+                 CAST(ISNULL(DATEDIFF(SECOND, MIN(enqueue_time), GETDATE()), 0) AS float)
+          FROM sys.transmission_queue;';
+        BEGIN TRY EXEC sys.sp_executesql @sql, N'@name sysname', @name=@db; END TRY BEGIN CATCH END CATCH;
+        FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs; DEALLOCATE dbs;
+      SELECT * FROM #broker_tx;
+
+  - query_name: mssql_service_broker_transmission_detail
+    query: |
+      CREATE TABLE #broker_txd (
+        db sysname, to_service nvarchar(256), status_class nvarchar(16),
+        message_count float, byte_count float, oldest_age_seconds float
+      );
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+        SELECT name FROM sys.databases WITH (NOLOCK)
+        WHERE database_id > 4 AND state = 0 AND is_broker_enabled = 1
+          AND source_database_id IS NULL AND HAS_DBACCESS(name) = 1;
+      OPEN dbs; FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @sql = N'USE ' + QUOTENAME(@db) + N'; INSERT #broker_txd
+          SELECT @name,
+                 CAST(LEFT(COALESCE(NULLIF(to_service_name, N''''), N''(local)''), 128) AS nvarchar(256)),
+                 CASE WHEN NULLIF(transmission_status, N'''') IS NOT NULL THEN N''error'' ELSE N''pending'' END,
+                 CAST(COUNT(*) AS float),
+                 CAST(ISNULL(SUM(CONVERT(float, DATALENGTH(message_body))), 0) AS float),
+                 CAST(ISNULL(DATEDIFF(SECOND, MIN(enqueue_time), GETDATE()), 0) AS float)
+          FROM sys.transmission_queue
+          GROUP BY CAST(LEFT(COALESCE(NULLIF(to_service_name, N''''), N''(local)''), 128) AS nvarchar(256)),
+                   CASE WHEN NULLIF(transmission_status, N'''') IS NOT NULL THEN N''error'' ELSE N''pending'' END;';
+        BEGIN TRY EXEC sys.sp_executesql @sql, N'@name sysname', @name=@db; END TRY BEGIN CATCH END CATCH;
+        FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs; DEALLOCATE dbs;
+      SELECT * FROM #broker_txd;
+
+  - query_name: mssql_service_broker_conversation
+    query: |
+      CREATE TABLE #broker_ce (
+        db sysname, state nvarchar(60), is_initiator nvarchar(1),
+        endpoint_count float, min_lifetime_remaining_seconds float
+      );
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+        SELECT name FROM sys.databases WITH (NOLOCK)
+        WHERE database_id > 4 AND state = 0 AND is_broker_enabled = 1
+          AND source_database_id IS NULL AND HAS_DBACCESS(name) = 1;
+      OPEN dbs; FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @sql = N'USE ' + QUOTENAME(@db) + N'; INSERT #broker_ce
+          SELECT @name,
+                 state_desc,
+                 CAST(is_initiator AS nvarchar(1)),
+                 CAST(COUNT(*) AS float),
+                 CAST(MIN(DATEDIFF(SECOND, GETDATE(), lifetime)) AS float)
+          FROM sys.conversation_endpoints
+          GROUP BY state_desc, is_initiator;';
+        BEGIN TRY EXEC sys.sp_executesql @sql, N'@name sysname', @name=@db; END TRY BEGIN CATCH END CATCH;
+        FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs; DEALLOCATE dbs;
+      SELECT * FROM #broker_ce;
+
+  - query_name: mssql_service_broker_endpoint
+    query: |
+      BEGIN TRY
+        SELECT
+          e.name AS endpoint,
+          e.state_desc AS state,
+          COALESCE(e.connection_auth_desc, N'unknown') AS connection_auth,
+          CAST(1 AS float) AS info,
+          CAST(CASE WHEN e.state_desc = N'STARTED' THEN 1 ELSE 0 END AS float) AS is_started,
+          CAST(ISNULL(e.is_message_forwarding_enabled, 0) AS float) AS forwarding_enabled,
+          CAST(ISNULL(e.message_forwarding_size, 0) AS float) AS forwarding_size_mb,
+          CAST(CASE WHEN e.encryption_algorithm_desc IS NULL OR e.encryption_algorithm_desc = N'NONE'
+                    THEN 0 ELSE 1 END AS float) AS encryption_enabled,
+          CAST(ISNULL(t.port, -1) AS float) AS port
+        FROM sys.service_broker_endpoints e WITH (NOLOCK)
+        LEFT JOIN sys.tcp_endpoints t WITH (NOLOCK) ON t.endpoint_id = e.endpoint_id;
+      END TRY
+      BEGIN CATCH
+        SELECT CAST(NULL AS sysname) AS endpoint, CAST(NULL AS nvarchar(60)) AS state,
+               CAST(NULL AS nvarchar(60)) AS connection_auth, CAST(NULL AS float) AS info,
+               CAST(NULL AS float) AS is_started, CAST(NULL AS float) AS forwarding_enabled,
+               CAST(NULL AS float) AS forwarding_size_mb, CAST(NULL AS float) AS encryption_enabled,
+               CAST(NULL AS float) AS port
+        WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_service_broker_connections
+    query: |
+      BEGIN TRY
+        IF OBJECT_ID(N'sys.dm_broker_connections') IS NULL
+          SELECT CAST(NULL AS nvarchar(60)) AS connection_state, CAST(NULL AS nvarchar(60)) AS login_state,
+                 CAST(NULL AS float) AS connection_count, CAST(NULL AS float) AS send_flow_controlled,
+                 CAST(NULL AS float) AS receive_flow_controlled, CAST(NULL AS float) AS bytes_sent,
+                 CAST(NULL AS float) AS bytes_received, CAST(NULL AS float) AS fragments_sent,
+                 CAST(NULL AS float) AS fragments_received
+          WHERE 1 = 0;
+        ELSE
+          SELECT
+            COALESCE(NULLIF(connection_state_desc, N''), N'unknown') AS connection_state,
+            COALESCE(NULLIF(login_state_desc, N''), N'unknown') AS login_state,
+            CAST(COUNT_BIG(*) AS float) AS connection_count,
+            CAST(SUM(CAST(is_send_flow_controlled AS float)) AS float) AS send_flow_controlled,
+            CAST(SUM(CAST(is_receive_flow_controlled AS float)) AS float) AS receive_flow_controlled,
+            CAST(SUM(CONVERT(float, total_bytes_sent)) AS float) AS bytes_sent,
+            CAST(SUM(CONVERT(float, total_bytes_received)) AS float) AS bytes_received,
+            CAST(SUM(CONVERT(float, total_fragments_sent)) AS float) AS fragments_sent,
+            CAST(SUM(CONVERT(float, total_fragments_received)) AS float) AS fragments_received
+          FROM sys.dm_broker_connections WITH (NOLOCK)
+          GROUP BY COALESCE(NULLIF(connection_state_desc, N''), N'unknown'),
+                   COALESCE(NULLIF(login_state_desc, N''), N'unknown');
+      END TRY
+      BEGIN CATCH
+        SELECT CAST(NULL AS nvarchar(60)) AS connection_state, CAST(NULL AS nvarchar(60)) AS login_state,
+               CAST(NULL AS float) AS connection_count, CAST(NULL AS float) AS send_flow_controlled,
+               CAST(NULL AS float) AS receive_flow_controlled, CAST(NULL AS float) AS bytes_sent,
+               CAST(NULL AS float) AS bytes_received, CAST(NULL AS float) AS fragments_sent,
+               CAST(NULL AS float) AS fragments_received
+        WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_service_broker_forwarded
+    query: |
+      BEGIN TRY
+        IF OBJECT_ID(N'sys.dm_broker_forwarded_messages') IS NULL
+          SELECT CAST(0 AS float) AS message_count,
+                 CAST(-1 AS float) AS min_hops_remaining, CAST(0 AS float) AS max_time_consumed
+          WHERE 1 = 0;
+        ELSE
+          SELECT
+            CAST(COUNT_BIG(*) AS float) AS message_count,
+            CAST(ISNULL(MIN(CONVERT(float, hops_remaining)), -1) AS float) AS min_hops_remaining,
+            CAST(ISNULL(MAX(CONVERT(float, time_consumed)), 0) AS float) AS max_time_consumed
+          FROM sys.dm_broker_forwarded_messages WITH (NOLOCK);
+      END TRY
+      BEGIN CATCH
+        SELECT CAST(NULL AS float) AS message_count,
+               CAST(NULL AS float) AS min_hops_remaining, CAST(NULL AS float) AS max_time_consumed
+        WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_service_broker_activation_counters
+    query: |
+      SELECT RTRIM(instance_name) AS db, CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Activation%'
+        AND RTRIM(counter_name) = N'Tasks Running'
+        AND RTRIM(instance_name) <> N'' AND RTRIM(instance_name) <> N'_Total';
+
+  - query_name: mssql_service_broker_activation_task_limit
+    query: |
+      SELECT RTRIM(instance_name) AS db, CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Activation%'
+        AND RTRIM(counter_name) = N'Task Limit Reached'
+        AND RTRIM(instance_name) <> N'' AND RTRIM(instance_name) <> N'_Total';
+
+  - query_name: mssql_service_broker_activation_tasks_started
+    query: |
+      SELECT RTRIM(instance_name) AS db, CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Activation%'
+        AND RTRIM(counter_name) = N'Tasks Started/sec'
+        AND RTRIM(instance_name) <> N'' AND RTRIM(instance_name) <> N'_Total';
+
+  - query_name: mssql_service_broker_activation_tasks_aborted
+    query: |
+      SELECT RTRIM(instance_name) AS db, CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Activation%'
+        AND RTRIM(counter_name) = N'Tasks Aborted/sec'
+        AND RTRIM(instance_name) <> N'' AND RTRIM(instance_name) <> N'_Total';
+
+  - query_name: mssql_service_broker_activation_procs
+    query: |
+      SELECT RTRIM(instance_name) AS db, CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Activation%'
+        AND RTRIM(counter_name) = N'Stored Procedures Invoked/sec'
+        AND RTRIM(instance_name) <> N'' AND RTRIM(instance_name) <> N'_Total';
+
+  - query_name: mssql_service_broker_stats_enqueued_tx
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'Enqueued Transmission Msgs/sec';
+
+  - query_name: mssql_service_broker_stats_dequeued_tx
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'Dequeued Transmission Msgs/sec';
+
+  - query_name: mssql_service_broker_stats_sql_send
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'SQL SEND Total';
+
+  - query_name: mssql_service_broker_stats_sql_receive
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'SQL RECEIVE Total';
+
+  - query_name: mssql_service_broker_stats_fwd_pending_count
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'Forwarded Pending Msg Count';
+
+  - query_name: mssql_service_broker_stats_fwd_pending_bytes
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'Forwarded Pending Msg Bytes';
+
+  - query_name: mssql_service_broker_stats_fwd_discarded
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'Forwarded Msg Discarded Total';
+
+  - query_name: mssql_service_broker_stats_fwd_messages
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker Statistics%'
+        AND RTRIM(counter_name) = N'Forwarded Messages Total';
+
+  - query_name: mssql_service_broker_transport_sends
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker/DBM Transport%'
+        AND RTRIM(counter_name) = N'Message Fragment Sends/sec';
+
+  - query_name: mssql_service_broker_transport_receives
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Broker/DBM Transport%'
+        AND RTRIM(counter_name) = N'Message Fragment Receives/sec';
+
+  - query_name: mssql_service_broker_certificates
+    query: |
+      CREATE TABLE #broker_cert (db sysname, certificate nvarchar(128), expiry_days float);
+
+      BEGIN TRY
+        INSERT #broker_cert (db, certificate, expiry_days)
+        SELECT N'_endpoint',
+               COALESCE(c.name, N'(none)'),
+               CAST(CASE WHEN c.expiry_date IS NULL THEN -1
+                         ELSE DATEDIFF(DAY, GETDATE(), c.expiry_date) END AS float)
+        FROM sys.service_broker_endpoints e WITH (NOLOCK)
+        LEFT JOIN master.sys.certificates c WITH (NOLOCK) ON c.certificate_id = e.certificate_id
+        WHERE e.certificate_id IS NOT NULL;
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+        SELECT name FROM sys.databases WITH (NOLOCK)
+        WHERE database_id > 4 AND state = 0 AND is_broker_enabled = 1
+          AND source_database_id IS NULL AND HAS_DBACCESS(name) = 1;
+      OPEN dbs; FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          INSERT #broker_cert
+          SELECT @name, c.name,
+                 CAST(CASE WHEN c.expiry_date IS NULL THEN -1
+                           ELSE DATEDIFF(DAY, GETDATE(), c.expiry_date) END AS float)
+          FROM sys.certificates c
+          WHERE c.pvt_key_encryption_type <> N''NA'';';
+        BEGIN TRY EXEC sys.sp_executesql @sql, N'@name sysname', @name=@db; END TRY BEGIN CATCH END CATCH;
+        FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs; DEALLOCATE dbs;
+      SELECT db, certificate, expiry_days FROM #broker_cert;

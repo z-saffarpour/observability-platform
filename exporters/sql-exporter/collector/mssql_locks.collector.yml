@@ -1,0 +1,192 @@
+# Lock inventory and waiting locks.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_locks
+
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_locks_count
+    type: gauge
+    help: 'Lock counts by resource type, mode and status.'
+    key_labels:
+      - resource_type
+      - request_mode
+      - request_status
+      - db
+    values: [lock_count]
+    query_ref: mssql_locks_summary
+
+  - metric_name: mssql_locks_waiting
+    type: gauge
+    help: 'Number of lock requests in WAIT status.'
+    values: [waiting_locks]
+    query_ref: mssql_locks_waiting_count
+
+  - metric_name: mssql_locks_wait_time_ms
+    type: gauge
+    help: 'Wait time (ms) for sessions waiting on locks.'
+    key_labels:
+      - session_id
+      - db
+      - resource_type
+      - request_mode
+      - wait_type
+      - login_name
+    values: [wait_time_ms]
+    query_ref: mssql_locks_waiting_detail
+
+  # --- from former mssql_oltp (unique) ---
+  - metric_name: mssql_latch_wait_time_ms
+    type: gauge
+    help: 'Cumulative latch wait time (ms) for selected latch classes.'
+    key_labels:
+      - latch_class
+    values: [wait_time_ms]
+    query_ref: mssql_latch_stats
+
+  - metric_name: mssql_latch_waits
+    type: gauge
+    help: 'Cumulative latch waits for selected latch classes.'
+    key_labels:
+      - latch_class
+    values: [waiting_requests_count]
+    query_ref: mssql_latch_stats
+
+  - metric_name: mssql_lock_related_request_elapsed_ms
+    type: gauge
+    help: 'Active user requests with lock/latch waits or elapsed >= 3s.'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - status
+      - wait_type
+      - command
+      - statement_snip
+    values: [elapsed_ms]
+    query_ref: mssql_lock_related_requests
+
+  - metric_name: mssql_lock_related_request_wait_ms
+    type: gauge
+    help: 'Wait time (ms) for active lock/latch-related requests.'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - status
+      - wait_type
+      - command
+      - statement_snip
+    values: [wait_time_ms]
+    query_ref: mssql_lock_related_requests
+
+queries:
+  - query_name: mssql_locks_summary
+    query: |
+      SELECT TOP (50)
+          ISNULL(resource_type, N'') AS resource_type,
+          ISNULL(request_mode, N'') AS request_mode,
+          ISNULL(request_status, N'') AS request_status,
+          ISNULL(DB_NAME(resource_database_id), N'') AS db,
+          CAST(COUNT(*) AS float) AS lock_count
+      FROM sys.dm_tran_locks WITH (NOLOCK)
+      WHERE request_session_id > 50
+      GROUP BY resource_type, request_mode, request_status, resource_database_id
+      ORDER BY COUNT(*) DESC;
+
+  - query_name: mssql_locks_waiting_count
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS waiting_locks
+      FROM sys.dm_tran_locks WITH (NOLOCK)
+      WHERE request_status = N'WAIT';
+
+  - query_name: mssql_locks_waiting_detail
+    query: |
+      SELECT TOP (40)
+          CAST(l.request_session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(l.resource_database_id), N'') AS db,
+          ISNULL(l.resource_type, N'') AS resource_type,
+          ISNULL(l.request_mode, N'') AS request_mode,
+          ISNULL(r.wait_type, N'') AS wait_type,
+          ISNULL(s.login_name, N'') AS login_name,
+          CAST(ISNULL(r.wait_time, 0) AS float) AS wait_time_ms
+      FROM sys.dm_tran_locks AS l WITH (NOLOCK)
+      LEFT JOIN sys.dm_exec_requests AS r WITH (NOLOCK)
+          ON l.request_session_id = r.session_id
+      LEFT JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON l.request_session_id = s.session_id
+      WHERE l.request_status = N'WAIT'
+      ORDER BY ISNULL(r.wait_time, 0) DESC;
+
+  - query_name: mssql_latch_stats
+    query: |
+      SELECT
+          latch_class,
+          CAST(wait_time_ms AS float) AS wait_time_ms,
+          CAST(waiting_requests_count AS float) AS waiting_requests_count
+      FROM sys.dm_os_latch_stats WITH (NOLOCK)
+      WHERE waiting_requests_count > 0
+        AND latch_class IN (
+          N'BUFFER',
+          N'ACCESS_METHODS_DATASET_PARENT',
+          N'ACCESS_METHODS_HOBT_COUNT',
+          N'ACCESS_METHODS_HOBT_VIRTUAL_ROOT',
+          N'ACCESS_METHODS_KEY_RANGE_CACHE',
+          N'FGCB_ADD_REMOVE',
+          N'LOG_MANAGER',
+          N'OPT_IDX_MISMATCH',
+          N'NESTING_TRANSACTION_READONLY',
+          N'NESTING_TRANSACTION_FULL'
+        )
+      ORDER BY wait_time_ms DESC;
+
+  - query_name: mssql_lock_related_requests
+    query: |
+      SELECT TOP (40)
+          CAST(r.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(r.database_id), N'') AS db,
+          ISNULL(s.login_name, N'') AS login_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          r.status AS status,
+          ISNULL(r.wait_type, N'') AS wait_type,
+          r.command AS command,
+          LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(
+                SUBSTRING(
+                  t.text,
+                  (r.statement_start_offset / 2) + 1,
+                  CASE
+                    WHEN r.statement_end_offset = -1 THEN 100
+                    WHEN r.statement_end_offset > r.statement_start_offset
+                      THEN ((r.statement_end_offset - r.statement_start_offset) / 2) + 1
+                    ELSE 100
+                  END
+                ),
+                N''
+              ),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            100
+          ) AS statement_snip,
+          CAST(r.total_elapsed_time AS float) AS elapsed_ms,
+          CAST(r.wait_time AS float) AS wait_time_ms
+      FROM sys.dm_exec_requests AS r WITH (NOLOCK)
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON r.session_id = s.session_id
+      OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
+      WHERE r.session_id <> @@SPID
+        AND s.is_user_process = 1
+        AND ISNULL(s.program_name, N'') NOT LIKE N'%sql_exporter%'
+        AND (
+          r.total_elapsed_time >= 3000
+          OR r.blocking_session_id <> 0
+          OR r.wait_type LIKE N'LCK[_]%'
+          OR r.wait_type LIKE N'PAGELATCH%'
+          OR r.wait_type LIKE N'LATCH%'
+          OR r.wait_type IN (N'WRITELOG', N'LOGBUFFER', N'ASYNC_NETWORK_IO')
+        )
+      ORDER BY r.wait_time DESC, r.total_elapsed_time DESC;

@@ -1,0 +1,889 @@
+# SQL Server PolyBase installation, inventory, node/DMS health, workload, and recent errors.
+#
+# Safe on instances where PolyBase is not installed: optional DMV queries return
+# an empty result set instead of failing the entire scrape.
+#
+# Permissions:
+#   GRANT VIEW SERVER STATE TO [monitoring_user];             -- SQL Server 2019 and older
+#   GRANT VIEW SERVER PERFORMANCE STATE TO [monitoring_user]; -- SQL Server 2022 and newer
+#   Catalog metrics also need CONNECT + metadata visibility on user databases
+#   that host external tables / data sources / file formats.
+
+collector_name: mssql_polybase
+
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_polybase_installed
+    type: gauge
+    help: '1 when the PolyBase feature is installed on this SQL Server instance.'
+    values: [installed]
+    query_ref: mssql_polybase_configuration
+
+  - metric_name: mssql_polybase_enabled
+    type: gauge
+    help: '1 when the polybase enabled server configuration is active; SQL Server 2016/2017 report the installation state.'
+    values: [enabled]
+    query_ref: mssql_polybase_configuration
+
+  - metric_name: mssql_polybase_compute_node_info
+    type: gauge
+    help: 'PolyBase compute-node inventory from sys.dm_exec_compute_nodes; value is always 1.'
+    key_labels: [compute_node_id, node_type, node_name]
+    values: [info]
+    query_ref: mssql_polybase_compute_nodes
+
+  - metric_name: mssql_polybase_node_info
+    type: gauge
+    help: 'PolyBase node process metadata; value is always 1.'
+    key_labels: [compute_node_id, process_name]
+    values: [info]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_available
+    type: gauge
+    help: '1 when the PolyBase compute node reports itself available.'
+    key_labels: [compute_node_id, process_name]
+    values: [is_available]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_allocated_memory
+    type: gauge
+    help: 'Memory currently allocated on the PolyBase node, in the native DMV unit.'
+    key_labels: [compute_node_id, process_name]
+    values: [allocated_memory]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_available_memory
+    type: gauge
+    help: 'Memory currently available on the PolyBase node, in the native DMV unit.'
+    key_labels: [compute_node_id, process_name]
+    values: [available_memory]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_memory_used_ratio
+    type: gauge
+    help: 'Allocated / (allocated + available) memory ratio on the PolyBase node; -1 when both are zero.'
+    key_labels: [compute_node_id, process_name]
+    values: [memory_used_ratio]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_threads
+    type: gauge
+    help: 'Number of threads currently used by the PolyBase node.'
+    key_labels: [compute_node_id, process_name]
+    values: [thread_count]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_handles
+    type: gauge
+    help: 'Number of handles currently used by the PolyBase node.'
+    key_labels: [compute_node_id, process_name]
+    values: [handle_count]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_process_cpu_ticks_total
+    type: counter
+    help: 'Cumulative PolyBase process CPU usage in DMV ticks since process start.'
+    key_labels: [compute_node_id, process_name]
+    values: [process_cpu_usage]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_total_cpu_ticks_total
+    type: counter
+    help: 'Cumulative total CPU usage in DMV ticks since node start.'
+    key_labels: [compute_node_id, process_name]
+    values: [total_cpu_usage]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_node_received_age_seconds
+    type: gauge
+    help: 'Seconds since the node last reported a received network package.'
+    key_labels: [compute_node_id, process_name]
+    values: [received_age_seconds]
+    query_ref: mssql_polybase_node_status
+
+  - metric_name: mssql_polybase_dms_services
+    type: gauge
+    help: 'Number of PolyBase Data Movement Service instances by compute node and status.'
+    key_labels: [compute_node_id, status]
+    values: [service_count]
+    query_ref: mssql_polybase_dms_services
+
+  - metric_name: mssql_polybase_requests
+    type: gauge
+    help: 'Number of current or recently active PolyBase distributed requests by status.'
+    key_labels: [status]
+    values: [request_count]
+    query_ref: mssql_polybase_requests
+
+  - metric_name: mssql_polybase_request_max_elapsed_seconds
+    type: gauge
+    help: 'Maximum elapsed time of PolyBase distributed requests by status.'
+    key_labels: [status]
+    values: [max_elapsed_seconds]
+    query_ref: mssql_polybase_requests
+
+  - metric_name: mssql_polybase_request_max_start_age_seconds
+    type: gauge
+    help: 'Maximum age in seconds since start_time for PolyBase distributed requests by status; -1 when start_time is null.'
+    key_labels: [status]
+    values: [max_start_age_seconds]
+    query_ref: mssql_polybase_requests
+
+  - metric_name: mssql_polybase_request_steps
+    type: gauge
+    help: 'Number of PolyBase distributed request steps by status, location type, and operation type.'
+    key_labels: [status, location_type, operation_type]
+    values: [step_count]
+    query_ref: mssql_polybase_request_steps
+
+  - metric_name: mssql_polybase_request_step_max_elapsed_seconds
+    type: gauge
+    help: 'Maximum elapsed time of PolyBase distributed request steps by status, location type, and operation type.'
+    key_labels: [status, location_type, operation_type]
+    values: [max_elapsed_seconds]
+    query_ref: mssql_polybase_request_steps
+
+  - metric_name: mssql_polybase_sql_steps
+    type: gauge
+    help: 'Number of PolyBase distributed SQL request distributions by status.'
+    key_labels: [status]
+    values: [step_count]
+    query_ref: mssql_polybase_sql_requests
+
+  - metric_name: mssql_polybase_sql_step_max_elapsed_seconds
+    type: gauge
+    help: 'Maximum elapsed time of PolyBase distributed SQL request distributions by status.'
+    key_labels: [status]
+    values: [max_elapsed_seconds]
+    query_ref: mssql_polybase_sql_requests
+
+  - metric_name: mssql_polybase_sql_step_rows
+    type: gauge
+    help: 'Sum of row_count for PolyBase distributed SQL request distributions by status; negative DMV sentinel values are ignored.'
+    key_labels: [status]
+    values: [row_count]
+    query_ref: mssql_polybase_sql_requests
+
+  - metric_name: mssql_polybase_dms_workers
+    type: gauge
+    help: 'Number of PolyBase DMS workers by status and worker type.'
+    key_labels: [status, type]
+    values: [worker_count]
+    query_ref: mssql_polybase_dms_workers
+
+  - metric_name: mssql_polybase_dms_bytes_processed
+    type: gauge
+    help: 'Bytes processed by PolyBase DMS workers currently retained in the DMV, grouped by status and worker type.'
+    key_labels: [status, type]
+    values: [bytes_processed]
+    query_ref: mssql_polybase_dms_workers
+
+  - metric_name: mssql_polybase_dms_rows_processed
+    type: gauge
+    help: 'Rows processed by PolyBase DMS workers currently retained in the DMV, grouped by status and worker type.'
+    key_labels: [status, type]
+    values: [rows_processed]
+    query_ref: mssql_polybase_dms_workers
+
+  - metric_name: mssql_polybase_dms_max_elapsed_seconds
+    type: gauge
+    help: 'Maximum elapsed time of PolyBase DMS workers by status and worker type.'
+    key_labels: [status, type]
+    values: [max_elapsed_seconds]
+    query_ref: mssql_polybase_dms_workers
+
+  - metric_name: mssql_polybase_external_workers
+    type: gauge
+    help: 'Number of PolyBase external workers by status and work type.'
+    key_labels: [status, type]
+    values: [worker_count]
+    query_ref: mssql_polybase_external_work
+
+  - metric_name: mssql_polybase_external_worker_bytes_processed
+    type: gauge
+    help: 'Bytes processed by PolyBase external workers currently retained in the DMV, grouped by status and work type.'
+    key_labels: [status, type]
+    values: [bytes_processed]
+    query_ref: mssql_polybase_external_work
+
+  - metric_name: mssql_polybase_external_worker_max_elapsed_seconds
+    type: gauge
+    help: 'Maximum elapsed time of PolyBase external workers by status and work type.'
+    key_labels: [status, type]
+    values: [max_elapsed_seconds]
+    query_ref: mssql_polybase_external_work
+
+  - metric_name: mssql_polybase_external_operations
+    type: gauge
+    help: 'Number of PolyBase external operations retained in the DMV by operation type.'
+    key_labels: [operation_type]
+    values: [operation_count]
+    query_ref: mssql_polybase_external_operations
+
+  - metric_name: mssql_polybase_external_operation_map_progress
+    type: gauge
+    help: 'Average map_progress (0-1) of PolyBase external operations by operation type.'
+    key_labels: [operation_type]
+    values: [avg_map_progress]
+    query_ref: mssql_polybase_external_operations
+
+  - metric_name: mssql_polybase_node_errors_recent
+    type: gauge
+    help: 'PolyBase compute-node errors recorded during the last 15 minutes, grouped by node and error type.'
+    key_labels: [compute_node_id, error_type]
+    values: [error_count]
+    query_ref: mssql_polybase_recent_errors
+
+  - metric_name: mssql_polybase_node_error_age_seconds
+    type: gauge
+    help: 'Age in seconds of recent PolyBase compute-node errors (TOP 50 in last 60 minutes) with full details text and correlation ids.'
+    key_labels: [compute_node_id, error_type, source, error_id, execution_id, spid, details]
+    values: [age_seconds]
+    query_ref: mssql_polybase_error_details
+
+  - metric_name: mssql_polybase_external_tables
+    type: gauge
+    help: 'Number of external tables per database.'
+    key_labels: [db]
+    values: [table_count]
+    query_ref: mssql_polybase_catalog
+
+  - metric_name: mssql_polybase_external_data_sources
+    type: gauge
+    help: 'Number of external data sources per database and source type.'
+    key_labels: [db, source_type]
+    values: [source_count]
+    query_ref: mssql_polybase_catalog_sources
+
+  - metric_name: mssql_polybase_external_file_formats
+    type: gauge
+    help: 'Number of external file formats per database.'
+    key_labels: [db]
+    values: [format_count]
+    query_ref: mssql_polybase_catalog
+
+  - metric_name: mssql_polybase_external_table_info
+    type: gauge
+    help: 'External table inventory; value is always 1.'
+    key_labels: [db, schema, table, data_source, file_format, location]
+    values: [info]
+    query_ref: mssql_polybase_external_table_list
+
+  - metric_name: mssql_polybase_external_data_source_info
+    type: gauge
+    help: 'External data source inventory; value is always 1.'
+    key_labels: [db, source_name, source_type, location]
+    values: [info]
+    query_ref: mssql_polybase_external_source_list
+
+  - metric_name: mssql_polybase_external_file_format_info
+    type: gauge
+    help: 'External file format inventory; value is always 1.'
+    key_labels: [db, format_name, format_type]
+    values: [info]
+    query_ref: mssql_polybase_external_format_list
+
+queries:
+  - query_name: mssql_polybase_configuration
+    query: |
+      SELECT
+          CAST(COALESCE(CONVERT(int, SERVERPROPERTY('IsPolyBaseInstalled')), 0) AS float) AS installed,
+          CAST(COALESCE(
+              (SELECT TOP (1) value_in_use
+               FROM sys.configurations
+               WHERE name = N'polybase enabled'),
+              CONVERT(int, SERVERPROPERTY('IsPolyBaseInstalled')),
+              0
+          ) AS float) AS enabled;
+
+  - query_name: mssql_polybase_compute_nodes
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_compute_nodes') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      CONVERT(varchar(20), compute_node_id) AS compute_node_id,
+                      COALESCE(NULLIF(type, N''''), N''unknown'') AS node_type,
+                      COALESCE(NULLIF(name, N''''), N''unknown'') AS node_name,
+                      CAST(1 AS float) AS info
+                  FROM sys.dm_exec_compute_nodes;';
+          ELSE
+              SELECT CAST(NULL AS varchar(20)) AS compute_node_id,
+                     CAST(NULL AS nvarchar(32)) AS node_type,
+                     CAST(NULL AS nvarchar(32)) AS node_name,
+                     CAST(NULL AS float) AS info
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS varchar(20)) AS compute_node_id,
+                 CAST(NULL AS nvarchar(32)) AS node_type,
+                 CAST(NULL AS nvarchar(32)) AS node_name,
+                 CAST(NULL AS float) AS info
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_node_status
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_compute_node_status') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      CONVERT(varchar(20), compute_node_id) AS compute_node_id,
+                      COALESCE(NULLIF(process_name, N''''), N''unknown'') AS process_name,
+                      CAST(1 AS float) AS info,
+                      CAST(is_available AS float) AS is_available,
+                      CAST(allocated_memory AS float) AS allocated_memory,
+                      CAST(available_memory AS float) AS available_memory,
+                      CAST(CASE
+                               WHEN COALESCE(allocated_memory, 0) = 0
+                                    AND COALESCE(available_memory, 0) = 0 THEN -1
+                               ELSE CONVERT(float, allocated_memory)
+                                    / NULLIF(CONVERT(float, allocated_memory)
+                                             + CONVERT(float, available_memory), 0)
+                           END AS float) AS memory_used_ratio,
+                      CAST(thread_count AS float) AS thread_count,
+                      CAST(handle_count AS float) AS handle_count,
+                      CAST(process_cpu_usage AS float) AS process_cpu_usage,
+                      CAST(total_cpu_usage AS float) AS total_cpu_usage,
+                      CAST(CASE WHEN received_time IS NULL THEN -1
+                                ELSE DATEDIFF_BIG(second, received_time, GETDATE()) END AS float) AS received_age_seconds
+                  FROM sys.dm_exec_compute_node_status;';
+          ELSE
+              SELECT CAST(NULL AS varchar(20)) AS compute_node_id, CAST(NULL AS nvarchar(255)) AS process_name,
+                     CAST(NULL AS float) AS info, CAST(NULL AS float) AS is_available,
+                     CAST(NULL AS float) AS allocated_memory, CAST(NULL AS float) AS available_memory,
+                     CAST(NULL AS float) AS memory_used_ratio,
+                     CAST(NULL AS float) AS thread_count, CAST(NULL AS float) AS handle_count,
+                     CAST(NULL AS float) AS process_cpu_usage, CAST(NULL AS float) AS total_cpu_usage,
+                     CAST(NULL AS float) AS received_age_seconds WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS varchar(20)) AS compute_node_id, CAST(NULL AS nvarchar(255)) AS process_name,
+                 CAST(NULL AS float) AS info, CAST(NULL AS float) AS is_available,
+                 CAST(NULL AS float) AS allocated_memory, CAST(NULL AS float) AS available_memory,
+                 CAST(NULL AS float) AS memory_used_ratio,
+                 CAST(NULL AS float) AS thread_count, CAST(NULL AS float) AS handle_count,
+                 CAST(NULL AS float) AS process_cpu_usage, CAST(NULL AS float) AS total_cpu_usage,
+                 CAST(NULL AS float) AS received_age_seconds WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_dms_services
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_dms_services') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      CONVERT(varchar(20), compute_node_id) AS compute_node_id,
+                      COALESCE(NULLIF(status, N''''), N''unknown'') AS status,
+                      CAST(COUNT_BIG(*) AS float) AS service_count
+                  FROM sys.dm_exec_dms_services
+                  GROUP BY compute_node_id, COALESCE(NULLIF(status, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS varchar(20)) AS compute_node_id,
+                     CAST(NULL AS nvarchar(32)) AS status,
+                     CAST(NULL AS float) AS service_count
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS varchar(20)) AS compute_node_id,
+                 CAST(NULL AS nvarchar(32)) AS status,
+                 CAST(NULL AS float) AS service_count
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_requests
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_distributed_requests') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      COALESCE(NULLIF(status, N''''), N''unknown'') AS status,
+                      CAST(COUNT_BIG(*) AS float) AS request_count,
+                      CAST(COALESCE(MAX(CONVERT(bigint, total_elapsed_time)), 0) / 1000.0 AS float) AS max_elapsed_seconds,
+                      CAST(COALESCE(MAX(CASE WHEN start_time IS NULL THEN NULL
+                                             ELSE DATEDIFF_BIG(second, start_time, GETDATE()) END), -1) AS float) AS max_start_age_seconds
+                  FROM sys.dm_exec_distributed_requests
+                  GROUP BY COALESCE(NULLIF(status, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS nvarchar(32)) AS status, CAST(NULL AS float) AS request_count,
+                     CAST(NULL AS float) AS max_elapsed_seconds,
+                     CAST(NULL AS float) AS max_start_age_seconds WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS nvarchar(32)) AS status, CAST(NULL AS float) AS request_count,
+                 CAST(NULL AS float) AS max_elapsed_seconds,
+                 CAST(NULL AS float) AS max_start_age_seconds WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_request_steps
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_distributed_request_steps') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      COALESCE(NULLIF(status, N''''), N''unknown'') AS status,
+                      COALESCE(NULLIF(location_type, N''''), N''unknown'') AS location_type,
+                      COALESCE(NULLIF(operation_type, N''''), N''unknown'') AS operation_type,
+                      CAST(COUNT_BIG(*) AS float) AS step_count,
+                      CAST(COALESCE(MAX(CONVERT(bigint, total_elapsed_time)), 0) / 1000.0 AS float) AS max_elapsed_seconds
+                  FROM sys.dm_exec_distributed_request_steps
+                  GROUP BY
+                      COALESCE(NULLIF(status, N''''), N''unknown''),
+                      COALESCE(NULLIF(location_type, N''''), N''unknown''),
+                      COALESCE(NULLIF(operation_type, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS nvarchar(32)) AS status,
+                     CAST(NULL AS nvarchar(32)) AS location_type,
+                     CAST(NULL AS nvarchar(128)) AS operation_type,
+                     CAST(NULL AS float) AS step_count,
+                     CAST(NULL AS float) AS max_elapsed_seconds
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS nvarchar(32)) AS status,
+                 CAST(NULL AS nvarchar(32)) AS location_type,
+                 CAST(NULL AS nvarchar(128)) AS operation_type,
+                 CAST(NULL AS float) AS step_count,
+                 CAST(NULL AS float) AS max_elapsed_seconds
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_sql_requests
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_distributed_sql_requests') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      COALESCE(NULLIF(status, N''''), N''unknown'') AS status,
+                      CAST(COUNT_BIG(*) AS float) AS step_count,
+                      CAST(COALESCE(MAX(CONVERT(bigint, total_elapsed_time)), 0) / 1000.0 AS float) AS max_elapsed_seconds,
+                      CAST(COALESCE(SUM(CASE WHEN row_count < 0 THEN 0 ELSE CONVERT(float, row_count) END), 0) AS float) AS row_count
+                  FROM sys.dm_exec_distributed_sql_requests
+                  GROUP BY COALESCE(NULLIF(status, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS nvarchar(32)) AS status,
+                     CAST(NULL AS float) AS step_count,
+                     CAST(NULL AS float) AS max_elapsed_seconds,
+                     CAST(NULL AS float) AS row_count
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS nvarchar(32)) AS status,
+                 CAST(NULL AS float) AS step_count,
+                 CAST(NULL AS float) AS max_elapsed_seconds,
+                 CAST(NULL AS float) AS row_count
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_dms_workers
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_dms_workers') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      COALESCE(NULLIF(status, N''''), N''unknown'') AS status,
+                      COALESCE(NULLIF(type, N''''), N''unknown'') AS type,
+                      CAST(COUNT_BIG(*) AS float) AS worker_count,
+                      CAST(COALESCE(SUM(CONVERT(float, bytes_processed)), 0) AS float) AS bytes_processed,
+                      CAST(COALESCE(SUM(CONVERT(float, rows_processed)), 0) AS float) AS rows_processed,
+                      CAST(COALESCE(MAX(CONVERT(bigint, total_elapsed_time)), 0) / 1000.0 AS float) AS max_elapsed_seconds
+                  FROM sys.dm_exec_dms_workers
+                  GROUP BY
+                      COALESCE(NULLIF(status, N''''), N''unknown''),
+                      COALESCE(NULLIF(type, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS nvarchar(32)) AS status,
+                     CAST(NULL AS nvarchar(32)) AS type,
+                     CAST(NULL AS float) AS worker_count,
+                     CAST(NULL AS float) AS bytes_processed,
+                     CAST(NULL AS float) AS rows_processed,
+                     CAST(NULL AS float) AS max_elapsed_seconds
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS nvarchar(32)) AS status,
+                 CAST(NULL AS nvarchar(32)) AS type,
+                 CAST(NULL AS float) AS worker_count,
+                 CAST(NULL AS float) AS bytes_processed,
+                 CAST(NULL AS float) AS rows_processed,
+                 CAST(NULL AS float) AS max_elapsed_seconds
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_external_work
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_external_work') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      COALESCE(NULLIF(status, N''''), N''unknown'') AS status,
+                      COALESCE(NULLIF(type, N''''), N''unknown'') AS type,
+                      CAST(COUNT_BIG(*) AS float) AS worker_count,
+                      CAST(COALESCE(SUM(CONVERT(float, bytes_processed)), 0) AS float) AS bytes_processed,
+                      CAST(COALESCE(MAX(CONVERT(bigint, total_elapsed_time)), 0) / 1000.0 AS float) AS max_elapsed_seconds
+                  FROM sys.dm_exec_external_work
+                  GROUP BY
+                      COALESCE(NULLIF(status, N''''), N''unknown''),
+                      COALESCE(NULLIF(type, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS nvarchar(32)) AS status,
+                     CAST(NULL AS nvarchar(60)) AS type,
+                     CAST(NULL AS float) AS worker_count,
+                     CAST(NULL AS float) AS bytes_processed,
+                     CAST(NULL AS float) AS max_elapsed_seconds
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS nvarchar(32)) AS status,
+                 CAST(NULL AS nvarchar(60)) AS type,
+                 CAST(NULL AS float) AS worker_count,
+                 CAST(NULL AS float) AS bytes_processed,
+                 CAST(NULL AS float) AS max_elapsed_seconds
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_external_operations
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_external_operations') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      COALESCE(NULLIF(operation_type, N''''), N''unknown'') AS operation_type,
+                      CAST(COUNT_BIG(*) AS float) AS operation_count,
+                      CAST(COALESCE(AVG(CONVERT(float, map_progress)), 0) AS float) AS avg_map_progress
+                  FROM sys.dm_exec_external_operations
+                  GROUP BY COALESCE(NULLIF(operation_type, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS nvarchar(128)) AS operation_type,
+                     CAST(NULL AS float) AS operation_count,
+                     CAST(NULL AS float) AS avg_map_progress
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS nvarchar(128)) AS operation_type,
+                 CAST(NULL AS float) AS operation_count,
+                 CAST(NULL AS float) AS avg_map_progress
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_recent_errors
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_compute_node_errors') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT
+                      CONVERT(varchar(20), compute_node_id) AS compute_node_id,
+                      COALESCE(NULLIF(type, N''''), N''unknown'') AS error_type,
+                      CAST(COUNT_BIG(*) AS float) AS error_count
+                  FROM sys.dm_exec_compute_node_errors
+                  WHERE create_time >= DATEADD(minute, -15, GETDATE())
+                  GROUP BY compute_node_id, COALESCE(NULLIF(type, N''''), N''unknown'');';
+          ELSE
+              SELECT CAST(NULL AS varchar(20)) AS compute_node_id, CAST(NULL AS nvarchar(255)) AS error_type,
+                     CAST(NULL AS float) AS error_count WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS varchar(20)) AS compute_node_id, CAST(NULL AS nvarchar(255)) AS error_type,
+                 CAST(NULL AS float) AS error_count WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_error_details
+    query: |
+      BEGIN TRY
+          IF OBJECT_ID(N'sys.dm_exec_compute_node_errors') IS NOT NULL
+              EXEC sys.sp_executesql N'
+                  SELECT TOP (50)
+                      CONVERT(varchar(20), compute_node_id) AS compute_node_id,
+                      COALESCE(NULLIF(type, N''''), N''unknown'') AS error_type,
+                      LEFT(COALESCE(NULLIF(source, N''''), N''unknown''), 128) AS source,
+                      COALESCE(NULLIF(CONVERT(nvarchar(36), error_id), N''''), N''unknown'') AS error_id,
+                      COALESCE(NULLIF(CONVERT(nvarchar(36), rexecution_id), N''''), N'''') AS execution_id,
+                      CONVERT(varchar(20), COALESCE(spid, -1)) AS spid,
+                      LEFT(
+                          REPLACE(REPLACE(REPLACE(
+                              COALESCE(NULLIF(details, N''''), N''(no details)''),
+                              CHAR(13), N'' ''),
+                              CHAR(10), N'' ''),
+                              N''  '', N'' ''),
+                          4000
+                      ) AS details,
+                      CAST(DATEDIFF_BIG(second, create_time, GETDATE()) AS float) AS age_seconds
+                  FROM sys.dm_exec_compute_node_errors
+                  WHERE create_time >= DATEADD(minute, -60, GETDATE())
+                  ORDER BY create_time DESC;';
+          ELSE
+              SELECT CAST(NULL AS varchar(20)) AS compute_node_id,
+                     CAST(NULL AS nvarchar(255)) AS error_type,
+                     CAST(NULL AS nvarchar(128)) AS source,
+                     CAST(NULL AS nvarchar(36)) AS error_id,
+                     CAST(NULL AS nvarchar(36)) AS execution_id,
+                     CAST(NULL AS varchar(20)) AS spid,
+                     CAST(NULL AS nvarchar(4000)) AS details,
+                     CAST(NULL AS float) AS age_seconds
+              WHERE 1 = 0;
+      END TRY
+      BEGIN CATCH
+          SELECT CAST(NULL AS varchar(20)) AS compute_node_id,
+                 CAST(NULL AS nvarchar(255)) AS error_type,
+                 CAST(NULL AS nvarchar(128)) AS source,
+                 CAST(NULL AS nvarchar(36)) AS error_id,
+                 CAST(NULL AS nvarchar(36)) AS execution_id,
+                 CAST(NULL AS varchar(20)) AS spid,
+                 CAST(NULL AS nvarchar(4000)) AS details,
+                 CAST(NULL AS float) AS age_seconds
+          WHERE 1 = 0;
+      END CATCH;
+
+  - query_name: mssql_polybase_catalog
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_pb_catalog') IS NOT NULL DROP TABLE #mssql_pb_catalog;
+      CREATE TABLE #mssql_pb_catalog (
+          db sysname NOT NULL,
+          table_count float NOT NULL,
+          format_count float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF OBJECT_ID(N''sys.external_tables'', N''V'') IS NOT NULL
+               OR OBJECT_ID(N''sys.external_file_formats'', N''V'') IS NOT NULL
+            INSERT INTO #mssql_pb_catalog (db, table_count, format_count)
+            SELECT
+                DB_NAME(),
+                CAST(CASE WHEN OBJECT_ID(N''sys.external_tables'', N''V'') IS NULL THEN 0
+                          ELSE (SELECT COUNT_BIG(*) FROM sys.external_tables WITH (NOLOCK)) END AS float),
+                CAST(CASE WHEN OBJECT_ID(N''sys.external_file_formats'', N''V'') IS NULL THEN 0
+                          ELSE (SELECT COUNT_BIG(*) FROM sys.external_file_formats WITH (NOLOCK)) END AS float)
+            WHERE
+                (OBJECT_ID(N''sys.external_tables'', N''V'') IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM sys.external_tables WITH (NOLOCK)))
+             OR (OBJECT_ID(N''sys.external_file_formats'', N''V'') IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM sys.external_file_formats WITH (NOLOCK)));';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, table_count, format_count
+      FROM #mssql_pb_catalog;
+
+  - query_name: mssql_polybase_catalog_sources
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_pb_sources') IS NOT NULL DROP TABLE #mssql_pb_sources;
+      CREATE TABLE #mssql_pb_sources (
+          db sysname NOT NULL,
+          source_type nvarchar(255) NOT NULL,
+          source_count float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF OBJECT_ID(N''sys.external_data_sources'', N''V'') IS NOT NULL
+            INSERT INTO #mssql_pb_sources (db, source_type, source_count)
+            SELECT
+                DB_NAME(),
+                COALESCE(NULLIF(type_desc, N''''), N''unknown''),
+                CAST(COUNT_BIG(*) AS float)
+            FROM sys.external_data_sources WITH (NOLOCK)
+            GROUP BY COALESCE(NULLIF(type_desc, N''''), N''unknown'');';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, source_type, source_count
+      FROM #mssql_pb_sources;
+
+  - query_name: mssql_polybase_external_table_list
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_pb_tables') IS NOT NULL DROP TABLE #mssql_pb_tables;
+      CREATE TABLE #mssql_pb_tables (
+          db sysname NOT NULL,
+          [schema] sysname NOT NULL,
+          [table] sysname NOT NULL,
+          data_source sysname NOT NULL,
+          file_format sysname NOT NULL,
+          location nvarchar(256) NOT NULL,
+          info float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF OBJECT_ID(N''sys.external_tables'', N''V'') IS NOT NULL
+            INSERT INTO #mssql_pb_tables (db, [schema], [table], data_source, file_format, location, info)
+            SELECT
+                DB_NAME(),
+                COALESCE(OBJECT_SCHEMA_NAME(t.object_id), N''dbo''),
+                t.name,
+                COALESCE(ds.name, N''''),
+                COALESCE(ff.name, N''''),
+                LEFT(COALESCE(t.location, N''''), 256),
+                CAST(1 AS float)
+            FROM sys.external_tables AS t WITH (NOLOCK)
+            LEFT JOIN sys.external_data_sources AS ds WITH (NOLOCK)
+                ON ds.data_source_id = t.data_source_id
+            LEFT JOIN sys.external_file_formats AS ff WITH (NOLOCK)
+                ON ff.file_format_id = t.file_format_id;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, [schema], [table], data_source, file_format, location, info
+      FROM #mssql_pb_tables;
+
+  - query_name: mssql_polybase_external_source_list
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_pb_source_list') IS NOT NULL DROP TABLE #mssql_pb_source_list;
+      CREATE TABLE #mssql_pb_source_list (
+          db sysname NOT NULL,
+          source_name sysname NOT NULL,
+          source_type nvarchar(255) NOT NULL,
+          location nvarchar(256) NOT NULL,
+          info float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF OBJECT_ID(N''sys.external_data_sources'', N''V'') IS NOT NULL
+            INSERT INTO #mssql_pb_source_list (db, source_name, source_type, location, info)
+            SELECT
+                DB_NAME(),
+                ds.name,
+                COALESCE(NULLIF(ds.type_desc, N''''), N''unknown''),
+                LEFT(COALESCE(ds.location, N''''), 256),
+                CAST(1 AS float)
+            FROM sys.external_data_sources AS ds WITH (NOLOCK);';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, source_name, source_type, location, info
+      FROM #mssql_pb_source_list;
+
+  - query_name: mssql_polybase_external_format_list
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_pb_formats') IS NOT NULL DROP TABLE #mssql_pb_formats;
+      CREATE TABLE #mssql_pb_formats (
+          db sysname NOT NULL,
+          format_name sysname NOT NULL,
+          format_type nvarchar(32) NOT NULL,
+          info float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF OBJECT_ID(N''sys.external_file_formats'', N''V'') IS NOT NULL
+            INSERT INTO #mssql_pb_formats (db, format_name, format_type, info)
+            SELECT
+                DB_NAME(),
+                ff.name,
+                CASE ff.format_type
+                    WHEN 1 THEN N''DELIMITEDTEXT''
+                    WHEN 2 THEN N''RCFILE''
+                    WHEN 3 THEN N''ORC''
+                    WHEN 4 THEN N''PARQUET''
+                    ELSE CONCAT(N''type_'', CONVERT(varchar(10), ff.format_type))
+                END,
+                CAST(1 AS float)
+            FROM sys.external_file_formats AS ff WITH (NOLOCK);';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, format_name, format_type, info
+      FROM #mssql_pb_formats;

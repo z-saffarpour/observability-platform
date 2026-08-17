@@ -1,0 +1,254 @@
+# Query Store enablement + top queries from DBs where QS is ON.
+#
+#   GRANT VIEW SERVER STATE TO
+#   Per-DB: VIEW DATABASE STATE / access to Query Store catalog views
+#
+collector_name: mssql_query_store
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_query_store_enabled
+    type: gauge
+    help: '1 if Query Store is enabled on the database, else 0.'
+    key_labels:
+      - db
+    values: [enabled]
+    query_ref: mssql_qs_enabled
+
+  - metric_name: mssql_query_store_top_duration_ms
+    type: gauge
+    help: 'Top Query Store queries by average duration (microseconds/1000=ms).'
+    key_labels:
+      - db
+      - query_id
+      - object_name
+      - query_snip
+    values: [avg_duration_ms]
+    query_ref: mssql_qs_top
+
+  - metric_name: mssql_query_store_top_cpu_ms
+    type: gauge
+    help: 'Top Query Store queries by average CPU time (ms).'
+    key_labels:
+      - db
+      - query_id
+      - object_name
+      - query_snip
+    values: [avg_cpu_ms]
+    query_ref: mssql_qs_top
+
+  - metric_name: mssql_query_store_top_execution_count
+    type: gauge
+    help: 'Execution count for top Query Store queries in recent window.'
+    key_labels:
+      - db
+      - query_id
+      - object_name
+      - query_snip
+    values: [execution_count]
+    query_ref: mssql_qs_top
+
+  - metric_name: mssql_query_store_top_last_execution_unix
+    type: gauge
+    help: 'Unix epoch (UTC) of last_execution_time for the query in the QS window.'
+    key_labels:
+      - db
+      - query_id
+      - object_name
+      - query_snip
+    values: [last_execution_unix]
+    query_ref: mssql_qs_top
+
+  - metric_name: mssql_query_store_top_last_execution_age_seconds
+    type: gauge
+    help: 'Seconds since last_execution_time for the query in the QS window.'
+    key_labels:
+      - db
+      - query_id
+      - object_name
+      - query_snip
+    values: [last_execution_age_seconds]
+    query_ref: mssql_qs_top
+
+  - metric_name: mssql_query_store_desired_state
+    type: gauge
+    help: 'Query Store desired_state per database (0=OFF 1=READ_ONLY 2=READ_WRITE 3=ERROR).'
+    key_labels:
+      - db
+    values: [desired_state]
+    query_ref: mssql_qs_options
+
+  - metric_name: mssql_query_store_actual_state
+    type: gauge
+    help: 'Query Store actual_state per database (0=OFF 1=READ_ONLY 2=READ_WRITE 3=ERROR).'
+    key_labels:
+      - db
+    values: [actual_state]
+    query_ref: mssql_qs_options
+
+  - metric_name: mssql_query_store_readonly_reason
+    type: gauge
+    help: 'Query Store readonly_reason bitmask when actual_state is READ_ONLY (0 if not).'
+    key_labels:
+      - db
+    values: [readonly_reason]
+    query_ref: mssql_qs_options
+
+  - metric_name: mssql_query_store_current_storage_size_mb
+    type: gauge
+    help: 'Current Query Store storage size (MB) per database.'
+    key_labels:
+      - db
+    values: [current_storage_size_mb]
+    query_ref: mssql_qs_options
+
+  - metric_name: mssql_query_store_max_storage_size_mb
+    type: gauge
+    help: 'Configured Query Store max storage size (MB) per database.'
+    key_labels:
+      - db
+    values: [max_storage_size_mb]
+    query_ref: mssql_qs_options
+
+queries:
+  - query_name: mssql_qs_enabled
+    query: |
+      SELECT
+          name AS db,
+          CAST(is_query_store_on AS float) AS enabled
+      FROM sys.databases WITH (NOLOCK)
+      WHERE state = 0
+        AND database_id > 4;
+
+  - query_name: mssql_qs_options
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID('tempdb..#qs_opt') IS NOT NULL DROP TABLE #qs_opt;
+      CREATE TABLE #qs_opt (
+          db sysname,
+          desired_state float,
+          actual_state float,
+          readonly_reason float,
+          current_storage_size_mb float,
+          max_storage_size_mb float
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0 AND is_query_store_on = 1 AND database_id > 4;
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'
+          INSERT INTO #qs_opt (
+              db, desired_state, actual_state, readonly_reason,
+              current_storage_size_mb, max_storage_size_mb
+          )
+          SELECT
+              @db_in,
+              CAST(desired_state AS float),
+              CAST(actual_state AS float),
+              CAST(ISNULL(readonly_reason, 0) AS float),
+              CAST(ISNULL(current_storage_size_mb, 0) AS float),
+              CAST(ISNULL(max_storage_size_mb, 0) AS float)
+          FROM ' + QUOTENAME(@db) + N'.sys.database_query_store_options;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT
+          db,
+          desired_state,
+          actual_state,
+          readonly_reason,
+          current_storage_size_mb,
+          max_storage_size_mb
+      FROM #qs_opt;
+
+  - query_name: mssql_qs_top
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID('tempdb..#qs') IS NOT NULL DROP TABLE #qs;
+      CREATE TABLE #qs (
+          db sysname,
+          query_id bigint,
+          object_name nvarchar(256),
+          query_snip nvarchar(120),
+          avg_duration_ms float,
+          avg_cpu_ms float,
+          execution_count float,
+          last_execution_unix float,
+          last_execution_age_seconds float
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0 AND is_query_store_on = 1 AND database_id > 4;
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'
+          INSERT INTO #qs (
+              db, query_id, object_name, query_snip,
+              avg_duration_ms, avg_cpu_ms, execution_count,
+              last_execution_unix, last_execution_age_seconds
+          )
+          SELECT TOP (10)
+              @db_in,
+              q.query_id,
+              ISNULL(OBJECT_SCHEMA_NAME(q.object_id, DB_ID(@db_in)) + N''.'' + OBJECT_NAME(q.object_id, DB_ID(@db_in)), N''(ad-hoc)''),
+              LEFT(REPLACE(REPLACE(REPLACE(qt.query_sql_text, CHAR(13), N'' ''), CHAR(10), N'' ''), N''  '', N'' ''), 120),
+              AVG(rs.avg_duration) / 1000.0,
+              AVG(rs.avg_cpu_time) / 1000.0,
+              SUM(rs.count_executions),
+              CAST(DATEDIFF(SECOND, {d ''1970-01-01''}, CONVERT(datetime2, MAX(rs.last_execution_time))) AS float),
+              CAST(DATEDIFF(SECOND, MAX(rs.last_execution_time), SYSUTCDATETIME()) AS float)
+          FROM ' + QUOTENAME(@db) + N'.sys.query_store_runtime_stats AS rs
+          INNER JOIN ' + QUOTENAME(@db) + N'.sys.query_store_plan AS p ON rs.plan_id = p.plan_id
+          INNER JOIN ' + QUOTENAME(@db) + N'.sys.query_store_query AS q ON p.query_id = q.query_id
+          INNER JOIN ' + QUOTENAME(@db) + N'.sys.query_store_query_text AS qt ON q.query_text_id = qt.query_text_id
+          INNER JOIN ' + QUOTENAME(@db) + N'.sys.query_store_runtime_stats_interval AS rsi ON rs.runtime_stats_interval_id = rsi.runtime_stats_interval_id
+          WHERE rsi.start_time >= DATEADD(HOUR, -6, SYSUTCDATETIME())
+          GROUP BY q.query_id, q.object_id, qt.query_sql_text
+          ORDER BY AVG(rs.avg_duration) DESC;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT TOP (40)
+          db,
+          CAST(query_id AS nvarchar(20)) AS query_id,
+          ISNULL(object_name, N'') AS object_name,
+          ISNULL(query_snip, N'') AS query_snip,
+          CAST(avg_duration_ms AS float) AS avg_duration_ms,
+          CAST(avg_cpu_ms AS float) AS avg_cpu_ms,
+          CAST(execution_count AS float) AS execution_count,
+          CAST(last_execution_unix AS float) AS last_execution_unix,
+          CAST(last_execution_age_seconds AS float) AS last_execution_age_seconds
+      FROM #qs
+      ORDER BY avg_duration_ms DESC;

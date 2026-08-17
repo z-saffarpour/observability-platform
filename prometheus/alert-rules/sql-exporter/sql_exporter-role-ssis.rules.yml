@@ -1,0 +1,17 @@
+# Role pack — SSIS
+groups:
+  - name: sql_exporter.role.ssis
+    interval: 60s
+    rules:
+      - alert: SqlSsisExecutionFailed
+        expr: mssql_ssis_failed_count > 0
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssis
+          collector: mssql_ssis
+        annotations:
+          summary: "SSIS execution failure detected"
+          description: "Package {{ $labels.package }} in project {{ $labels.project }} has recent failures."
+          runbook: "Open SSISDB execution reports and fix package/environment errors."

@@ -1,0 +1,17 @@
+# Role pack — CDC / Change Tracking
+groups:
+  - name: sql_exporter.role.cdc
+    interval: 60s
+    rules:
+      - alert: SqlCdcCaptureBehind
+        expr: mssql_cdc_capture_lag_seconds > 300
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: cdc
+          collector: mssql_cdc_change_tracking
+        annotations:
+          summary: "CDC capture is behind"
+          description: "CDC high endpoint for {{ $labels.db }} is {{ $value | humanizeDuration }} behind."
+          runbook: "Check CDC capture job mode/schedule and scan latency; tune threshold to RPO."

@@ -1,0 +1,4772 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Always On Availability Groups - Primary-node view only (metrics joined to role_desc=PRIMARY). Lag/queues, replica & group health, commit latency, sync flaps, failover readiness. Filter by Server and AG.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "HADR Cluster",
+      "type": "link",
+      "url": "/d/sqlx-hadr-cluster?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Replication",
+      "type": "link",
+      "url": "/d/sqlx-replication?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "CDC",
+      "type": "link",
+      "url": "/d/sqlx-cdc?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Change Tracking",
+      "type": "link",
+      "url": "/d/sqlx-change-tracking?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Restore",
+      "type": "link",
+      "url": "/d/sqlx-restore?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Backup",
+      "type": "link",
+      "url": "/d/sqlx-backup?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Log Usage",
+      "type": "link",
+      "url": "/d/sqlx-log-usage?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "ERRORLOG",
+      "type": "link",
+      "url": "/d/sqlx-errorlog-signals?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Jobs Hub",
+      "type": "link",
+      "url": "/d/sqlx-jobs-hub?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "KPI (Primary view)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          },
+          "unit": "dtdhms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_secondary_lag_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Max Lag",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Lag",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          },
+          "unit": "dtdhms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_estimated_data_loss_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Max Data Loss",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Data Loss",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          },
+          "unit": "dtdhms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_redo_queue_remaining_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Max Redo Drain",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Redo Drain",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 2000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_commit_latency_ms{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Max Commit Lat",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Commit Lat",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "kbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_log_send_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Max Log Send Q",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Log Send Q",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "kbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_redo_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Max Redo Q",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Redo Q",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 4
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum(((mssql_alwayson_is_suspended{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Suspended",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Suspended",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 4
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_is_failover_ready{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} == 0) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Not Failover Ready",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Not Failover Ready",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 4
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_replica_connected_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} == 0) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Disconnected",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Disconnected",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 4
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_replica_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} < 2) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Unhealthy Replicas",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Unhealthy Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 4
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_group_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} < 2) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "legendFormat": "Unhealthy Groups",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Unhealthy Groups",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 4
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum((((mssql_alwayson_sync_state_flaps_24h{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)) >= 0)) or vector(0)",
+          "legendFormat": "Sync Flaps 24h",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sync Flaps 24h",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 101,
+      "panels": [],
+      "title": "Inventory (Primary view)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Data Loss"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 300
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sec Lag"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 120
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Redo Remain"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 120
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Send Remain"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 120
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Redo Q"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 10240
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Send Q"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "kbytes"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1024
+                    },
+                    {
+                      "color": "red",
+                      "value": 10240
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Commit ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 500
+                    },
+                    {
+                      "color": "red",
+                      "value": 2000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 20,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_estimated_data_loss_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_secondary_lag_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_redo_queue_remaining_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_log_send_queue_remaining_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_redo_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_log_send_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, server_primary, server_secondary) (((mssql_alwayson_commit_latency_ms{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "G"
+        }
+      ],
+      "title": "AG Pair Lag / Queues / Commit (Primary only)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "availability_mode_desc": true,
+              "instance": true,
+              "job": true,
+              "owner": true,
+              "window": true
+            },
+            "indexByName": {
+              "AG": 0,
+              "Commit ms": 10,
+              "Data Loss": 4,
+              "Database": 1,
+              "Primary": 2,
+              "Redo Q": 8,
+              "Redo Remain": 6,
+              "Sec Lag": 5,
+              "Secondary": 3,
+              "Send Q": 9,
+              "Send Remain": 7,
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "Value #E": 8,
+              "Value #F": 9,
+              "Value #G": 10,
+              "availability_group_name": 0,
+              "db": 1,
+              "server_primary": 2,
+              "server_secondary": 3
+            },
+            "renameByName": {
+              "Value #A": "Data Loss",
+              "Value #B": "Sec Lag",
+              "Value #C": "Redo Remain",
+              "Value #D": "Send Remain",
+              "Value #E": "Redo Q",
+              "Value #F": "Send Q",
+              "Value #G": "Commit ms",
+              "availability_group_name": "AG",
+              "db": "Database",
+              "server_primary": "Primary",
+              "server_secondary": "Secondary"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Data Loss"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Role"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "PRIMARY": {
+                        "color": "green",
+                        "text": "PRIMARY"
+                      },
+                      "RESOLVING": {
+                        "color": "orange",
+                        "text": "RESOLVING"
+                      },
+                      "SECONDARY": {
+                        "color": "blue",
+                        "text": "SECONDARY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Connected"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "DISCONNECTED"
+                      },
+                      "1": {
+                        "color": "green",
+                        "text": "CONNECTED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sync Health"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 2
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "NOT_HEALTHY"
+                      },
+                      "1": {
+                        "color": "orange",
+                        "text": "PARTIAL"
+                      },
+                      "2": {
+                        "color": "green",
+                        "text": "HEALTHY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disconnected s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 30
+                    },
+                    {
+                      "color": "red",
+                      "value": 120
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Flaps 24h"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, replica_server, role_desc, availability_mode_desc) (((((mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * 0 + 1) * on(instance, availability_group_name, replica_server, role_desc) group_left(availability_mode_desc) (((mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, replica_server, role_desc, availability_mode_desc) (((((mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * 0 + 1) * on(instance, availability_group_name, replica_server, role_desc) group_left() (((mssql_alwayson_replica_connected_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, replica_server, role_desc, availability_mode_desc) (((((mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * 0 + 1) * on(instance, availability_group_name, replica_server, role_desc) group_left() (((mssql_alwayson_replica_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, replica_server, role_desc) (((((mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * 0 + 1) * on(instance, availability_group_name, replica_server, role_desc) group_left() (((mssql_alwayson_disconnected_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, db, replica_server, role_desc) (((((mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * 0 + 1) * on(instance, availability_group_name, replica_server, role_desc) group_left() (((mssql_alwayson_sync_state_flaps_24h{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        }
+      ],
+      "title": "Replicas from Primary (role / connected / sync / flaps)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value #A": true,
+              "__name__": true,
+              "connected_state_desc": true,
+              "failover_mode_desc": true,
+              "instance": true,
+              "job": true,
+              "operational_state_desc": true,
+              "owner": true,
+              "synchronization_health_desc": true
+            },
+            "indexByName": {
+              "AG": 0,
+              "Connected": 5,
+              "Database": 2,
+              "Disconnected s": 7,
+              "Flaps 24h": 8,
+              "Mode": 1,
+              "Replica": 3,
+              "Role": 4,
+              "Sync Health": 6,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "Value #E": 8,
+              "availability_group_name": 0,
+              "availability_mode_desc": 1,
+              "db": 2,
+              "replica_server": 3,
+              "role_desc": 4
+            },
+            "renameByName": {
+              "Value #B": "Connected",
+              "Value #C": "Sync Health",
+              "Value #D": "Disconnected s",
+              "Value #E": "Flaps 24h",
+              "availability_group_name": "AG",
+              "availability_mode_desc": "Mode",
+              "db": "Database",
+              "replica_server": "Replica",
+              "role_desc": "Role"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "AG"
+              },
+              {
+                "desc": false,
+                "field": "Database"
+              },
+              {
+                "desc": false,
+                "field": "Role"
+              },
+              {
+                "desc": false,
+                "field": "Replica"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Role"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "PRIMARY": {
+                        "color": "green",
+                        "text": "PRIMARY"
+                      },
+                      "RESOLVING": {
+                        "color": "orange",
+                        "text": "RESOLVING"
+                      },
+                      "SECONDARY": {
+                        "color": "blue",
+                        "text": "SECONDARY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sync State"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "NOT SYNCHRONIZING"
+                      },
+                      "1": {
+                        "color": "orange",
+                        "text": "SYNCHRONIZING"
+                      },
+                      "2": {
+                        "color": "green",
+                        "text": "SYNCHRONIZED"
+                      },
+                      "3": {
+                        "color": "purple",
+                        "text": "REVERTING"
+                      },
+                      "4": {
+                        "color": "yellow",
+                        "text": "INITIALIZING"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DB Health"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 2
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "NOT_HEALTHY"
+                      },
+                      "1": {
+                        "color": "orange",
+                        "text": "PARTIAL"
+                      },
+                      "2": {
+                        "color": "green",
+                        "text": "HEALTHY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failover Ready"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "NO"
+                      },
+                      "1": {
+                        "color": "green",
+                        "text": "YES"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Suspended"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "text": "no"
+                      },
+                      "1": {
+                        "color": "red",
+                        "text": "YES"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 22,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, replica_server, db, role_desc, availability_mode_desc, synchronization_state_desc, synchronization_health_desc) (((((mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * on(instance, availability_group_name, replica_server, role_desc) group_left(availability_mode_desc) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} * 0 + 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, replica_server, db, role_desc, availability_mode_desc, synchronization_state_desc, synchronization_health_desc) (((((mssql_alwayson_replica_db_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * on(instance, availability_group_name, replica_server, role_desc) group_left(availability_mode_desc) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} * 0 + 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, replica_server, db, role_desc, availability_mode_desc, synchronization_state_desc) (((((mssql_alwayson_is_failover_ready{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * on(instance, availability_group_name, replica_server, role_desc) group_left(availability_mode_desc) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} * 0 + 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (availability_group_name, replica_server, db, role_desc, availability_mode_desc, suspend_reason_desc) (((((mssql_alwayson_replica_db_is_suspended{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))) * on(instance, availability_group_name, replica_server, role_desc) group_left(availability_mode_desc) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"} * 0 + 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        }
+      ],
+      "title": "DB Sync / Health / Failover / Suspended (Primary view)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "is_local": true,
+              "job": true,
+              "owner": true,
+              "suspend_reason_desc": true,
+              "synchronization_health_desc": true,
+              "synchronization_state_desc": true
+            },
+            "indexByName": {
+              "AG": 0,
+              "DB Health": 6,
+              "Database": 2,
+              "Failover Ready": 7,
+              "Mode": 1,
+              "Replica": 3,
+              "Role": 4,
+              "Suspended": 8,
+              "Sync State": 5,
+              "Value #A": 5,
+              "Value #B": 6,
+              "Value #C": 7,
+              "Value #D": 8,
+              "availability_group_name": 0,
+              "availability_mode_desc": 1,
+              "db": 2,
+              "replica_server": 3,
+              "role_desc": 4
+            },
+            "renameByName": {
+              "Value #A": "Sync State",
+              "Value #B": "DB Health",
+              "Value #C": "Failover Ready",
+              "Value #D": "Suspended",
+              "availability_group_name": "AG",
+              "availability_mode_desc": "Mode",
+              "db": "Database",
+              "replica_server": "Replica",
+              "role_desc": "Role",
+              "suspend_reason_desc": "Suspend Reason",
+              "synchronization_health_desc": "Health Desc",
+              "synchronization_state_desc": "Sync Desc"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "AG"
+              },
+              {
+                "desc": false,
+                "field": "Database"
+              },
+              {
+                "desc": false,
+                "field": "Role"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Group Sync"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 2
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "NOT_HEALTHY"
+                      },
+                      "1": {
+                        "color": "orange",
+                        "text": "PARTIAL"
+                      },
+                      "2": {
+                        "color": "green",
+                        "text": "HEALTHY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Primary Recovery"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 2
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "text": "NOT_HEALTHY"
+                      },
+                      "1": {
+                        "color": "orange",
+                        "text": "PARTIAL"
+                      },
+                      "2": {
+                        "color": "green",
+                        "text": "HEALTHY"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "HADR Cluster",
+                    "url": "/d/sqlx-hadr-cluster?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Replication",
+                    "url": "/d/sqlx-replication?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "CDC",
+                    "url": "/d/sqlx-cdc?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Change Tracking",
+                    "url": "/d/sqlx-change-tracking?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Restore",
+                    "url": "/d/sqlx-restore?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Backup",
+                    "url": "/d/sqlx-backup?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Log Usage",
+                    "url": "/d/sqlx-log-usage?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "ERRORLOG",
+                    "url": "/d/sqlx-errorlog-signals?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Jobs Hub",
+                    "url": "/d/sqlx-jobs-hub?${__url_time_range}&var-instance=${__value.raw}"
+                  },
+                  {
+                    "targetBlank": true,
+                    "title": "Overview",
+                    "url": "/d/sqlx-00-overview?${__url_time_range}&var-instance=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 23,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, availability_group_name, primary_replica, primary_recovery_health_desc, synchronization_health_desc) (((mssql_alwayson_group_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, availability_group_name, primary_replica, primary_recovery_health_desc, synchronization_health_desc) (((mssql_alwayson_group_primary_recovery_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "AG Group Health (Primary view)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true
+            },
+            "indexByName": {
+              "AG": 1,
+              "Group Sync": 5,
+              "Host": 0,
+              "Primary": 2,
+              "Primary Recovery": 6,
+              "Recovery Desc": 3,
+              "Sync Desc": 4,
+              "Value #A": 5,
+              "Value #B": 6,
+              "availability_group_name": 1,
+              "instance": 0,
+              "primary_recovery_health_desc": 3,
+              "primary_replica": 2,
+              "synchronization_health_desc": 4
+            },
+            "renameByName": {
+              "Value #A": "Group Sync",
+              "Value #B": "Primary Recovery",
+              "availability_group_name": "AG",
+              "instance": "Host",
+              "primary_recovery_health_desc": "Recovery Desc",
+              "primary_replica": "Primary",
+              "synchronization_health_desc": "Sync Desc"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Group Sync"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "id": 102,
+      "panels": [],
+      "title": "Lag & Queues (Primary view)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_secondary_lag_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Secondary Lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_estimated_data_loss_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Estimated Data Loss",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_log_send_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Log Send Queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_redo_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Redo Queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "KBs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 65
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_log_send_rate_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Log Send Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "KBs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 65
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_redo_rate_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Redo Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 73
+      },
+      "id": 36,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_redo_queue_remaining_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Redo Drain ETA",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 73
+      },
+      "id": 37,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_log_send_queue_remaining_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Log Send Drain ETA",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 81
+      },
+      "id": 38,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_commit_latency_ms{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Commit Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "KBs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 81
+      },
+      "id": 39,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_log_send_rate_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "send rate {{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_redo_queue_growth_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "redo {{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Log send rate / redo queue growth (KB/s)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 89
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Health & Seeding (Primary view)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 90
+      },
+      "id": 40,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_connected_state{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} ({{role_desc}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica Connected (1=ok)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 90
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} ({{role_desc}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica Sync Health (2=healthy)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 98
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_disconnected_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} ({{role_desc}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Disconnected Seconds",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 98
+      },
+      "id": 43,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((((mssql_alwayson_sync_state_flaps_24h{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1)) >= 0)",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} ({{role_desc}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sync State Flaps 24h",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 106
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_group_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{instance}} {{availability_group_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Group Sync Health",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 106
+      },
+      "id": 45,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_group_primary_recovery_health{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{instance}} {{availability_group_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Primary Recovery Health",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 114
+      },
+      "id": 46,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_is_failover_ready{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failover Ready (1=yes)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 114
+      },
+      "id": 47,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_is_suspended{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Suspended (1=yes)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "KBs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 122
+      },
+      "id": 48,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_filestream_send_rate_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{db}} -> {{server_secondary}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Filestream Send Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 122
+      },
+      "id": 49,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "mssql_alwayson_seeding_percent{job=\"sql_exporter\", instance=~\"$instance\"}",
+          "legendFormat": "{{instance}} {{local_database_name}} -> {{remote_machine_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Seeding %",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 130
+      },
+      "id": 104,
+      "panels": [],
+      "title": "Per-replica DB queues (Primary view)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 131
+      },
+      "id": 50,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_db_log_send_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica DB Log Send Queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "kbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 131
+      },
+      "id": 51,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_db_redo_queue_kb{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica DB Redo Queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "KBs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 139
+      },
+      "id": 52,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_db_log_send_rate_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica DB Log Send Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "KBs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 139
+      },
+      "id": 53,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_db_redo_rate_kb_s{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica DB Redo Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 147
+      },
+      "id": 54,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_alwayson_replica_db_secondary_lag_seconds{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", availability_group_name=~\"$ag\", role_desc=\"PRIMARY\"} == 1))",
+          "legendFormat": "{{availability_group_name}} {{replica_server}} {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Replica DB Secondary Lag",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "collector",
+    "alwayson"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\"}, availability_group_name)",
+        "includeAll": true,
+        "label": "AG",
+        "multi": true,
+        "name": "ag",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\"}, availability_group_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Collector alwayson",
+  "uid": "sqlx-alwayson",
+  "version": 29
+}

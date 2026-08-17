@@ -1,0 +1,134 @@
+# P1 — High performance pressure
+groups:
+  - name: sql_exporter.p1.performance
+    interval: 30s
+    rules:
+      - alert: SqlServerCpuHigh
+        expr: mssql_cpu_sqlserver_process_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_cpu
+        annotations:
+          summary: "SQL Server CPU usage is high"
+          description: "SQL Server process CPU is {{ $value | humanize }}%."
+          runbook: "Check top consumers (heavy queries, parallelism, other processes). Tune threshold per instance baseline."
+
+      - alert: SqlFileIoLatencyHigh
+        expr: mssql_file_io_avg_read_latency_ms > 20 or mssql_file_io_avg_write_latency_ms > 20
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_file_io
+        annotations:
+          summary: "SQL Server file I/O latency is high"
+          description: "File {{ $labels.logical_name }} in {{ $labels.db }} exceeds 20 ms average latency."
+          runbook: "Inspect storage latency, pending I/O, and file placement. Exclude idle/archive DBs if noisy."
+
+      - alert: SqlTransactionLogUsageHigh
+        expr: mssql_log_used_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_log_usage
+        annotations:
+          summary: "Transaction log usage is high"
+          description: "Transaction log for {{ $labels.db }} is {{ $value | humanize }}% used."
+          runbook: "Check log_reuse_wait, long transactions, AG/replication lag, and log backup schedule."
+
+      - alert: SqlBlockingPersistent
+        expr: mssql_blocking_count > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_blocking
+        annotations:
+          summary: "Persistent SQL Server blocking"
+          description: "{{ $value }} blocked requests have persisted for five minutes."
+          runbook: "Identify head blocker, wait type, and blocking chain. Kill only when safe and approved."
+
+      - alert: SqlMemoryGrantPressure
+        expr: mssql_memory_grants_pending > 0 or mssql_resource_semaphore_waiter_count > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_memory
+        annotations:
+          summary: "SQL Server memory grant pressure"
+          description: "Queries have waited for memory grants for at least five minutes."
+          runbook: "Review large sorts/hashes, max server memory, Resource Governor, and concurrent grants."
+
+      - alert: SqlTempdbPressure
+        expr: mssql_tempdb_waiting_tasks_count > 0 or mssql_tempdb_version_store_mb > 10240
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_tempdb
+        annotations:
+          summary: "tempdb pressure detected"
+          description: "tempdb has waiting tasks or version store exceeds 10 GiB."
+          runbook: "Check version-store consumers, spill queries, and tempdb file layout/contention."
+
+      - alert: SqlBufferPoolLifeExpectancyLow
+        expr: mssql_buffer_pool_page_life_expectancy > 0 and mssql_buffer_pool_page_life_expectancy < 300
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_buffer_pool
+        annotations:
+          summary: "Buffer pool page life expectancy is low"
+          description: "PLE for {{ $labels.instance }} is {{ $value }} seconds."
+          runbook: "Review memory pressure, large scans, and max server memory."
+
+      - alert: SqlSchedulerPressure
+        expr: mssql_scheduler_total_runnable > 4 or mssql_scheduler_total_work_queue > 0
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_scheduler
+        annotations:
+          summary: "SQL Server scheduler pressure"
+          description: "Runnable tasks or work queue remained elevated for ten minutes."
+          runbook: "Correlate with CPU, CXPACKET/SOS_SCHEDULER_YIELD waits, and heavy queries."
+
+      - alert: SqlLockWaitPersistent
+        expr: mssql_locks_waiting > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_locks
+        annotations:
+          summary: "Persistent lock wait detected"
+          description: "Session {{ $labels.session_id }} is waiting on a lock."
+          runbook: "Inspect blocking chain and lock mode; relate to SqlBlockingPersistent."
+
+      - alert: SqlLongRunningRequest
+        expr: mssql_requests_elapsed_ms > 300000
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_heavy_queries
+        annotations:
+          summary: "A SQL request has run for more than five minutes"
+          description: "Session {{ $labels.session_id }} in {{ $labels.db }} has elapsed {{ $value | humanize }} ms."
+          runbook: "Review query text/plan, waits, and whether the request is expected batch work."

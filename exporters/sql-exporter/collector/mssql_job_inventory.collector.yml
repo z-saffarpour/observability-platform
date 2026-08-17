@@ -1,0 +1,173 @@
+# SQL Agent job inventory / last-run snapshot / next schedule.
+# Live running → mssql_job_running
+# Failures (alerts) → mssql_job_failed
+# History / failures → mssql_job_history
+# Backups → mssql_backup
+#
+#   GRANT SELECT ON msdb.dbo.sysjobservers TO
+#   GRANT SELECT ON msdb.dbo.sysjobs TO
+#   GRANT SELECT ON msdb.dbo.syscategories TO
+#   GRANT SELECT ON msdb.dbo.sysjobschedules TO
+#
+collector_name: mssql_job_inventory
+
+min_interval: 900s
+
+metrics:
+  - metric_name: mssql_job_activity_monitor
+    type: gauge
+    help: 'Last run date/time/duration/unix from sysjobservers (Job Activity Monitor style).'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+      - last_run_status
+    value_label: operation
+    values:
+      - last_run_date
+      - last_run_time
+      - last_run_duration
+      - last_run_unix
+    query_ref: mssql_job_activity_monitor
+
+  - metric_name: mssql_job_enabled
+    type: gauge
+    help: '1 if SQL Agent job is enabled, else 0.'
+    key_labels:
+      - job_name
+      - category_name
+    values: [enabled]
+    query_ref: mssql_job_inventory
+
+  - metric_name: mssql_job_count
+    type: gauge
+    help: 'SQL Agent job count by enabled flag.'
+    key_labels:
+      - enabled
+    values: [job_count]
+    query_ref: mssql_job_count
+
+  - metric_name: mssql_job_last_run_outcome
+    type: gauge
+    help: 'Last run outcome from sysjobservers: 0=Fail 1=Succeed 2=Retry 3=Cancel 4=InProgress 5=Unknown.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+    values: [last_run_outcome]
+    query_ref: mssql_job_last_outcome
+
+  - metric_name: mssql_job_next_run_age_seconds
+    type: gauge
+    help: 'Seconds until next scheduled run (negative = overdue). Only jobs with a next_run_date.'
+    key_labels:
+      - job_name
+      - category_name
+      - enabled
+    values: [next_run_age_seconds]
+    query_ref: mssql_job_next_run
+
+queries:
+  - query_name: mssql_job_activity_monitor
+    query: |
+      SELECT
+          myJob.name AS job_name,
+          myCategory.name AS category_name,
+          CAST(myJob.[enabled] AS nvarchar(5)) AS enabled,
+          CAST(myJobActivityMonitor.[last_run_outcome] AS nvarchar(5)) AS last_run_status,
+          CASE
+            WHEN myJobActivityMonitor.[last_run_date] != 0 THEN
+              DATEDIFF(SECOND, { D '1970-01-01' }, CONVERT(DATE, CAST(myJobActivityMonitor.[last_run_date] AS NVARCHAR(8)), 112))
+            ELSE 0
+          END AS last_run_date,
+          CASE
+            WHEN last_run_time > 0 THEN
+              ((last_run_time / 10000) * 60 * 60
+                + ((last_run_time - (last_run_time / 10000) * 10000) / 100) * 60
+                + (last_run_time - (last_run_time / 100) * 100))
+            ELSE 0
+          END AS last_run_time,
+          CASE
+            WHEN [last_run_duration] > 0 THEN
+              (([last_run_duration] / 10000) * 60 * 60
+                + (([last_run_duration] - ([last_run_duration] / 10000) * 10000) / 100) * 60
+                + ([last_run_duration] - ([last_run_duration] / 100) * 100))
+            ELSE 0
+          END AS last_run_duration,
+          CASE
+            WHEN myJobActivityMonitor.[last_run_date] != 0 THEN
+              DATEDIFF(SECOND, { D '1970-01-01' }, CONVERT(DATE, CAST(myJobActivityMonitor.[last_run_date] AS NVARCHAR(8)), 112))
+              + CASE
+                  WHEN last_run_time > 0 THEN
+                    ((last_run_time / 10000) * 60 * 60
+                      + ((last_run_time - (last_run_time / 10000) * 10000) / 100) * 60
+                      + (last_run_time - (last_run_time / 100) * 100))
+                  ELSE 0
+                END
+            ELSE 0
+          END AS last_run_unix
+      FROM msdb.dbo.sysjobservers AS myJobActivityMonitor WITH (NOLOCK)
+      INNER JOIN msdb.dbo.sysjobs AS myJob WITH (NOLOCK)
+          ON myJobActivityMonitor.job_id = myJob.job_id
+      INNER JOIN msdb.dbo.syscategories AS myCategory WITH (NOLOCK)
+          ON myCategory.category_id = myJob.category_id;
+
+  - query_name: mssql_job_inventory
+    query: |
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS float) AS enabled
+      FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id;
+
+  - query_name: mssql_job_count
+    query: |
+      SELECT
+          CAST([enabled] AS nvarchar(5)) AS enabled,
+          CAST(COUNT(*) AS float) AS job_count
+      FROM msdb.dbo.sysjobs WITH (NOLOCK)
+      GROUP BY [enabled];
+
+  - query_name: mssql_job_last_outcome
+    query: |
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          CAST(js.last_run_outcome AS float) AS last_run_outcome
+      FROM msdb.dbo.sysjobservers AS js WITH (NOLOCK)
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON js.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id;
+
+  - query_name: mssql_job_next_run
+    query: |
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
+          CAST(
+            DATEDIFF(
+              SECOND,
+              GETDATE(),
+              TRY_CONVERT(datetime,
+                STUFF(STUFF(RIGHT('00000000' + CAST(js.next_run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                + ' '
+                + STUFF(STUFF(RIGHT('000000' + CAST(js.next_run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+              )
+            ) AS float
+          ) AS next_run_age_seconds
+      FROM msdb.dbo.sysjobschedules AS js WITH (NOLOCK)
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON js.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      WHERE js.next_run_date > 0
+        AND TRY_CONVERT(datetime,
+              STUFF(STUFF(RIGHT('00000000' + CAST(js.next_run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+              + ' '
+              + STUFF(STUFF(RIGHT('000000' + CAST(js.next_run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+            ) IS NOT NULL;

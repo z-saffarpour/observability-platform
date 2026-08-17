@@ -1,0 +1,664 @@
+# SQL Server Replication (Transactional Push / Pull)
+#
+# Covers instances that are Publisher, Subscriber, Distributor, or mixed
+# (e.g. sql-pub-01 = Publisher+Subscriber Push; sql-sub-01 = Pull Subscriber).
+#
+# When distribution DB is local: agent latency, pending cmds, inventory.
+# When only subscribed (remote distributor): DB flags + local pull-agent jobs.
+# Safe when replication is absent (empty result sets).
+#
+# Permissions:
+#   VIEW SERVER STATE
+#   SELECT on distribution.* (if Distributor)
+#   SELECT on msdb.dbo.sysjobs / sysjobhistory / syscategories
+#
+collector_name: mssql_replication
+
+min_interval: 60s
+
+metrics:
+  # -------------------------------------------------------------------------
+  # Database role flags (Publisher / Subscriber / Distributor)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_replication_published_databases
+    type: gauge
+    help: '1 if database is published (sys.databases.is_published).'
+    key_labels:
+      - db
+    values: [is_published]
+    query_ref: mssql_repl_db_flags
+
+  - metric_name: mssql_replication_subscribed_databases
+    type: gauge
+    help: '1 if database is subscribed (sys.databases.is_subscribed).'
+    key_labels:
+      - db
+    values: [is_subscribed]
+    query_ref: mssql_repl_db_flags
+
+  - metric_name: mssql_replication_merge_published_databases
+    type: gauge
+    help: '1 if database is merge-published.'
+    key_labels:
+      - db
+    values: [is_merge_published]
+    query_ref: mssql_repl_db_flags
+
+  - metric_name: mssql_replication_is_distributor
+    type: gauge
+    help: '1 if this instance hosts the distribution database.'
+    values: [is_distributor]
+    query_ref: mssql_repl_is_distributor
+
+  # -------------------------------------------------------------------------
+  # Inventory (from local distribution DB when present)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_replication_publication
+    type: gauge
+    help: '1 per transactional publication known to the local Distributor.'
+    key_labels:
+      - publisher
+      - publisher_db
+      - publication
+    values: [info]
+    query_ref: mssql_repl_publications
+
+  - metric_name: mssql_replication_subscription
+    type: gauge
+    help: '1 per subscription. subscription_type: Push / Pull / Anonymous.'
+    key_labels:
+      - publisher
+      - publisher_db
+      - publication
+      - subscriber
+      - subscriber_db
+      - subscription_type
+    values: [info]
+    query_ref: mssql_repl_subscriptions
+
+  # -------------------------------------------------------------------------
+  # Distribution Agent (Push runs at Distributor; Pull runs at Subscriber)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_replication_distributor_latency_seconds
+    type: gauge
+    help: 'Latest Distribution Agent delivery_latency (seconds) from MSdistribution_history.'
+    key_labels:
+      - publisher
+      - publisher_db
+      - publication
+      - subscriber
+      - subscriber_db
+      - agent_name
+      - subscription_type
+    values: [latency_seconds]
+    query_ref: mssql_repl_distributor_latency
+
+  - metric_name: mssql_replication_pending_commands
+    type: gauge
+    help: 'Undelivered commands in distribution DB (MSdistribution_status).'
+    key_labels:
+      - publisher
+      - publisher_db
+      - subscriber
+      - subscriber_db
+      - agent_name
+      - subscription_type
+    values: [UndelivCmdsInDistDB]
+    query_ref: mssql_repl_pending
+
+  - metric_name: mssql_replication_distribution_delivered_commands
+    type: gauge
+    help: 'Commands delivered in the latest Distribution Agent history row.'
+    key_labels:
+      - publisher_db
+      - subscriber_db
+      - agent_name
+      - subscription_type
+    values: [delivered_commands]
+    query_ref: mssql_repl_distributor_latency
+
+  - metric_name: mssql_replication_distribution_agent_status
+    type: gauge
+    help: 'Latest Distribution Agent runstatus (1=start 2=succeed 3=in progress 4=idle 5=retry 6=fail).'
+    key_labels:
+      - publisher_db
+      - subscriber_db
+      - agent_name
+      - subscription_type
+      - status_desc
+    values: [runstatus]
+    query_ref: mssql_repl_distributor_latency
+
+  - metric_name: mssql_replication_distribution_agent_last_run_age_seconds
+    type: gauge
+    help: 'Seconds since last Distribution Agent history entry.'
+    key_labels:
+      - publisher_db
+      - subscriber_db
+      - agent_name
+      - subscription_type
+    values: [last_run_age_seconds]
+    query_ref: mssql_repl_distributor_latency
+
+  # -------------------------------------------------------------------------
+  # Log Reader Agent (Publisher side — required for transactional repl)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_replication_logreader_latency_seconds
+    type: gauge
+    help: 'Latest Log Reader Agent delivery_latency (seconds).'
+    key_labels:
+      - publisher
+      - publisher_db
+      - agent_name
+    values: [latency_seconds]
+    query_ref: mssql_repl_logreader
+
+  - metric_name: mssql_replication_logreader_delivered_commands
+    type: gauge
+    help: 'Commands delivered in the latest Log Reader history row.'
+    key_labels:
+      - publisher_db
+      - agent_name
+    values: [delivered_commands]
+    query_ref: mssql_repl_logreader
+
+  - metric_name: mssql_replication_logreader_agent_status
+    type: gauge
+    help: 'Latest Log Reader runstatus (1=start 2=succeed 3=in progress 4=idle 5=retry 6=fail).'
+    key_labels:
+      - publisher_db
+      - agent_name
+      - status_desc
+    values: [runstatus]
+    query_ref: mssql_repl_logreader
+
+  - metric_name: mssql_replication_logreader_agent_last_run_age_seconds
+    type: gauge
+    help: 'Seconds since last Log Reader history entry.'
+    key_labels:
+      - publisher_db
+      - agent_name
+    values: [last_run_age_seconds]
+    query_ref: mssql_repl_logreader
+
+  # -------------------------------------------------------------------------
+  # Snapshot Agent
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_replication_snapshot_agent_status
+    type: gauge
+    help: 'Latest Snapshot Agent runstatus (1=start 2=succeed 3=in progress 4=idle 5=retry 6=fail).'
+    key_labels:
+      - publisher_db
+      - publication
+      - agent_name
+      - status_desc
+    values: [runstatus]
+    query_ref: mssql_repl_snapshot
+
+  - metric_name: mssql_replication_snapshot_agent_last_run_age_seconds
+    type: gauge
+    help: 'Seconds since last Snapshot Agent history entry.'
+    key_labels:
+      - publisher_db
+      - publication
+      - agent_name
+    values: [last_run_age_seconds]
+    query_ref: mssql_repl_snapshot
+
+  # -------------------------------------------------------------------------
+  # Subscriber-local: SQL Agent jobs in REPL-* categories (esp. Pull on sql-sub-01)
+  # -------------------------------------------------------------------------
+  - metric_name: mssql_replication_agent_job_enabled
+    type: gauge
+    help: '1 if replication-related SQL Agent job is enabled (local instance).'
+    key_labels:
+      - job_name
+      - category_name
+      - agent_role
+    values: [is_enabled]
+    query_ref: mssql_repl_agent_jobs
+
+  - metric_name: mssql_replication_agent_job_last_run_status
+    type: gauge
+    help: 'Last SQL Agent run outcome for replication jobs (0=fail 1=succeed 2=retry 3=cancel 4=in progress; -1=never).'
+    key_labels:
+      - job_name
+      - category_name
+      - agent_role
+      - last_run_outcome_desc
+    values: [last_run_outcome]
+    query_ref: mssql_repl_agent_jobs
+
+  - metric_name: mssql_replication_agent_job_last_run_age_seconds
+    type: gauge
+    help: 'Seconds since last SQL Agent run of a replication job (-1 if never).'
+    key_labels:
+      - job_name
+      - category_name
+      - agent_role
+    values: [last_run_age_seconds]
+    query_ref: mssql_repl_agent_jobs
+
+  - metric_name: mssql_replication_agent_job_running
+    type: gauge
+    help: '1 if replication SQL Agent job is currently executing.'
+    key_labels:
+      - job_name
+      - category_name
+      - agent_role
+    values: [is_running]
+    query_ref: mssql_repl_agent_jobs
+
+queries:
+  - query_name: mssql_repl_db_flags
+    query: |
+      SELECT
+          name AS db,
+          CAST(is_published AS float) AS is_published,
+          CAST(is_subscribed AS float) AS is_subscribed,
+          CAST(is_merge_published AS float) AS is_merge_published
+      FROM sys.databases WITH (NOLOCK)
+      WHERE state = 0
+        AND (is_published = 1
+             OR is_subscribed = 1
+             OR is_merge_published = 1
+             OR is_distributor = 1);
+
+  - query_name: mssql_repl_is_distributor
+    query: |
+      SELECT CAST(CASE WHEN DB_ID(N'distribution') IS NOT NULL THEN 1 ELSE 0 END AS float) AS is_distributor;
+
+  - query_name: mssql_repl_publications
+    query: |
+      IF DB_ID(N'distribution') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSpublications') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS publisher,
+                 CAST(N'' AS nvarchar(128)) AS publisher_db,
+                 CAST(N'' AS nvarchar(128)) AS publication,
+                 CAST(NULL AS float) AS info
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (100)
+              CASE
+                  WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                  THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                  ELSE srv.name
+              END AS publisher,
+              ISNULL(p.publisher_db, N'') AS publisher_db,
+              ISNULL(p.publication, N'') AS publication,
+              CAST(1 AS float) AS info
+          FROM distribution.dbo.MSpublications AS p WITH (NOLOCK)
+          LEFT JOIN master.sys.servers AS srv WITH (NOLOCK)
+              ON srv.server_id = p.publisher_id
+          ORDER BY publisher, p.publisher_db, p.publication;
+      END
+
+  - query_name: mssql_repl_subscriptions
+    query: |
+      IF DB_ID(N'distribution') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSsubscriptions') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSpublications') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS publisher,
+                 CAST(N'' AS nvarchar(128)) AS publisher_db,
+                 CAST(N'' AS nvarchar(128)) AS publication,
+                 CAST(N'' AS nvarchar(128)) AS subscriber,
+                 CAST(N'' AS nvarchar(128)) AS subscriber_db,
+                 CAST(N'' AS nvarchar(32)) AS subscription_type,
+                 CAST(NULL AS float) AS info
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (200)
+              CASE
+                  WHEN pub_srv.name IS NULL OR pub_srv.name IN (N'', N'repl_distributor')
+                  THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                  ELSE pub_srv.name
+              END AS publisher,
+              ISNULL(p.publisher_db, N'') AS publisher_db,
+              ISNULL(p.publication, N'') AS publication,
+              ISNULL(sub_srv.name, N'') AS subscriber,
+              ISNULL(s.subscriber_db, N'') AS subscriber_db,
+              CASE s.subscription_type
+                  WHEN 0 THEN N'Push'
+                  WHEN 1 THEN N'Pull'
+                  WHEN 2 THEN N'Anonymous'
+                  ELSE N'Unknown'
+              END AS subscription_type,
+              CAST(1 AS float) AS info
+          FROM distribution.dbo.MSsubscriptions AS s WITH (NOLOCK)
+          INNER JOIN distribution.dbo.MSpublications AS p WITH (NOLOCK)
+              ON s.publication_id = p.publication_id
+             AND s.publisher_database_id = p.publisher_database_id
+          LEFT JOIN master.sys.servers AS pub_srv WITH (NOLOCK)
+              ON pub_srv.server_id = p.publisher_id
+          LEFT JOIN master.sys.servers AS sub_srv WITH (NOLOCK)
+              ON sub_srv.server_id = s.subscriber_id
+          WHERE s.subscriber_id >= 0
+          ORDER BY pub_srv.name, p.publisher_db, p.publication, sub_srv.name;
+      END
+
+  - query_name: mssql_repl_distributor_latency
+    query: |
+      IF DB_ID(N'distribution') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSdistribution_history') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSdistribution_agents') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS publisher,
+                 CAST(N'' AS nvarchar(128)) AS publisher_db,
+                 CAST(N'' AS nvarchar(128)) AS publication,
+                 CAST(N'' AS nvarchar(128)) AS subscriber,
+                 CAST(N'' AS nvarchar(128)) AS subscriber_db,
+                 CAST(N'' AS nvarchar(200)) AS agent_name,
+                 CAST(N'' AS nvarchar(32)) AS subscription_type,
+                 CAST(N'' AS nvarchar(32)) AS status_desc,
+                 CAST(NULL AS float) AS latency_seconds,
+                 CAST(NULL AS float) AS delivered_commands,
+                 CAST(NULL AS float) AS runstatus,
+                 CAST(NULL AS float) AS last_run_age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          ;WITH latest AS (
+              SELECT
+                  a.publisher_db,
+                  a.publication,
+                  a.subscriber_db,
+                  a.name AS agent_name,
+                  a.subscription_type,
+                  ISNULL(
+                      (SELECT TOP (1)
+                           CASE
+                               WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                               THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                               ELSE srv.name
+                           END
+                       FROM master.sys.servers AS srv WITH (NOLOCK)
+                       WHERE srv.server_id = a.publisher_id),
+                      CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                  ) AS publisher,
+                  ISNULL(
+                      (SELECT TOP (1) srv.name
+                       FROM master.sys.servers AS srv WITH (NOLOCK)
+                       WHERE srv.server_id = a.subscriber_id),
+                      N''
+                  ) AS subscriber,
+                  h.delivery_latency,
+                  h.delivered_commands,
+                  h.runstatus,
+                  h.time,
+                  ROW_NUMBER() OVER (PARTITION BY h.agent_id ORDER BY h.time DESC) AS rn
+              FROM distribution.dbo.MSdistribution_history AS h WITH (NOLOCK)
+              INNER JOIN distribution.dbo.MSdistribution_agents AS a WITH (NOLOCK)
+                  ON h.agent_id = a.id
+          )
+          SELECT TOP (80)
+              ISNULL(publisher, N'') AS publisher,
+              ISNULL(publisher_db, N'') AS publisher_db,
+              ISNULL(publication, N'') AS publication,
+              ISNULL(subscriber, N'') AS subscriber,
+              ISNULL(subscriber_db, N'') AS subscriber_db,
+              ISNULL(agent_name, N'') AS agent_name,
+              CASE subscription_type
+                  WHEN 0 THEN N'Push'
+                  WHEN 1 THEN N'Pull'
+                  WHEN 2 THEN N'Anonymous'
+                  ELSE N'Unknown'
+              END AS subscription_type,
+              CASE runstatus
+                  WHEN 1 THEN N'start'
+                  WHEN 2 THEN N'succeed'
+                  WHEN 3 THEN N'in_progress'
+                  WHEN 4 THEN N'idle'
+                  WHEN 5 THEN N'retry'
+                  WHEN 6 THEN N'fail'
+                  ELSE N'unknown'
+              END AS status_desc,
+              CAST(ISNULL(delivery_latency, 0) AS float) / 1000.0 AS latency_seconds,
+              CAST(ISNULL(delivered_commands, 0) AS float) AS delivered_commands,
+              CAST(ISNULL(runstatus, 0) AS float) AS runstatus,
+              CAST(DATEDIFF(SECOND, time, GETDATE()) AS float) AS last_run_age_seconds
+          FROM latest
+          WHERE rn = 1;
+      END
+
+  - query_name: mssql_repl_pending
+    query: |
+      IF DB_ID(N'distribution') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSdistribution_status') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSdistribution_agents') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS publisher,
+                 CAST(N'' AS nvarchar(128)) AS publisher_db,
+                 CAST(N'' AS nvarchar(128)) AS subscriber,
+                 CAST(N'' AS nvarchar(128)) AS subscriber_db,
+                 CAST(N'' AS nvarchar(200)) AS agent_name,
+                 CAST(N'' AS nvarchar(32)) AS subscription_type,
+                 CAST(NULL AS float) AS UndelivCmdsInDistDB
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (80)
+              ISNULL(
+                  (SELECT TOP (1)
+                       CASE
+                           WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                           THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                           ELSE srv.name
+                       END
+                   FROM master.sys.servers AS srv WITH (NOLOCK)
+                   WHERE srv.server_id = a.publisher_id),
+                  CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+              ) AS publisher,
+              ISNULL(a.publisher_db, N'') AS publisher_db,
+              ISNULL(
+                  (SELECT TOP (1) srv.name
+                   FROM master.sys.servers AS srv WITH (NOLOCK)
+                   WHERE srv.server_id = a.subscriber_id),
+                  N''
+              ) AS subscriber,
+              ISNULL(a.subscriber_db, N'') AS subscriber_db,
+              ISNULL(a.name, N'') AS agent_name,
+              CASE a.subscription_type
+                  WHEN 0 THEN N'Push'
+                  WHEN 1 THEN N'Pull'
+                  WHEN 2 THEN N'Anonymous'
+                  ELSE N'Unknown'
+              END AS subscription_type,
+              CAST(SUM(s.UndelivCmdsInDistDB) AS float) AS UndelivCmdsInDistDB
+          FROM distribution.dbo.MSdistribution_status AS s WITH (NOLOCK)
+          INNER JOIN distribution.dbo.MSdistribution_agents AS a WITH (NOLOCK)
+              ON s.agent_id = a.id
+          GROUP BY
+              a.publisher_id,
+              a.publisher_db,
+              a.subscriber_id,
+              a.subscriber_db,
+              a.name,
+              a.subscription_type
+          ORDER BY SUM(s.UndelivCmdsInDistDB) DESC;
+      END
+
+  - query_name: mssql_repl_logreader
+    query: |
+      IF DB_ID(N'distribution') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSlogreader_history') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSlogreader_agents') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS publisher,
+                 CAST(N'' AS nvarchar(128)) AS publisher_db,
+                 CAST(N'' AS nvarchar(200)) AS agent_name,
+                 CAST(N'' AS nvarchar(32)) AS status_desc,
+                 CAST(NULL AS float) AS latency_seconds,
+                 CAST(NULL AS float) AS delivered_commands,
+                 CAST(NULL AS float) AS runstatus,
+                 CAST(NULL AS float) AS last_run_age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          ;WITH latest AS (
+              SELECT
+                  a.publisher_db,
+                  a.name AS agent_name,
+                  ISNULL(
+                      (SELECT TOP (1)
+                           CASE
+                               WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                               THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                               ELSE srv.name
+                           END
+                       FROM master.sys.servers AS srv WITH (NOLOCK)
+                       WHERE srv.server_id = a.publisher_id),
+                      CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                  ) AS publisher,
+                  h.delivery_latency,
+                  h.delivered_commands,
+                  h.runstatus,
+                  h.time,
+                  ROW_NUMBER() OVER (PARTITION BY h.agent_id ORDER BY h.time DESC) AS rn
+              FROM distribution.dbo.MSlogreader_history AS h WITH (NOLOCK)
+              INNER JOIN distribution.dbo.MSlogreader_agents AS a WITH (NOLOCK)
+                  ON h.agent_id = a.id
+          )
+          SELECT TOP (40)
+              ISNULL(publisher, N'') AS publisher,
+              ISNULL(publisher_db, N'') AS publisher_db,
+              ISNULL(agent_name, N'') AS agent_name,
+              CASE runstatus
+                  WHEN 1 THEN N'start'
+                  WHEN 2 THEN N'succeed'
+                  WHEN 3 THEN N'in_progress'
+                  WHEN 4 THEN N'idle'
+                  WHEN 5 THEN N'retry'
+                  WHEN 6 THEN N'fail'
+                  ELSE N'unknown'
+              END AS status_desc,
+              CAST(ISNULL(delivery_latency, 0) AS float) / 1000.0 AS latency_seconds,
+              CAST(ISNULL(delivered_commands, 0) AS float) AS delivered_commands,
+              CAST(ISNULL(runstatus, 0) AS float) AS runstatus,
+              CAST(DATEDIFF(SECOND, time, GETDATE()) AS float) AS last_run_age_seconds
+          FROM latest
+          WHERE rn = 1;
+      END
+
+  - query_name: mssql_repl_snapshot
+    query: |
+      IF DB_ID(N'distribution') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSsnapshot_history') IS NULL
+         OR OBJECT_ID(N'distribution.dbo.MSsnapshot_agents') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS publisher_db,
+                 CAST(N'' AS nvarchar(128)) AS publication,
+                 CAST(N'' AS nvarchar(200)) AS agent_name,
+                 CAST(N'' AS nvarchar(32)) AS status_desc,
+                 CAST(NULL AS float) AS runstatus,
+                 CAST(NULL AS float) AS last_run_age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          ;WITH latest AS (
+              SELECT
+                  a.publisher_db,
+                  a.publication,
+                  a.name AS agent_name,
+                  h.runstatus,
+                  h.time,
+                  ROW_NUMBER() OVER (PARTITION BY h.agent_id ORDER BY h.time DESC) AS rn
+              FROM distribution.dbo.MSsnapshot_history AS h WITH (NOLOCK)
+              INNER JOIN distribution.dbo.MSsnapshot_agents AS a WITH (NOLOCK)
+                  ON h.agent_id = a.id
+          )
+          SELECT TOP (40)
+              ISNULL(publisher_db, N'') AS publisher_db,
+              ISNULL(publication, N'') AS publication,
+              ISNULL(agent_name, N'') AS agent_name,
+              CASE runstatus
+                  WHEN 1 THEN N'start'
+                  WHEN 2 THEN N'succeed'
+                  WHEN 3 THEN N'in_progress'
+                  WHEN 4 THEN N'idle'
+                  WHEN 5 THEN N'retry'
+                  WHEN 6 THEN N'fail'
+                  ELSE N'unknown'
+              END AS status_desc,
+              CAST(ISNULL(runstatus, 0) AS float) AS runstatus,
+              CAST(DATEDIFF(SECOND, time, GETDATE()) AS float) AS last_run_age_seconds
+          FROM latest
+          WHERE rn = 1;
+      END
+
+  - query_name: mssql_repl_agent_jobs
+    query: |
+      SELECT TOP (80)
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CASE
+              WHEN c.name LIKE N'REPL-%Distribution%' THEN N'distribution'
+              WHEN c.name LIKE N'REPL-%LogReader%' THEN N'logreader'
+              WHEN c.name LIKE N'REPL-%Snapshot%' THEN N'snapshot'
+              WHEN c.name LIKE N'REPL-%Merge%' THEN N'merge'
+              WHEN c.name LIKE N'REPL-%QueueReader%' THEN N'queuereader'
+              ELSE N'other'
+          END AS agent_role,
+          CAST(j.enabled AS float) AS is_enabled,
+          CAST(CASE WHEN ja.job_id IS NOT NULL THEN 1 ELSE 0 END AS float) AS is_running,
+          CAST(
+              CASE
+                  WHEN jh.run_status IS NULL THEN -1
+                  ELSE jh.run_status
+              END AS float
+          ) AS last_run_outcome,
+          CASE
+              WHEN jh.run_status IS NULL THEN N'never'
+              WHEN jh.run_status = 0 THEN N'fail'
+              WHEN jh.run_status = 1 THEN N'succeed'
+              WHEN jh.run_status = 2 THEN N'retry'
+              WHEN jh.run_status = 3 THEN N'cancel'
+              WHEN jh.run_status = 4 THEN N'in_progress'
+              ELSE N'unknown'
+          END AS last_run_outcome_desc,
+          CAST(
+              CASE
+                  WHEN jh.run_date IS NULL OR jh.run_date = 0 THEN -1
+                  ELSE DATEDIFF(
+                      SECOND,
+                      CONVERT(
+                          datetime,
+                          STUFF(STUFF(CONVERT(char(8), jh.run_date), 5, 0, '-'), 8, 0, '-')
+                          + ' '
+                          + STUFF(STUFF(RIGHT('000000' + CONVERT(varchar(6), ISNULL(jh.run_time, 0)), 6), 3, 0, ':'), 6, 0, ':')
+                      ),
+                      GETDATE()
+                  )
+              END AS float
+          ) AS last_run_age_seconds
+      FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+      INNER JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      LEFT JOIN msdb.dbo.sysjobactivity AS ja WITH (NOLOCK)
+          ON j.job_id = ja.job_id
+         AND ja.session_id = (
+                SELECT MAX(session_id) FROM msdb.dbo.syssessions WITH (NOLOCK)
+             )
+         AND ja.stop_execution_date IS NULL
+         AND ja.start_execution_date IS NOT NULL
+      OUTER APPLY (
+          SELECT TOP (1)
+              h.run_status,
+              h.run_date,
+              h.run_time
+          FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+          WHERE h.job_id = j.job_id
+            AND h.step_id = 0
+          ORDER BY h.instance_id DESC
+      ) AS jh
+      WHERE c.name LIKE N'REPL-%'
+      ORDER BY c.name, j.name;

@@ -1,0 +1,44 @@
+# Sample Prometheus config — default = P1 High (same as windows_exporter rollout style).
+# Prefer copying a block from prometheus/profiles/*.yml into your real prometheus.yml.
+#
+# Exporter collectors: profiles/alert-p1.yml (or oltp.yml / alert-p2.yml).
+
+global:
+  scrape_interval: 90s
+  evaluation_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "CHANGE_ME_ALERTMANAGER_HOST:9093"
+
+rule_files:
+  - "rules/sql_exporter-recording.rules.yml"
+  - "rules/sql_exporter-p0-availability.rules.yml"
+  - "rules/sql_exporter-p0-hadr.rules.yml"
+  - "rules/sql_exporter-p0-jobs.rules.yml"
+  - "rules/sql_exporter-p1-performance.rules.yml"
+  - "rules/sql_exporter-p1-space.rules.yml"
+  - "rules/sql_exporter-p1-jobs.rules.yml"
+  - "rules/sql_exporter-p1-signals.rules.yml"
+  # Optional P2:
+  # - "rules/sql_exporter-p2-performance.rules.yml"
+  # - "rules/sql_exporter-p2-maintenance.rules.yml"
+  # - "rules/sql_exporter-p2-config.rules.yml"
+  # Optional role packs:
+  # - "rules/sql_exporter-role-replication.rules.yml"
+  # - "rules/sql_exporter-role-ssis.rules.yml"
+  # - "rules/sql_exporter-role-security.rules.yml"
+  # - "rules/sql_exporter-role-cdc.rules.yml"
+
+scrape_configs:
+  - job_name: sql_exporter
+    scrape_interval: 90s
+    scrape_timeout: 60s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "SQL01:9399"
+        labels:
+          env: production

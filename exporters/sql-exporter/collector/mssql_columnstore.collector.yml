@@ -1,0 +1,322 @@
+# Columnstore rowgroup health (useful on DWH / BI hosts).
+# Empty result when no columnstore indexes exist.
+#
+# Signals:
+#   - OPEN / CLOSED backlog → tuple mover lag
+#   - deleted_ratio on COMPRESSED → REORGANIZE candidate
+#   - avg_rows_per_rg / underfilled → fragmentation / tiny rowgroups
+#   - top bloated objects → actionable REORGANIZE targets
+#
+#   GRANT VIEW SERVER STATE TO
+#   VIEW DATABASE STATE / access on user databases with columnstore
+#
+collector_name: mssql_columnstore
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_columnstore_rowgroups
+    type: gauge
+    help: 'Columnstore rowgroup count by state (OPEN/CLOSED/COMPRESSED/…).'
+    key_labels:
+      - db
+      - state_desc
+    values: [rowgroup_count]
+    query_ref: mssql_columnstore_rowgroups
+
+  - metric_name: mssql_columnstore_total_rows
+    type: gauge
+    help: 'Total rows in columnstore rowgroups by state.'
+    key_labels:
+      - db
+      - state_desc
+    values: [total_rows]
+    query_ref: mssql_columnstore_rowgroups
+
+  - metric_name: mssql_columnstore_deleted_rows
+    type: gauge
+    help: 'Deleted rows in columnstore rowgroups by state (COMPRESSED bloat signal).'
+    key_labels:
+      - db
+      - state_desc
+    values: [deleted_rows]
+    query_ref: mssql_columnstore_rowgroups
+
+  - metric_name: mssql_columnstore_size_mb
+    type: gauge
+    help: 'Columnstore rowgroup size (MB) by state.'
+    key_labels:
+      - db
+      - state_desc
+    values: [size_mb]
+    query_ref: mssql_columnstore_rowgroups
+
+  - metric_name: mssql_columnstore_deleted_ratio
+    type: gauge
+    help: 'deleted_rows / NULLIF(total_rows,0) for COMPRESSED rowgroups per database.'
+    key_labels:
+      - db
+    values: [deleted_ratio]
+    query_ref: mssql_columnstore_health
+
+  - metric_name: mssql_columnstore_avg_rows_per_rg
+    type: gauge
+    help: 'Average total_rows per COMPRESSED rowgroup (ideal ~1,048,576).'
+    key_labels:
+      - db
+    values: [avg_rows_per_rg]
+    query_ref: mssql_columnstore_health
+
+  - metric_name: mssql_columnstore_underfilled_rg
+    type: gauge
+    help: 'Count of COMPRESSED rowgroups with total_rows < 100000 (tiny / fragmented RGs).'
+    key_labels:
+      - db
+    values: [underfilled_rg]
+    query_ref: mssql_columnstore_health
+
+  - metric_name: mssql_columnstore_object_deleted_ratio
+    type: gauge
+    help: 'Top columnstore objects by COMPRESSED deleted-row ratio (REORGANIZE candidates).'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+    values: [deleted_ratio]
+    query_ref: mssql_columnstore_top_objects
+
+  - metric_name: mssql_columnstore_object_deleted_rows
+    type: gauge
+    help: 'Deleted rows in COMPRESSED rowgroups for top bloated columnstore objects.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+    values: [deleted_rows]
+    query_ref: mssql_columnstore_top_objects
+
+  - metric_name: mssql_columnstore_object_total_rows
+    type: gauge
+    help: 'Total rows in COMPRESSED rowgroups for top bloated columnstore objects.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+    values: [total_rows]
+    query_ref: mssql_columnstore_top_objects
+
+  - metric_name: mssql_columnstore_object_rowgroups
+    type: gauge
+    help: 'COMPRESSED rowgroup count for top bloated columnstore objects.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+    values: [rowgroup_count]
+    query_ref: mssql_columnstore_top_objects
+
+  - metric_name: mssql_columnstore_object_size_mb
+    type: gauge
+    help: 'COMPRESSED size (MB) for top bloated columnstore objects.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+    values: [size_mb]
+    query_ref: mssql_columnstore_top_objects
+
+queries:
+  - query_name: mssql_columnstore_rowgroups
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_cs_rg') IS NOT NULL DROP TABLE #mssql_cs_rg;
+      CREATE TABLE #mssql_cs_rg (
+          db sysname NOT NULL,
+          state_desc nvarchar(60) NOT NULL,
+          rowgroup_count float NOT NULL,
+          total_rows float NOT NULL,
+          deleted_rows float NOT NULL,
+          size_mb float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model', N'msdb')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF EXISTS (SELECT 1 FROM sys.column_store_row_groups WITH (NOLOCK))
+            INSERT INTO #mssql_cs_rg (db, state_desc, rowgroup_count, total_rows, deleted_rows, size_mb)
+            SELECT
+                DB_NAME(),
+                ISNULL(state_desc, N''),
+                CAST(COUNT(*) AS float),
+                CAST(SUM(CAST(total_rows AS bigint)) AS float),
+                CAST(SUM(CAST(deleted_rows AS bigint)) AS float),
+                CAST(SUM(CAST(size_in_bytes AS bigint)) AS float) / 1024.0 / 1024.0
+            FROM sys.column_store_row_groups WITH (NOLOCK)
+            GROUP BY state_desc;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, state_desc, rowgroup_count, total_rows, deleted_rows, size_mb
+      FROM #mssql_cs_rg;
+
+  - query_name: mssql_columnstore_health
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_cs_health') IS NOT NULL DROP TABLE #mssql_cs_health;
+      CREATE TABLE #mssql_cs_health (
+          db sysname NOT NULL,
+          deleted_ratio float NOT NULL,
+          avg_rows_per_rg float NOT NULL,
+          underfilled_rg float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model', N'msdb')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF EXISTS (
+              SELECT 1 FROM sys.column_store_row_groups WITH (NOLOCK)
+              WHERE state_desc = N''COMPRESSED''
+            )
+            INSERT INTO #mssql_cs_health (db, deleted_ratio, avg_rows_per_rg, underfilled_rg)
+            SELECT
+                DB_NAME(),
+                CAST(
+                  SUM(CAST(deleted_rows AS float))
+                  / NULLIF(SUM(CAST(total_rows AS float)), 0)
+                  AS float
+                ),
+                CAST(
+                  AVG(CAST(total_rows AS float))
+                  AS float
+                ),
+                CAST(
+                  SUM(CASE WHEN total_rows < 100000 THEN 1 ELSE 0 END)
+                  AS float
+                )
+            FROM sys.column_store_row_groups WITH (NOLOCK)
+            WHERE state_desc = N''COMPRESSED'';';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, deleted_ratio, avg_rows_per_rg, underfilled_rg
+      FROM #mssql_cs_health;
+
+  - query_name: mssql_columnstore_top_objects
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_cs_obj') IS NOT NULL DROP TABLE #mssql_cs_obj;
+      CREATE TABLE #mssql_cs_obj (
+          db sysname NOT NULL,
+          schema_name sysname NOT NULL,
+          table_name sysname NOT NULL,
+          index_name sysname NOT NULL,
+          deleted_ratio float NOT NULL,
+          deleted_rows float NOT NULL,
+          total_rows float NOT NULL,
+          rowgroup_count float NOT NULL,
+          size_mb float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND name NOT IN (N'tempdb', N'model', N'msdb')
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            IF EXISTS (
+              SELECT 1 FROM sys.column_store_row_groups WITH (NOLOCK)
+              WHERE state_desc = N''COMPRESSED''
+                AND deleted_rows > 0
+            )
+            INSERT INTO #mssql_cs_obj (
+              db, schema_name, table_name, index_name,
+              deleted_ratio, deleted_rows, total_rows, rowgroup_count, size_mb
+            )
+            SELECT TOP (15)
+                DB_NAME(),
+                ISNULL(OBJECT_SCHEMA_NAME(rg.object_id), N''),
+                ISNULL(OBJECT_NAME(rg.object_id), N''),
+                ISNULL(i.name, N''),
+                CAST(
+                  SUM(CAST(rg.deleted_rows AS float))
+                  / NULLIF(SUM(CAST(rg.total_rows AS float)), 0)
+                  AS float
+                ),
+                CAST(SUM(CAST(rg.deleted_rows AS bigint)) AS float),
+                CAST(SUM(CAST(rg.total_rows AS bigint)) AS float),
+                CAST(COUNT(*) AS float),
+                CAST(SUM(CAST(rg.size_in_bytes AS bigint)) AS float) / 1024.0 / 1024.0
+            FROM sys.column_store_row_groups AS rg WITH (NOLOCK)
+            LEFT JOIN sys.indexes AS i WITH (NOLOCK)
+              ON i.object_id = rg.object_id
+             AND i.index_id = rg.index_id
+            WHERE rg.state_desc = N''COMPRESSED''
+            GROUP BY rg.object_id, i.name
+            HAVING SUM(CAST(rg.deleted_rows AS bigint)) > 0
+            ORDER BY
+              SUM(CAST(rg.deleted_rows AS float))
+              / NULLIF(SUM(CAST(rg.total_rows AS float)), 0) DESC,
+              SUM(CAST(rg.deleted_rows AS bigint)) DESC;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT
+          db, schema_name, table_name, index_name,
+          deleted_ratio, deleted_rows, total_rows, rowgroup_count, size_mb
+      FROM #mssql_cs_obj;

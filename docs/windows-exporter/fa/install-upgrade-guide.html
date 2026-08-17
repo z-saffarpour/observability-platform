@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>راهنمای نصب، آپگرید و حذف windows_exporter</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --text: #1f2937;
+      --muted: #4b5563;
+      --border: #d1d5db;
+      --accent: #0f766e;
+      --accent-soft: #ecfdf5;
+      --code-bg: #0b1220;
+      --code-text: #e5e7eb;
+      --thead: #f3f4f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, "IranSans", "Vazirmatn", sans-serif;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 3rem;
+    }
+    header.hero {
+      background: linear-gradient(135deg, #0f766e 0%, #115e59 55%, #134e4a 100%);
+      color: #fff;
+      border-radius: 14px;
+      padding: 1.5rem 1.4rem;
+      margin-bottom: 1.25rem;
+    }
+    header.hero h1 {
+      margin: 0 0 0.5rem;
+      font-size: 1.55rem;
+      font-weight: 700;
+    }
+    header.hero p { margin: 0.25rem 0; opacity: 0.95; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.9rem;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.16);
+      border: 1px solid rgba(255,255,255,0.28);
+      border-radius: 999px;
+      padding: 0.2rem 0.7rem;
+      font-size: 0.85rem;
+    }
+    nav.toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+    nav.toc h2 {
+      margin: 0 0 0.6rem;
+      font-size: 1rem;
+    }
+    nav.toc ol {
+      margin: 0;
+      padding-inline-start: 1.25rem;
+    }
+    nav.toc a { color: var(--accent); text-decoration: none; }
+    nav.toc a:hover { text-decoration: underline; }
+    article {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem 1.6rem;
+    }
+    h2 {
+      margin: 1.8rem 0 0.7rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 2px solid var(--accent-soft);
+      color: #0f172a;
+      font-size: 1.25rem;
+    }
+    h2:first-child { margin-top: 0.2rem; }
+    h3 {
+      margin: 1.2rem 0 0.5rem;
+      font-size: 1.05rem;
+      color: #134e4a;
+    }
+    p, li { color: var(--text); }
+    a { color: var(--accent); }
+    code, kbd {
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      font-size: 0.92em;
+      background: #eef2f7;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 0.05rem 0.35rem;
+      direction: ltr;
+      unicode-bidi: isolate;
+      display: inline-block;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+      overflow-x: auto;
+      direction: ltr;
+      text-align: left;
+      line-height: 1.45;
+      border: 1px solid #1f2937;
+    }
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      font-size: 0.88rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1rem;
+      font-size: 0.95rem;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.7rem;
+      vertical-align: top;
+      text-align: right;
+    }
+    th {
+      background: var(--thead);
+      font-weight: 600;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    .note {
+      background: var(--accent-soft);
+      border: 1px solid #99f6e4;
+      border-radius: 10px;
+      padding: 0.75rem 0.9rem;
+      margin: 0.8rem 0;
+    }
+    .path {
+      direction: ltr;
+      text-align: left;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      background: #f8fafc;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.7rem 0.9rem;
+    }
+    footer {
+      margin-top: 1rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    .lang-switch { margin-top: 0.75rem; }
+    .lang-switch a {
+      color: #fff;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    @media print {
+      body { background: #fff; }
+      .wrap { max-width: none; padding: 0; }
+      header.hero, article, nav.toc {
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      header.hero { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      pre { white-space: pre-wrap; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>راهنمای نصب، آپگرید و حذف windows_exporter</h1>
+      <p>نصب و آپگرید ریموت از طریق WinRM تا نسخه <strong>0.31.8</strong></p>
+      <div class="meta">
+        <span class="badge">پورت scrape: 9182</span>
+        <span class="badge">مسیر metrics: /metrics</span>
+        <span class="badge">اسکریپت‌ها: PowerShell + WinRM</span>
+      </div>
+      <p class="lang-switch">
+        منبع Markdown:
+        <a href="install-upgrade-guide.md">Markdown</a>
+        ·
+        <a href="../en/install-upgrade-guide.html">English (HTML)</a>
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="فهرست">
+      <h2>فهرست</h2>
+      <ol>
+        <li><a href="#prereq">پیش‌نیازها</a></li>
+        <li><a href="#access">دسترسی‌های لازم</a></li>
+        <li><a href="#profile">انتخاب Profile</a></li>
+        <li><a href="#install">نصب ریموت</a></li>
+        <li><a href="#upgrade">آپگرید ریموت</a></li>
+        <li><a href="#uninstall">حذف ریموت</a></li>
+        <li><a href="#rollout">ترتیب پیشنهادی rollout</a></li>
+        <li><a href="#verify">کنترل پس از نصب / آپگرید</a></li>
+        <li><a href="#notes">نکات نسخه 0.31.8</a></li>
+        <li><a href="#troubleshoot">عیب‌یابی سریع</a></li>
+        <li><a href="#related">مستندات مرتبط</a></li>
+      </ol>
+    </nav>
+
+    <article>
+      <p>
+        این راهنما نصب و آپگرید <strong>ریموت</strong> (WinRM) تا نسخه <strong>0.31.8</strong> را پوشش می‌دهد.
+        پورت scrape پیش‌فرض: <strong>9182</strong> (Basic Auth غیرفعال).
+      </p>
+      <div class="note">
+        برای نصب دستی سرویس روی خود سرور، Firewall،
+        <a href="install-config-guide.md#basic-auth-اختیاری">ایجاد و فعال‌سازی Basic Auth</a>
+        و نمونه <code>scrape_config</code>
+        به <a href="install-config-guide.md">راهنمای نصب و تنظیمات</a> مراجعه کنید.
+      </div>
+
+      <h2 id="prereq">پیش‌نیازها</h2>
+      <table>
+        <thead>
+          <tr><th>مورد</th><th>توضیح</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>کلاینت</td>
+            <td>PowerShell 5.1+؛ پکیج کامل در مسیر محلی (exe، yml، <code>profiles/</code>، اسکریپت‌ها)</td>
+          </tr>
+          <tr>
+            <td>مقصد</td>
+            <td>Windows Server 2016+؛ Administrator؛ WinRM/PowerShell Remoting فعال</td>
+          </tr>
+          <tr>
+            <td>شبکه</td>
+            <td>دسترسی کلاینت به مقصد روی WinRM؛ دسترسی Prometheus به TCP/9182</td>
+          </tr>
+          <tr>
+            <td>پکیج</td>
+            <td><code>windows_exporter.exe</code>، <code>windows_exporter.yml</code>، <code>web-config.yml</code>، <code>profiles/</code>، <code>scripts/powershell/windows-exporter/</code> (و در صورت وجود <code>scripts/ssas/windows-exporter/</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>اسکریپت‌ها را <strong>از کلاینت</strong> اجرا کنید؛ <code>windows_exporter.exe</code> را روی کلاینت start نکنید.</p>
+<pre><code># تست WinRM قبل از نصب
+Test-WSMan -ComputerName SERVER01</code></pre>
+
+      <h2 id="access">دسترسی‌های لازم</h2>
+      <p>ماتریس دسترسی، ایجاد ACL/Firewall/حقوق حساب، سپس audit:</p>
+<pre><code>.\scripts\powershell\windows-exporter\Test-WindowsExporterRequiredAccess.ps1 -ShowRequirements
+.\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20 -WhatIf
+.\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -PrometheusRemoteAddress 10.10.10.20
+.\scripts\powershell\windows-exporter\Test-WindowsExporterRequiredAccess.ps1
+.\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 `
+  -ComputerName SQL01 `
+  -Credential (Get-Credential) `
+  -ServiceAccount 'DOMAIN\svc-winexporter$' `
+  -PrometheusRemoteAddress 10.10.10.20 `
+  -GrantPerformanceMonitorUsers</code></pre>
+      <p><code>Set-WindowsExporterRequiredAccess.ps1</code> دسترسی را ایجاد می‌کند؛ <code>Test-WindowsExporterRequiredAccess.ps1</code> نتیجه را بررسی می‌کند. حق Admin داخل SSAS جداگانه در Analysis Services تنظیم می‌شود.</p>
+
+      <h2 id="profile">انتخاب Profile</h2>
+      <table>
+        <thead>
+          <tr><th>روش</th><th>پارامتر</th><th>رفتار</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>پیش‌فرض نصب</td>
+            <td>بدون <code>-Profile</code></td>
+            <td><code>windows_exporter.yml</code> در ریشه نصب</td>
+          </tr>
+          <tr>
+            <td>ثابت</td>
+            <td><code>-Profile sql-server.yml</code></td>
+            <td>کانفیگ نقش از <code>profiles/</code></td>
+          </tr>
+          <tr>
+            <td>خودکار</td>
+            <td><code>-AutoProfile</code></td>
+            <td>کشف نقش با <code>Discover-WindowsExporterRole.ps1</code> روی هر سرور</td>
+          </tr>
+          <tr>
+            <td>آپگرید بدون تغییر</td>
+            <td>بدون <code>-Profile</code> / <code>-AutoProfile</code></td>
+            <td><code>--config.file</code> فعلی حفظ می‌شود؛ <code>profiles/</code> و <code>scripts/</code> به‌روز و <code>textfile_inputs/</code> تضمین می‌شود</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>-Profile</code> و <code>-AutoProfile</code> را هم‌زمان استفاده نکنید.
+        جزئیات نقش‌ها: <a href="profiles.md">Profileهای نقش‌محور</a>.
+        برای سرورهای SSAS پس از نصب exporter، Task جمع‌آوری متریک را طبق
+        <a href="ssas-monitoring.md">مانیتورینگ SSAS</a> جداگانه نصب کنید.
+        برای سرورهای SSAS پس از نصب exporter، Task جمع‌آوری متریک را طبق
+        <a href="ssas-monitoring.md">مانیتورینگ SSAS</a> جداگانه نصب کنید.
+      </p>
+<pre><code># کشف نقش (محلی یا ریموت)
+.\scripts\powershell\windows-exporter\Discover-WindowsExporterRole.ps1
+.\scripts\powershell\windows-exporter\Discover-WindowsExporterRole.ps1 -ComputerName SQL01,SQL02 -Credential (Get-Credential)</code></pre>
+
+      <h2 id="install">نصب ریموت</h2>
+      <p>اسکریپت: <code>scripts/powershell/windows-exporter/Install-WindowsExporterRemote.ps1</code></p>
+
+      <h3>چه کاری انجام می‌دهد</h3>
+      <ol>
+        <li>فایل‌های پکیج، <code>profiles/</code> و <code>scripts/</code> (powershell + ssas) را از کلاینت کپی می‌کند و پوشه <code>textfile_inputs</code> را می‌سازد</li>
+        <li>از فایل‌های موجود بکاپ timestamped می‌گیرد (<code>_backup\install_...</code>)</li>
+        <li>سرویس native <code>windows_exporter</code> را ایجاد یا ImagePath را به‌روز می‌کند</li>
+        <li>حساب سرویس را تنظیم و سرویس را start می‌کند</li>
+        <li>اجرای مجدد برای refresh فایل‌ها امن است (idempotent)</li>
+      </ol>
+      <p class="note">نصب exporter به‌تنهایی سرویس متریک SSAS را ایجاد نمی‌کند. پس از نصب با Profile مربوط به SSAS، <code>Install-SsasMetricsTask.ps1</code> را با دسترسی Administrator اجرا کنید تا سرویس <code>prometheus_windows_ssas</code> نصب شود. جزئیات در <a href="ssas-monitoring.md">مانیتورینگ SSAS</a>.</p>
+      <p>مسیر پیش‌فرض نصب:</p>
+      <div class="path">C:\Program Files\Observability\PrometheusExporters\windows-exporter</div>
+
+      <h3>پارامترهای مهم</h3>
+      <table>
+        <thead>
+          <tr><th>پارامتر</th><th>پیش‌فرض</th><th>توضیح</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-Computers</code></td><td>(الزامی)</td><td>نام سرورها یا لیست از فایل</td></tr>
+          <tr><td><code>-SourceRoot</code></td><td>ریشه پکیج</td><td>مسیر پکیج روی کلاینت</td></tr>
+          <tr><td><code>-InstallRoot</code></td><td>مسیر Program Files بالا</td><td>مسیر نصب روی مقصد</td></tr>
+          <tr><td><code>-ListenAddress</code></td><td><code>:9182</code></td><td>آدرس/پورت scrape (<code>--web.listen-address</code>)</td></tr>
+          <tr><td><code>-WebConfigPath</code></td><td>—</td><td>deploy <code>web-config.yml</code> سفارشی</td></tr>
+          <tr><td><code>-BasicAuthUsername</code> / <code>-BasicAuthHash</code></td><td>—</td><td>فعال‌سازی Basic Auth در نصب</td></tr>
+          <tr><td><code>-ServiceMode</code></td><td><code>ServiceBase</code></td><td><code>ServiceBase</code> یا <code>NSSM</code>؛ NSSM در <code>C:\Program Files\Observability\Tools\NSSM\nssm.exe</code> مستقر می‌شود</td></tr>
+          <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>—</td><td>انتخاب کانفیگ نقش</td></tr>
+          <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td><code>LocalSystem</code>، <code>LocalService</code>، <code>NetworkService</code>، <code>Credential</code>، <code>gMSA</code>، <code>NtService</code></td></tr>
+          <tr><td><code>-ServiceCredential</code></td><td>—</td><td>برای حالت <code>Credential</code></td></tr>
+          <tr><td><code>-ServiceAccount</code></td><td>—</td><td>gMSA با پسوند <code>$</code>؛ برای <code>NtService</code> اختیاری به‌صورت <code>NT SERVICE\&lt;ServiceName&gt;</code></td></tr>
+          <tr><td><code>-RemoteCredential</code></td><td>—</td><td>credential WinRM به مقصد</td></tr>
+          <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>مهلت انتظار برای Stop/Start سرویس</td></tr>
+          <tr><td><code>-WhatIf</code></td><td>—</td><td>شبیه‌سازی بدون تغییر</td></tr>
+        </tbody>
+      </table>
+
+      <h3>نمونه‌ها</h3>
+<pre><code># شبیه‌سازی
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 `
+  -WhatIf
+
+# نصب از لیست سرورها
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)
+
+# Profile ثابت برای SQL
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01,SQL02 `
+  -Profile sql-server.yml `
+  -RemoteCredential (Get-Credential)
+
+# کشف خودکار Profile روی هر سرور
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01,APP01 `
+  -AutoProfile `
+  -RemoteCredential (Get-Credential)
+
+# حساب سرویس دامینی
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -Profile sql-server.yml `
+  -ServiceAccountMode Credential `
+  -ServiceCredential (Get-Credential) `
+  -RemoteCredential (Get-Credential)
+
+# gMSA
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -ServiceAccountMode gMSA `
+  -ServiceAccount 'DOMAIN\svc-winexporter$' `
+  -RemoteCredential (Get-Credential)
+
+# Virtual service account (NT SERVICE\windows_exporter)
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+# پس از NtService، ACL مسیر نصب را برای حساب مجازی تنظیم کنید:
+# .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'
+
+# آدرس Listen و Basic Auth
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+      <h2 id="upgrade">آپگرید ریموت</h2>
+      <p>اسکریپت: <code>scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1</code></p>
+
+      <h3>چه کاری انجام می‌دهد</h3>
+      <ol>
+        <li>نصب <strong>Native</strong> یا <strong>NSSM</strong> و مسیر باینری را خودکار تشخیص می‌دهد</li>
+        <li>قبل از جایگزینی بکاپ می‌گیرد (<code>_backup\upgrade_&lt;version&gt;_...</code>)</li>
+        <li>exe، ymlها، <code>profiles/</code> و <code>scripts/</code> را به‌روز می‌کند و <code>textfile_inputs</code> را تضمین می‌کند</li>
+        <li>نسخه نصب‌شده را با <code>-ExpectedVersion</code> (پیش‌فرض <code>0.31.8</code>) مطابقت می‌دهد</li>
+        <li>در صورت شکست validation یا startup، فایل‌ها (و در صورت تغییر Profile، ImagePath/AppParameters) را rollback می‌کند</li>
+        <li>بکاپ‌های قدیمی upgrade را تا <code>-KeepBackups</code> نگه می‌دارد (پیش‌فرض 5)</li>
+      </ol>
+
+      <h3>پارامترهای مهم</h3>
+      <table>
+        <thead>
+          <tr><th>پارامتر</th><th>پیش‌فرض</th><th>توضیح</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-Computers</code></td><td>(الزامی)</td><td>سرورهای هدف</td></tr>
+          <tr><td><code>-ExpectedVersion</code></td><td><code>0.31.8</code></td><td>نسخه مورد انتظار باینری پکیج و پس از نصب</td></tr>
+          <tr><td><code>-InstallRoot</code></td><td>(تشخیص خودکار)</td><td>فقط اگر مسیر exe قابل تشخیص نباشد</td></tr>
+          <tr><td><code>-ListenAddress</code></td><td>(خالی = حفظ سرویس)</td><td>override <code>--web.listen-address</code></td></tr>
+          <tr><td><code>-PreserveWebConfig</code></td><td>خاموش</td><td>حفظ <code>web-config.yml</code> ریموت</td></tr>
+          <tr><td><code>-ServiceMode</code></td><td><code>Preserve</code></td><td>حفظ و اعتبارسنجی حالت نصب‌شده <code>ServiceBase</code>/<code>NSSM</code></td></tr>
+          <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>حفظ فعلی</td><td>تغییر <code>--config.file</code></td></tr>
+          <tr><td><code>-ServiceAccountMode</code></td><td>حفظ فعلی</td><td><code>LocalSystem</code>، <code>LocalService</code>، <code>NetworkService</code>، <code>Credential</code>، <code>gMSA</code>، <code>NtService</code></td></tr>
+          <tr><td><code>-ServiceCredential</code></td><td>—</td><td>برای حالت <code>Credential</code></td></tr>
+          <tr><td><code>-ServiceAccount</code></td><td>—</td><td>gMSA با پسوند <code>$</code>؛ برای <code>NtService</code> اختیاری به‌صورت <code>NT SERVICE\&lt;ServiceName&gt;</code></td></tr>
+          <tr><td><code>-KeepBackups</code></td><td><code>5</code></td><td>تعداد بکاپ‌های <code>upgrade_*</code></td></tr>
+          <tr><td><code>-RemoteCredential</code></td><td>—</td><td>credential WinRM</td></tr>
+          <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>مهلت انتظار برای Stop/Start سرویس</td></tr>
+          <tr><td><code>-WhatIf</code></td><td>—</td><td>شبیه‌سازی</td></tr>
+        </tbody>
+      </table>
+
+      <h3>نمونه‌ها</h3>
+<pre><code># شبیه‌سازی
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 `
+  -WhatIf
+
+# آپگرید با حفظ Profile فعلی
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)
+
+# آپگرید + تغییر Profile
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SQL01,SQL02 `
+  -Profile sql-server.yml `
+  -RemoteCredential (Get-Credential)
+
+# آپگرید + AutoProfile
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SQL01,SQL02 `
+  -AutoProfile `
+  -RemoteCredential (Get-Credential)
+
+# نسخه پکیج جدیدتر از پیش‌فرض اسکریپت
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ExpectedVersion 0.32.0 `
+  -RemoteCredential (Get-Credential)
+
+# آپگرید + تغییر حساب به NT SERVICE\windows_exporter
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SQL01 `
+  -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+
+# حفظ web-config؛ تغییر پورت
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)</code></pre>
+
+      <h2 id="uninstall">حذف ریموت</h2>
+      <p><code>Uninstall-WindowsExporterRemote.ps1</code> نوع ServiceBase یا NSSM را تشخیص می‌دهد، سرویس <code>prometheus_windows_exporter</code> را متوقف و حذف می‌کند و در صورت عدم استفاده از <code>-KeepFiles</code> فایل‌های نصب را نیز پاک می‌کند. اگر <code>-SkipBackup</code> داده نشود، ZIP بکاپ در <code>C:\ProgramData\Observability\PrometheusExporters\uninstall-backups</code> ساخته می‌شود. Event Source به‌صورت پیش‌فرض حفظ خواهد شد.</p>
+      <pre><code># شبیه‌سازی
+.\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 -WhatIf
+
+# حذف سرویس و فایل‌ها
+.\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
+  -Computers SERVER01,SERVER02 `
+  -ServiceMode Preserve `
+  -RemoteCredential (Get-Credential)
+
+# فقط حذف سرویس
+.\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 -KeepFiles</code></pre>
+      <div class="note">گزینه <code>-RemoveEventSource</code> فقط زمانی استفاده شود که دیگر به Source رخدادهای قبلی Application نیاز نیست.</div>
+
+      <h2 id="rollout">ترتیب پیشنهادی rollout</h2>
+      <ol>
+        <li>روی <strong>یک سرور آزمایشی</strong> با <code>-WhatIf</code> سپس نصب/آپگرید واقعی</li>
+        <li><code>Get-Service windows_exporter</code> و <code>/metrics</code> را بررسی کنید</li>
+        <li>در Prometheus مقدار <code>up</code> و <code>windows_exporter_collector_success</code> را کنترل کنید</li>
+        <li>dashboard و ruleها را از نظر نام metric نسخه جدید بررسی کنید</li>
+        <li>سپس روی بقیه سرورها rollout کنید</li>
+      </ol>
+
+      <h2 id="verify">کنترل پس از نصب / آپگرید</h2>
+<pre><code>Get-Service windows_exporter
+Get-CimInstance Win32_Service -Filter "Name='windows_exporter'" |
+  Select-Object Name, State, StartName, PathName
+
+.\windows_exporter.exe --version
+
+Invoke-WebRequest http://localhost:9182/metrics</code></pre>
+      <p>از سرور Prometheus:</p>
+<pre><code>Test-NetConnection SERVER01 -Port 9182</code></pre>
+      <p>متریک‌های سلامت:</p>
+      <ul>
+        <li><code>up</code> — دسترس‌پذیری target</li>
+        <li><code>windows_exporter_collector_success</code> — موفقیت هر collector</li>
+        <li><code>windows_exporter_collector_duration_seconds</code> — زمان اجرای collector</li>
+      </ul>
+
+      <h2 id="notes">نکات نسخه 0.31.8</h2>
+      <ul>
+        <li>کانفیگ در startup اعتبارسنجی می‌شود؛ کلید ناشناخته باعث توقف سرویس می‌شود</li>
+        <li><code>telemetry.max-requests</code> معتبر نیست</li>
+        <li>collector قدیمی <code>logon</code> با <code>terminal_services</code> جایگزین شده است</li>
+        <li>وجود <code>web-config.yml</code> به‌تنهایی کافی نیست؛ <code>--web.config.file</code> باید در ImagePath باشد</li>
+      </ul>
+
+      <h2 id="troubleshoot">عیب‌یابی سریع</h2>
+      <table>
+        <thead>
+          <tr><th>علامت</th><th>اقدام</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>خطای WinRM / دسترسی</td>
+            <td><code>Test-WSMan</code>؛ <code>Test-WindowsExporterRequiredAccess.ps1</code>؛ در صورت نیاز <code>Set-WindowsExporterRequiredAccess.ps1</code></td>
+          </tr>
+          <tr>
+            <td>سرویس start نمی‌شود</td>
+            <td>Event Log Application؛ اجرای دستی با همان آرگومان‌های ImagePath</td>
+          </tr>
+          <tr>
+            <td>نسخه mismatch در آپگرید</td>
+            <td>تطابق <code>-ExpectedVersion</code> با <code>--version</code> باینری پکیج</td>
+          </tr>
+          <tr>
+            <td>آپگرید شکست + rollback</td>
+            <td>پیام خطا علت را نشان می‌دهد؛ بکاپ در <code>_backup\upgrade_...</code></td>
+          </tr>
+          <tr>
+            <td>401 روی <code>/metrics</code></td>
+            <td>فقط اگر Basic Auth فعال باشد: hash/رمز و وجود <code>--web.config.file</code> را بررسی کنید</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>جزئیات بیشتر: <a href="troubleshooting.md">عیب‌یابی</a>.</p>
+
+      <h2 id="related">مستندات مرتبط</h2>
+      <ul>
+        <li><a href="install-config-guide.md#basic-auth-اختیاری">نصب و تنظیمات دستی / Basic Auth</a></li>
+        <li><a href="profiles.md">Profileهای نقش‌محور</a></li>
+        <li><a href="ssas-monitoring.md">مانیتورینگ SSAS</a></li>
+        <li><a href="prometheus-rules.md">Prometheus و Alertها</a></li>
+        <li><a href="troubleshooting.md">عیب‌یابی</a></li>
+      </ul>
+    </article>
+
+    <footer>
+      windows_exporter 0.31.8 · docs/fa/install-upgrade-guide.html
+    </footer>
+  </div>
+</body>
+</html>

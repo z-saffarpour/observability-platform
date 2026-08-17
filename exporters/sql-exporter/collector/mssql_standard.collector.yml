@@ -1,0 +1,326 @@
+# Core instance identity + unique counters not owned by specialized collectors.
+#
+# Covered elsewhere (removed from here):
+#   buffer_pool  → PLE, page read/write, lazy write, checkpoint, buffer cache hit
+#   file_io      → IO stall (per file / latency)
+#   database_size_growth → database/file sizes
+#   connections_detail   → sessions by host/login/program/db
+#   memory       → clerks, grants, Memory Manager MB
+#
+#   GRANT VIEW ANY DEFINITION TO
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_standard
+
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_up
+    type: gauge
+    help: 'UP Status.'
+    values: [count]
+    query: |
+      SELECT 1 AS count
+
+  - metric_name: mssql_hostname
+    type: gauge
+    help: 'Database server hostname'
+    key_labels:
+      - hostname
+    static_value: 1
+    query: |
+      SELECT @@SERVERNAME AS hostname
+
+  - metric_name: mssql_product_version
+    type: gauge
+    help: 'Instance version (Major.Minor).'
+    key_labels:
+      - product_version_major
+      - product_version_minor
+      - product_version_build
+      - product_version_batch
+      - product_version
+      - edition
+    static_value: 1
+    query: |
+      SELECT CAST(SERVERPROPERTY( 'ProductMajorVersion' ) AS NVARCHAR(5)) AS product_version_major,
+       CAST(SERVERPROPERTY( 'ProductMinorVersion' ) AS NVARCHAR(5)) AS product_version_minor,
+       CAST(SERVERPROPERTY( 'ProductBuild' ) AS NVARCHAR(5)) AS product_version_build,
+       CAST(PARSENAME( CAST(SERVERPROPERTY( 'productversion' ) AS NVARCHAR(50)), 1 ) AS NVARCHAR(5)) AS product_version_batch,
+       CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(50)) AS product_version,
+       CAST(SERVERPROPERTY('Edition') AS NVARCHAR(255))AS edition
+
+  - metric_name: mssql_local_time_seconds
+    type: gauge
+    help: 'UTC epoch seconds (Unix time from GETUTCDATE).'
+    values: [unix_time]
+    query: |
+      SELECT DATEDIFF(second, '19700101', GETUTCDATE()) AS unix_time
+
+  # NOTE: value column is db_state (not "state") to avoid confusion with recovery_model
+  # and to make scrapes unambiguous. state_desc is a label for dashboards.
+  - metric_name: mssql_database_state
+    type: gauge
+    help: 'Databases states: 0=ONLINE 1=RESTORING 2=RECOVERING 3=RECOVERY_PENDING 4=SUSPECT 5=EMERGENCY 6=OFFLINE 7=COPYING 10=OFFLINE_SECONDARY.'
+    key_labels:
+      - db
+      - state_desc
+    values: [db_state]
+    query: |
+      SELECT
+        name AS db,
+        state_desc,
+        CAST(state AS float) AS db_state
+      FROM sys.databases
+
+  - metric_name: mssql_database_is_read_only
+    type: gauge
+    help: '1 if database is read_only (monthly Full backup policy), else 0.'
+    key_labels:
+      - db
+    values: [is_read_only]
+    query: |
+      SELECT name AS db, CAST(is_read_only AS float) AS is_read_only
+      FROM sys.databases
+      WHERE state = 0
+        AND source_database_id IS NULL
+        AND name <> N'tempdb'
+
+  - metric_name: mssql_database_recovery_model
+    type: gauge
+    help: 'Databases recovery_model: 1=FULL 2=BULK_LOGGED 3=SIMPLE'
+    key_labels:
+      - db
+      - recovery_model_desc
+    values: [recovery_model]
+    query: |
+      SELECT
+        name AS db,
+        recovery_model_desc,
+        CAST(recovery_model AS float) AS recovery_model
+      FROM sys.databases
+
+  - metric_name: mssql_transactions
+    type: counter
+    help: 'Transactions/sec per database (raw cntr_value; use rate()).'
+    key_labels:
+      - db
+    values: [cntr_value]
+    query: |
+      SELECT rtrim(instance_name) AS db, cntr_value
+      FROM sys.dm_os_performance_counters
+      WHERE counter_name = 'Transactions/sec' AND instance_name <> '_Total'
+
+  - metric_name: mssql_log_growths
+    type: counter
+    help: 'Number of times the transaction log has been expanded, per database.'
+    key_labels:
+      - db
+    values: [cntr_value]
+    query: |
+      SELECT rtrim(instance_name) AS db, cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = 'Log Growths' AND instance_name <> '_Total'
+
+  - metric_name: mssql_deadlocks
+    type: counter
+    help: 'Number of lock requests that resulted in a deadlock (raw cntr_value; use rate()).'
+    values: [cntr_value]
+    query: |
+      SELECT cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = 'Number of Deadlocks/sec' AND instance_name = '_Total'
+
+  - metric_name: mssql_user_errors
+    type: counter
+    help: 'Number of user errors (raw cntr_value; use rate()).'
+    values: [cntr_value]
+    query: |
+      SELECT cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = 'Errors/sec' AND instance_name = 'User Errors'
+
+  - metric_name: mssql_kill_connection_errors
+    type: counter
+    help: 'Severe errors that caused SQL Server to kill the connection (raw cntr_value; use rate()).'
+    values: [cntr_value]
+    query: |
+      SELECT cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = 'Errors/sec' AND instance_name = 'Kill Connection Errors'
+
+  - metric_name: mssql_batch_requests
+    type: counter
+    help: 'Number of command batches received (raw cntr_value; use rate()).'
+    values: [cntr_value]
+    query: |
+      SELECT cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = 'Batch Requests/sec'
+
+  - metric_name: mssql_user_connections_current
+    type: gauge
+    help: 'Current number of user connections.'
+    values: [user_connections_current]
+    query_ref: mssql_standard_connection_counters
+
+  - metric_name: mssql_compilations_per_sec
+    type: counter
+    help: 'SQL compilations/sec raw cntr_value (cumulative); use rate().'
+    values: [compilations_per_sec]
+    query_ref: mssql_standard_compilation_counters
+
+  - metric_name: mssql_recompilations_per_sec
+    type: counter
+    help: 'SQL re-compilations/sec raw cntr_value (cumulative); use rate().'
+    values: [recompilations_per_sec]
+    query_ref: mssql_standard_compilation_counters
+
+  - metric_name: mssql_checkpoint_pages_per_sec
+    type: counter
+    help: 'Checkpoint pages/sec raw cntr_value (cumulative); use rate().'
+    values: [checkpoint_pages_per_sec]
+    query_ref: mssql_standard_checkpoint_pages
+
+  - metric_name: mssql_log_reuse_wait
+    type: gauge
+    help: 'Current log_reuse_wait value per database.'
+    key_labels:
+      - db
+      - log_reuse_wait_desc
+    values: [log_reuse_wait]
+    query_ref: mssql_standard_log_reuse_wait
+
+  - metric_name: mssql_perf_counter
+    type: gauge
+    help: 'Selected SQL Server performance counters (raw cntr_value). Use rate() for /sec counters.'
+    key_labels:
+      - object
+      - counter
+      - instance
+    values: [cntr_value]
+    query_ref: mssql_perf_counters
+
+  # Process / OS memory (not covered by mssql_memory clerks/grants)
+  - metric_name: mssql_resident_memory_bytes
+    type: gauge
+    help: 'SQL Server resident memory size (AKA working set).'
+    values: [resident_memory_bytes]
+    query_ref: mssql_process_memory
+
+  - metric_name: mssql_virtual_memory_bytes
+    type: gauge
+    help: 'SQL Server committed virtual memory size.'
+    values: [virtual_memory_bytes]
+    query_ref: mssql_process_memory
+
+  - metric_name: mssql_memory_utilization_percentage
+    type: gauge
+    help: 'The percentage of committed memory that is in the working set.'
+    values: [memory_utilization_percentage]
+    query_ref: mssql_process_memory
+
+  - metric_name: mssql_page_fault_count
+    type: counter
+    help: 'The number of page faults that were incurred by the SQL Server process.'
+    values: [page_fault_count]
+    query_ref: mssql_process_memory
+
+  - metric_name: mssql_os_memory
+    type: gauge
+    help: 'OS physical memory, used and available.'
+    value_label: 'state'
+    values: [used, available, total]
+    query: |
+      SELECT
+        (total_physical_memory_kb - available_physical_memory_kb) * 1024 AS used,
+        available_physical_memory_kb * 1024 AS available,
+        total_physical_memory_kb * 1024 AS total
+      FROM sys.dm_os_sys_memory
+
+  - metric_name: mssql_os_page_file
+    type: gauge
+    help: 'OS page file, used and available.'
+    value_label: 'state'
+    values: [used, available, total]
+    query: |
+      SELECT
+        (total_page_file_kb - available_page_file_kb) * 1024 AS used,
+        available_page_file_kb * 1024 AS available,
+        total_page_file_kb * 1024 AS total
+      FROM sys.dm_os_sys_memory
+
+queries:
+  - query_name: mssql_standard_connection_counters
+    query: |
+      SELECT CAST(cntr_value AS float) AS user_connections_current
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = N'User Connections'
+        AND (instance_name = N'' OR instance_name = N'_Total');
+
+  - query_name: mssql_standard_compilation_counters
+    query: |
+      SELECT
+          CAST(MAX(CASE WHEN counter_name = N'SQL Compilations/sec' THEN cntr_value END) AS float)
+            AS compilations_per_sec,
+          CAST(MAX(CASE WHEN counter_name = N'SQL Re-Compilations/sec' THEN cntr_value END) AS float)
+            AS recompilations_per_sec
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name IN (N'SQL Compilations/sec', N'SQL Re-Compilations/sec')
+        AND (instance_name = N'' OR instance_name = N'_Total');
+
+  - query_name: mssql_standard_checkpoint_pages
+    query: |
+      SELECT CAST(cntr_value AS float) AS checkpoint_pages_per_sec
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name = N'Checkpoint pages/sec'
+        AND (instance_name = N'' OR instance_name = N'_Total');
+
+  - query_name: mssql_standard_log_reuse_wait
+    query: |
+      SELECT
+          name AS db,
+          log_reuse_wait_desc,
+          CAST(log_reuse_wait AS float) AS log_reuse_wait
+      FROM sys.databases WITH (NOLOCK)
+      WHERE state = 0
+        AND source_database_id IS NULL
+        AND name <> N'tempdb';
+
+  - query_name: mssql_process_memory
+    query: |
+      SELECT
+        physical_memory_in_use_kb * 1024 AS resident_memory_bytes,
+        virtual_address_space_committed_kb * 1024 AS virtual_memory_bytes,
+        memory_utilization_percentage,
+        page_fault_count
+      FROM sys.dm_os_process_memory
+
+  - query_name: mssql_perf_counters
+    query: |
+      SELECT
+          RTRIM(REPLACE(REPLACE(object_name, @@SERVICENAME + N':', N''), N'MSSQL$' + @@SERVICENAME + N':', N'')) AS object,
+          RTRIM(counter_name) AS counter,
+          CASE
+            WHEN RTRIM(instance_name) = N'' THEN N''
+            ELSE RTRIM(instance_name)
+          END AS instance,
+          CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE counter_name IN (
+          N'SQL Compilations/sec',
+          N'SQL Re-Compilations/sec',
+          N'User Connections',
+          N'Processes blocked',
+          N'Forwarded Records/sec',
+          N'Page Splits/sec',
+          N'Table Lock Escalations/sec',
+          N'Lock Wait Time (ms)',
+          N'Lock Waits/sec',
+          N'Write Transactions/sec',
+          N'Full Scans/sec',
+          N'Index Searches/sec',
+          N'Workfiles Created/sec',
+          N'Worktables Created/sec'
+        )
+        AND (instance_name = N'' OR instance_name = N'_Total');

@@ -1,0 +1,645 @@
+# Security-focused SQL Server collector.
+#
+# Required:
+#   GRANT VIEW SERVER STATE TO
+#   GRANT VIEW ANY DEFINITION TO
+#
+# Optional (for richer signals):
+#   - xp_readerrorlog permission for failed-login parsing
+#   - CONTROL SERVER for reading SQL Server Audit files via fn_get_audit_file
+#
+collector_name: mssql_security
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_failed_logins_total
+    type: gauge
+    help: 'Failed login rows parsed from ERRORLOG in the last 60 minutes, grouped by login/client/reason.'
+    key_labels:
+      - login_name
+      - client_host
+      - reason
+    values: [event_count]
+    query_ref: mssql_security_failed_logins
+
+  - metric_name: mssql_privileged_sessions
+    type: gauge
+    help: 'Current user sessions whose login is member of sysadmin or securityadmin.'
+    key_labels:
+      - login_name
+      - host_name
+      - program_name
+      - server_role
+    values: [session_count]
+    query_ref: mssql_security_privileged_sessions
+
+  - metric_name: mssql_unexpected_login_count
+    type: gauge
+    help: 'Current user sessions with login names outside the inline allow-list CTE in this collector.'
+    key_labels:
+      - login_name
+    values: [session_count]
+    query_ref: mssql_security_unexpected_logins
+
+  - metric_name: mssql_sql_auth_logins_enabled
+    type: gauge
+    help: 'Number of enabled SQL-authentication logins (type_desc = SQL_LOGIN).'
+    values: [enabled_count]
+    query_ref: mssql_security_sql_auth_enabled
+
+  - metric_name: mssql_security_configurations
+    type: gauge
+    help: 'Selected security/behavior configuration values moved from mssql_standard.'
+    key_labels:
+      - config_name
+    values: [cntr_value]
+    query_ref: mssql_security_configurations
+
+  - metric_name: mssql_sa_login_enabled
+    type: gauge
+    help: '1 if sa login is enabled; 0 otherwise.'
+    values: [is_enabled]
+    query_ref: mssql_security_sa_enabled
+
+  - metric_name: mssql_login_disabled
+    type: gauge
+    help: '1 if SQL login is disabled.'
+    key_labels:
+      - login_name
+    values: [is_disabled]
+    query_ref: mssql_security_sql_logins_state
+
+  - metric_name: mssql_login_password_expired
+    type: gauge
+    help: '1 if SQL login password is expired.'
+    key_labels:
+      - login_name
+    values: [is_password_expired]
+    query_ref: mssql_security_sql_logins_state
+
+  - metric_name: mssql_server_audit_enabled
+    type: gauge
+    help: '1 if SQL Server Audit object is enabled.'
+    key_labels:
+      - audit_name
+    values: [is_enabled]
+    query_ref: mssql_security_server_audit_state
+
+  - metric_name: mssql_audit_status
+    type: gauge
+    help: 'Audit runtime status from dm_server_audit_status (1=started).'
+    key_labels:
+      - audit_name
+      - status_desc
+    values: [status]
+    query_ref: mssql_security_server_audit_state
+
+  - metric_name: mssql_audit_events_total
+    type: gauge
+    help: 'Audit event rows in the last 60 minutes grouped by action/principal/database (requires CONTROL SERVER).'
+    key_labels:
+      - action_id
+      - principal_name
+      - database_name
+    values: [event_count]
+    query_ref: mssql_security_audit_events
+
+  - metric_name: mssql_security_errorlog_signal_count
+    type: gauge
+    help: 'Security-specific ERRORLOG signal count in the last 6 hours (failed/disabled/anonymous login).'
+    key_labels:
+      - signal
+    values: [event_count]
+    query_ref: mssql_security_errorlog_signals
+
+  - metric_name: mssql_database_owner_is_sysadmin
+    type: gauge
+    help: '1 when database owner login is member of sysadmin.'
+    key_labels:
+      - db
+      - owner_login
+    values: [is_sysadmin_owner]
+    query_ref: mssql_security_db_owner_sysadmin
+
+  - metric_name: mssql_public_role_permissions
+    type: gauge
+    help: 'Count of granted server-level permissions for public role.'
+    key_labels:
+      - permission_name
+      - state_desc
+    values: [permission_count]
+    query_ref: mssql_security_public_server_permissions
+
+  - metric_name: mssql_orphaned_users
+    type: gauge
+    help: 'Orphaned users per online user database (INSTANCE-authenticated principals without matching server login SID).'
+    key_labels:
+      - db
+    values: [orphan_count]
+    query_ref: mssql_security_orphaned_users
+
+  - metric_name: mssql_agent_proxy_count
+    type: gauge
+    help: 'Number of SQL Agent proxies defined in msdb.'
+    values: [proxy_count]
+    query_ref: mssql_security_agent_proxy_count
+
+  - metric_name: mssql_agent_job_owner_is_sysadmin
+    type: gauge
+    help: '1 when SQL Agent job owner is member of sysadmin.'
+    key_labels:
+      - job_name
+      - owner_login
+    values: [is_sysadmin_owner]
+    query_ref: mssql_security_job_owner_sysadmin
+
+  - metric_name: mssql_encryption_at_rest_enabled
+    type: gauge
+    help: '1 when database encryption key is present and encryption_state indicates active/in-progress TDE.'
+    key_labels:
+      - db
+    values: [is_encrypted]
+    query_ref: mssql_security_tde_state
+
+  - metric_name: mssql_backup_encryption_enabled
+    type: gauge
+    help: '1 when the most recent Full/Diff/Log backup is encrypted.'
+    key_labels:
+      - db
+      - backup_type
+    values: [is_encrypted]
+    query_ref: mssql_security_backup_encryption
+
+  - metric_name: mssql_tls_encryption_sessions
+    type: gauge
+    help: 'Current session count by encrypt_option from dm_exec_connections.'
+    key_labels:
+      - encrypt_option
+    values: [session_count]
+    query_ref: mssql_security_tls_sessions
+
+  - metric_name: mssql_xp_cmdshell_enabled
+    type: gauge
+    help: '1 if xp_cmdshell is enabled.'
+    values: [is_enabled]
+    query_ref: mssql_security_surface_area
+
+  - metric_name: mssql_ole_automation_enabled
+    type: gauge
+    help: '1 if OLE Automation Procedures is enabled.'
+    values: [ole_automation_enabled]
+    query_ref: mssql_security_surface_area
+
+  - metric_name: mssql_clr_enabled
+    type: gauge
+    help: '1 if CLR integration is enabled.'
+    values: [clr_enabled]
+    query_ref: mssql_security_surface_area
+
+  - metric_name: mssql_linked_server_count
+    type: gauge
+    help: 'Count of configured linked servers (excluding local server entry).'
+    values: [linked_server_count]
+    query_ref: mssql_security_linked_servers
+
+  - metric_name: mssql_linked_server_rpc_out_enabled
+    type: gauge
+    help: 'Count of linked servers with RPC OUT enabled.'
+    values: [rpc_out_enabled_count]
+    query_ref: mssql_security_linked_servers
+
+queries:
+  - query_name: mssql_security_failed_logins
+    query: |
+      DECLARE @start datetime = DATEADD(HOUR, -1, GETDATE());
+      DECLARE @end datetime = GETDATE();
+
+      IF OBJECT_ID('tempdb..#el') IS NOT NULL DROP TABLE #el;
+      CREATE TABLE #el (
+          LogDate datetime,
+          ProcessInfo nvarchar(128),
+          Text nvarchar(max)
+      );
+
+      BEGIN TRY
+          INSERT INTO #el EXEC xp_readerrorlog 0, 1, N'Login failed for user', NULL, @start, @end, N'asc';
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      ;WITH src AS (
+          SELECT Text
+          FROM #el
+          WHERE Text LIKE N'Login failed for user %'
+      ),
+      pos AS (
+          SELECT
+              Text,
+              CHARINDEX(N'Login failed for user ''', Text) AS p_login_start,
+              CHARINDEX(N'''. Reason:', Text) AS p_login_end,
+              CHARINDEX(N'Reason:', Text) AS p_reason_start,
+              CHARINDEX(N'[CLIENT:', Text) AS p_client_start
+          FROM src
+      ),
+      parsed AS (
+          SELECT
+              CASE
+                WHEN p_login_start > 0 AND p_login_end > p_login_start
+                  THEN SUBSTRING(
+                         Text,
+                         p_login_start + LEN(N'Login failed for user '''),
+                         p_login_end - (p_login_start + LEN(N'Login failed for user '''))
+                       )
+                ELSE N'unknown'
+              END AS login_name,
+              CASE
+                WHEN p_client_start > 0
+                  THEN LTRIM(RTRIM(REPLACE(SUBSTRING(Text, p_client_start + LEN(N'[CLIENT:'), 256), N']', N'')))
+                ELSE N'unknown'
+              END AS client_host,
+              CASE
+                WHEN p_reason_start > 0
+                  THEN LTRIM(RTRIM(SUBSTRING(
+                         Text,
+                         p_reason_start + LEN(N'Reason:'),
+                         CASE
+                           WHEN p_client_start > p_reason_start THEN p_client_start - (p_reason_start + LEN(N'Reason:'))
+                           ELSE 256
+                         END
+                       )))
+                ELSE N'unknown'
+              END AS reason
+          FROM pos
+      )
+      SELECT
+          LEFT(ISNULL(login_name, N'unknown'), 128) AS login_name,
+          LEFT(ISNULL(client_host, N'unknown'), 128) AS client_host,
+          LEFT(ISNULL(reason, N'unknown'), 256) AS reason,
+          CAST(COUNT(*) AS float) AS event_count
+      FROM parsed
+      GROUP BY
+          LEFT(ISNULL(login_name, N'unknown'), 128),
+          LEFT(ISNULL(client_host, N'unknown'), 128),
+          LEFT(ISNULL(reason, N'unknown'), 256);
+
+  - query_name: mssql_security_privileged_sessions
+    query: |
+      ;WITH role_members AS (
+          SELECT
+              p.name AS login_name,
+              r.name AS server_role
+          FROM sys.server_role_members AS rm
+          INNER JOIN sys.server_principals AS p
+              ON p.principal_id = rm.member_principal_id
+          INNER JOIN sys.server_principals AS r
+              ON r.principal_id = rm.role_principal_id
+          WHERE r.name IN (N'sysadmin', N'securityadmin')
+      )
+      SELECT
+          s.login_name,
+          LEFT(ISNULL(s.host_name, N''), 64) AS host_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          rm.server_role,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions AS s WITH (NOLOCK)
+      INNER JOIN role_members AS rm
+          ON rm.login_name = s.login_name
+      WHERE s.is_user_process = 1
+      GROUP BY
+          s.login_name,
+          LEFT(ISNULL(s.host_name, N''), 64),
+          LEFT(ISNULL(s.program_name, N''), 64),
+          rm.server_role;
+
+  - query_name: mssql_security_unexpected_logins
+    query: |
+      -- Allow-list for mssql_unexpected_login_count (edit site logins below).
+      -- Docs: docs/en/collectors/mssql_security.md#allow-list-for-mssql_unexpected_login_count
+      --       docs/fa/collectors/mssql_security.md#allow-list-برای-mssql_unexpected_login_count
+      ;WITH allowlist AS (
+          SELECT N'sa' AS login_name
+          UNION ALL SELECT N'NT AUTHORITY\SYSTEM'
+          UNION ALL SELECT N'NT SERVICE\SQLSERVERAGENT'
+          UNION ALL SELECT N'NT SERVICE\MSSQLSERVER'
+          -- Add site-specific app logins here, e.g.:
+          -- UNION ALL SELECT N'my_app_login'
+      )
+      SELECT
+          s.login_name,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_sessions AS s WITH (NOLOCK)
+      LEFT JOIN allowlist AS a
+          ON a.login_name = s.login_name
+      WHERE s.is_user_process = 1
+        AND s.login_name IS NOT NULL
+        AND a.login_name IS NULL
+        AND s.login_name NOT LIKE N'NT SERVICE\%'
+        AND s.login_name NOT LIKE N'NT AUTHORITY\%'
+      GROUP BY s.login_name;
+
+  - query_name: mssql_security_sql_auth_enabled
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS enabled_count
+      FROM sys.server_principals
+      WHERE type_desc = N'SQL_LOGIN'
+        AND is_disabled = 0;
+
+  - query_name: mssql_security_configurations
+    query: |
+      SELECT name AS config_name, CAST(value AS float) AS cntr_value
+      FROM sys.configurations
+      WHERE name IN (
+          N'remote access',
+          N'remote proc trans',
+          N'priority boost',
+          N'remote admin connections',
+          N'optimize for ad hoc workloads',
+          N'Ole Automation Procedures',
+          N'xp_cmdshell',
+          N'backup checksum default',
+          N'clr enabled'
+        );
+
+  - query_name: mssql_security_sa_enabled
+    query: |
+      SELECT CAST(CASE WHEN EXISTS (
+          SELECT 1
+          FROM sys.sql_logins
+          WHERE name = N'sa'
+            AND is_disabled = 0
+      ) THEN 1 ELSE 0 END AS float) AS is_enabled;
+
+  - query_name: mssql_security_sql_logins_state
+    query: |
+      SELECT
+          name AS login_name,
+          CAST(CASE WHEN is_disabled = 1 THEN 1 ELSE 0 END AS float) AS is_disabled,
+          CAST(CASE WHEN is_expiration_checked = 1 AND LOGINPROPERTY(name, 'IsExpired') = 1 THEN 1 ELSE 0 END AS float) AS is_password_expired
+      FROM sys.sql_logins
+      WHERE principal_id > 1;
+
+  - query_name: mssql_security_server_audit_state
+    query: |
+      SELECT
+          a.name AS audit_name,
+          CAST(a.is_state_enabled AS float) AS is_enabled,
+          CAST(ISNULL(s.status, 0) AS float) AS status,
+          ISNULL(s.status_desc, N'NOT_STARTED') AS status_desc
+      FROM sys.server_audits AS a
+      LEFT JOIN sys.dm_server_audit_status AS s
+          ON s.name = a.name;
+
+  - query_name: mssql_security_audit_events
+    query: |
+      IF HAS_PERMS_BY_NAME(NULL, NULL, 'CONTROL SERVER') <> 1
+      BEGIN
+          SELECT TOP (0)
+              CAST(N'' AS nvarchar(8)) AS action_id,
+              CAST(N'' AS nvarchar(256)) AS principal_name,
+              CAST(N'' AS nvarchar(256)) AS database_name,
+              CAST(0 AS float) AS event_count;
+          RETURN;
+      END;
+
+      DECLARE @pattern nvarchar(4000);
+      SELECT TOP (1)
+          @pattern = CASE
+                        WHEN RIGHT(f.log_file_path, 1) IN (N'\', N'/') THEN f.log_file_path + N'*.sqlaudit'
+                        ELSE f.log_file_path + N'\*.sqlaudit'
+                     END
+      FROM sys.server_file_audits AS f
+      INNER JOIN sys.server_audits AS a
+          ON a.audit_guid = f.audit_guid
+      WHERE a.is_state_enabled = 1;
+
+      IF @pattern IS NULL
+      BEGIN
+          SELECT TOP (0)
+              CAST(N'' AS nvarchar(8)) AS action_id,
+              CAST(N'' AS nvarchar(256)) AS principal_name,
+              CAST(N'' AS nvarchar(256)) AS database_name,
+              CAST(0 AS float) AS event_count;
+          RETURN;
+      END;
+
+      SELECT
+          ISNULL(action_id, N'') AS action_id,
+          LEFT(ISNULL(server_principal_name, N''), 256) AS principal_name,
+          LEFT(ISNULL(database_name, N''), 256) AS database_name,
+          CAST(COUNT(*) AS float) AS event_count
+      FROM sys.fn_get_audit_file(@pattern, DEFAULT, DEFAULT)
+      WHERE event_time >= DATEADD(HOUR, -1, SYSUTCDATETIME())
+      GROUP BY
+          ISNULL(action_id, N''),
+          LEFT(ISNULL(server_principal_name, N''), 256),
+          LEFT(ISNULL(database_name, N''), 256);
+
+  - query_name: mssql_security_errorlog_signals
+    query: |
+      DECLARE @start datetime = DATEADD(HOUR, -6, GETDATE());
+      DECLARE @end datetime = GETDATE();
+
+      IF OBJECT_ID('tempdb..#el') IS NOT NULL DROP TABLE #el;
+      CREATE TABLE #el (
+          LogDate datetime,
+          ProcessInfo nvarchar(128),
+          Text nvarchar(max)
+      );
+
+      BEGIN TRY
+          INSERT INTO #el EXEC xp_readerrorlog 0, 1, NULL, NULL, @start, @end, N'asc';
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      BEGIN TRY
+          INSERT INTO #el EXEC xp_readerrorlog 1, 1, NULL, NULL, @start, @end, N'asc';
+      END TRY
+      BEGIN CATCH
+      END CATCH;
+
+      ;WITH classified AS (
+          SELECT
+              CASE
+                WHEN Text LIKE N'%Error: 18456%' THEN N'18456_login_failed'
+                WHEN Text LIKE N'%Error: 18470%' THEN N'18470_login_disabled'
+                WHEN Text LIKE N'%Login failed for user ''NT AUTHORITY\ANONYMOUS LOGON''%'
+                  THEN N'anonymous_login_failed'
+                ELSE NULL
+              END AS signal
+          FROM #el
+      )
+      SELECT
+          signal,
+          CAST(COUNT(*) AS float) AS event_count
+      FROM classified
+      WHERE signal IS NOT NULL
+      GROUP BY signal;
+
+  - query_name: mssql_security_db_owner_sysadmin
+    query: |
+      ;WITH sysadmin_members AS (
+          SELECT p.sid
+          FROM sys.server_role_members AS rm
+          INNER JOIN sys.server_principals AS r
+              ON r.principal_id = rm.role_principal_id
+          INNER JOIN sys.server_principals AS p
+              ON p.principal_id = rm.member_principal_id
+          WHERE r.name = N'sysadmin'
+      )
+      SELECT
+          d.name AS db,
+          ISNULL(sp.name, N'') AS owner_login,
+          CAST(CASE WHEN sam.sid IS NULL THEN 0 ELSE 1 END AS float) AS is_sysadmin_owner
+      FROM sys.databases AS d
+      LEFT JOIN sys.server_principals AS sp
+          ON sp.sid = d.owner_sid
+      LEFT JOIN sysadmin_members AS sam
+          ON sam.sid = d.owner_sid
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL;
+
+  - query_name: mssql_security_public_server_permissions
+    query: |
+      SELECT
+          permission_name,
+          state_desc,
+          CAST(COUNT(*) AS float) AS permission_count
+      FROM sys.server_permissions
+      WHERE grantee_principal_id = SUSER_ID(N'public')
+      GROUP BY permission_name, state_desc;
+
+  - query_name: mssql_security_orphaned_users
+    query: |
+      IF OBJECT_ID(N'tempdb..#orphans') IS NOT NULL DROP TABLE #orphans;
+      CREATE TABLE #orphans (
+          db sysname NOT NULL,
+          orphan_count float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases
+          WHERE state = 0
+            AND database_id > 4
+            AND source_database_id IS NULL
+            AND is_in_standby = 0
+            AND HAS_DBACCESS(name) = 1
+            -- Orphan checks are meaningful on writable primary only.
+            -- AG/log-shipping secondaries often lack matching instance logins → false positives.
+            AND ISNULL(sys.fn_hadr_is_primary_replica(name), 1) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'
+          INSERT INTO #orphans (db, orphan_count)
+          SELECT
+              N''' + REPLACE(@db, '''', '''''') + N''' AS db,
+              CAST(COUNT(*) AS float) AS orphan_count
+          FROM ' + QUOTENAME(@db) + N'.sys.database_principals AS dp
+          LEFT JOIN master.sys.server_principals AS sp
+              ON sp.sid = dp.sid
+          WHERE dp.principal_id > 4
+            AND dp.type IN (N''S'', N''U'', N''G'')
+            AND dp.authentication_type_desc = N''INSTANCE''
+            AND dp.name NOT IN (N''dbo'', N''guest'', N''INFORMATION_SCHEMA'', N''sys'')
+            AND sp.sid IS NULL;';
+
+          EXEC sp_executesql @sql;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT db, orphan_count FROM #orphans;
+
+  - query_name: mssql_security_agent_proxy_count
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS proxy_count
+      FROM msdb.dbo.sysproxies WITH (NOLOCK);
+
+  - query_name: mssql_security_job_owner_sysadmin
+    query: |
+      ;WITH sysadmin_members AS (
+          SELECT p.sid
+          FROM sys.server_role_members AS rm
+          INNER JOIN sys.server_principals AS r
+              ON r.principal_id = rm.role_principal_id
+          INNER JOIN sys.server_principals AS p
+              ON p.principal_id = rm.member_principal_id
+          WHERE r.name = N'sysadmin'
+      )
+      SELECT
+          j.name AS job_name,
+          ISNULL(sp.name, N'') AS owner_login,
+          CAST(CASE WHEN sam.sid IS NULL THEN 0 ELSE 1 END AS float) AS is_sysadmin_owner
+      FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
+      LEFT JOIN sys.server_principals AS sp
+          ON sp.sid = j.owner_sid
+      LEFT JOIN sysadmin_members AS sam
+          ON sam.sid = j.owner_sid;
+
+  - query_name: mssql_security_tde_state
+    query: |
+      SELECT
+          d.name AS db,
+          CAST(CASE
+                 WHEN dek.encryption_state IN (2, 3, 4, 5, 6) THEN 1
+                 ELSE 0
+               END AS float) AS is_encrypted
+      FROM sys.databases AS d
+      LEFT JOIN sys.dm_database_encryption_keys AS dek
+          ON dek.database_id = d.database_id
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL
+        AND d.name <> N'tempdb';
+
+  - query_name: mssql_security_backup_encryption
+    query: |
+      ;WITH ranked AS (
+          SELECT
+              b.database_name AS db,
+              CASE b.type WHEN 'D' THEN N'full' WHEN 'I' THEN N'diff' WHEN 'L' THEN N'log' ELSE N'other' END AS backup_type,
+              CASE WHEN b.key_algorithm IS NULL THEN 0 ELSE 1 END AS is_encrypted,
+              ROW_NUMBER() OVER (
+                PARTITION BY b.database_name, b.type
+                ORDER BY b.backup_finish_date DESC
+              ) AS rn
+          FROM msdb.dbo.backupset AS b WITH (NOLOCK)
+          WHERE b.type IN ('D', 'I', 'L')
+      )
+      SELECT
+          db,
+          backup_type,
+          CAST(is_encrypted AS float) AS is_encrypted
+      FROM ranked
+      WHERE rn = 1;
+
+  - query_name: mssql_security_tls_sessions
+    query: |
+      SELECT
+          ISNULL(encrypt_option, N'UNKNOWN') AS encrypt_option,
+          CAST(COUNT(*) AS float) AS session_count
+      FROM sys.dm_exec_connections WITH (NOLOCK)
+      GROUP BY ISNULL(encrypt_option, N'UNKNOWN');
+
+  - query_name: mssql_security_surface_area
+    query: |
+      SELECT
+          CAST(MAX(CASE WHEN name = N'xp_cmdshell' THEN CAST(value_in_use AS float) END) AS float) AS is_enabled,
+          CAST(MAX(CASE WHEN name = N'Ole Automation Procedures' THEN CAST(value_in_use AS float) END) AS float) AS ole_automation_enabled,
+          CAST(MAX(CASE WHEN name = N'clr enabled' THEN CAST(value_in_use AS float) END) AS float) AS clr_enabled
+      FROM sys.configurations
+      WHERE name IN (N'xp_cmdshell', N'Ole Automation Procedures', N'clr enabled');
+
+  - query_name: mssql_security_linked_servers
+    query: |
+      SELECT
+          CAST(SUM(CASE WHEN is_linked = 1 THEN 1 ELSE 0 END) AS float) AS linked_server_count,
+          CAST(SUM(CASE WHEN is_linked = 1 AND is_rpc_out_enabled = 1 THEN 1 ELSE 0 END) AS float) AS rpc_out_enabled_count
+      FROM sys.servers
+      WHERE server_id <> 0;

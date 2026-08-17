@@ -1,0 +1,252 @@
+# Memory metrics for Microsoft SQL Server.
+#
+# It is required that the SQL Server user has the following permissions:
+#
+#   GRANT VIEW SERVER STATE TO
+#
+# Auto-loaded via collectors: [mssql_*] and collector_files: ["collector/*.collector.yml"]
+#
+collector_name: mssql_memory
+
+# Clerks + semaphores are useful for grant pressure; 60s balances freshness vs load.
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_memory_clerk_size_kb
+    type: gauge
+    help: 'Memory clerk size in KB (top clerks; SUM(pages_kb)).'
+    key_labels:
+      - clerk_type
+      - clerk_name
+    values: [size_kb]
+    query_ref: mssql_memory_clerks
+
+  - metric_name: mssql_resource_semaphore_available_mb
+    type: gauge
+    help: 'Query memory grant available (MB) per resource semaphore.'
+    key_labels:
+      - resource_semaphore_id
+      - pool_id
+    values: [available_memory_mb]
+    query_ref: mssql_resource_semaphores
+
+  - metric_name: mssql_resource_semaphore_granted_mb
+    type: gauge
+    help: 'Query memory currently granted (MB) per resource semaphore.'
+    key_labels:
+      - resource_semaphore_id
+      - pool_id
+    values: [granted_memory_mb]
+    query_ref: mssql_resource_semaphores
+
+  - metric_name: mssql_resource_semaphore_grantee_count
+    type: gauge
+    help: 'Number of queries currently granted memory.'
+    key_labels:
+      - resource_semaphore_id
+      - pool_id
+    values: [grantee_count]
+    query_ref: mssql_resource_semaphores
+
+  - metric_name: mssql_resource_semaphore_waiter_count
+    type: gauge
+    help: 'Number of queries waiting for memory grant (RESOURCE_SEMAPHORE risk).'
+    key_labels:
+      - resource_semaphore_id
+      - pool_id
+    values: [waiter_count]
+    query_ref: mssql_resource_semaphores
+
+  - metric_name: mssql_resource_semaphore_target_mb
+    type: gauge
+    help: 'Target memory (MB) for resource semaphore.'
+    key_labels:
+      - resource_semaphore_id
+      - pool_id
+    values: [target_memory_mb]
+    query_ref: mssql_resource_semaphores
+
+  - metric_name: mssql_resource_semaphore_max_mb
+    type: gauge
+    help: 'Max memory (MB) for resource semaphore.'
+    key_labels:
+      - resource_semaphore_id
+      - pool_id
+    values: [max_memory_mb]
+    query_ref: mssql_resource_semaphores
+
+  - metric_name: mssql_memory_manager_mb
+    type: gauge
+    help: 'SQL Memory Manager counters converted to MB.'
+    key_labels:
+      - counter
+    values: [value_mb]
+    query_ref: mssql_memory_manager_mb
+
+  - metric_name: mssql_memory_grants_outstanding
+    type: gauge
+    help: 'Memory grants currently outstanding.'
+    values: [cntr_value]
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Memory Manager%'
+        AND counter_name = N'Memory Grants Outstanding';
+
+  - metric_name: mssql_memory_grants_pending
+    type: gauge
+    help: 'Memory grants currently pending (RESOURCE_SEMAPHORE pressure).'
+    values: [cntr_value]
+    query: |
+      SELECT CAST(cntr_value AS float) AS cntr_value
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Memory Manager%'
+        AND counter_name = N'Memory Grants Pending';
+
+  - metric_name: mssql_memory_target_server_mb
+    type: gauge
+    help: 'Target Server Memory (MB).'
+    values: [target_server_mb]
+    query_ref: mssql_memory_server_summary
+
+  - metric_name: mssql_memory_total_server_mb
+    type: gauge
+    help: 'Total Server Memory (MB).'
+    values: [total_server_mb]
+    query_ref: mssql_memory_server_summary
+
+  - metric_name: mssql_memory_stolen_mb
+    type: gauge
+    help: 'Stolen Server Memory (MB).'
+    values: [stolen_server_mb]
+    query_ref: mssql_memory_server_summary
+
+  - metric_name: mssql_memory_locked_pages_mb
+    type: gauge
+    help: 'Locked pages allocated (MB).'
+    values: [locked_pages_mb]
+    query_ref: mssql_memory_server_summary
+
+  - metric_name: mssql_memory_clerk_topn_ratio
+    type: gauge
+    help: 'Percent of total clerk pages held by top N clerks by size.'
+    values: [topn_ratio_percent]
+    query_ref: mssql_memory_clerk_topn_ratio
+
+  # --- from former mssql_workspace_memory (unique) ---
+  - metric_name: mssql_memory_active_grant_mb
+    type: gauge
+    help: 'Active requests with significant memory grant (>= 100MB).'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - wait_type
+      - statement_snip
+    values: [granted_mb]
+    query_ref: mssql_memory_active_grants
+
+queries:
+  - query_name: mssql_memory_server_summary
+    query: |
+      SELECT
+          CAST(MAX(CASE WHEN counter_name = N'Target Server Memory (KB)' THEN cntr_value END) AS float) / 1024.0 AS target_server_mb,
+          CAST(MAX(CASE WHEN counter_name = N'Total Server Memory (KB)' THEN cntr_value END) AS float) / 1024.0 AS total_server_mb,
+          CAST(MAX(CASE WHEN counter_name = N'Stolen Server Memory (KB)' THEN cntr_value END) AS float) / 1024.0 AS stolen_server_mb,
+          CAST(MAX(CASE WHEN counter_name = N'Locked Pages Allocated (KB)' THEN cntr_value END) AS float) / 1024.0 AS locked_pages_mb
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Memory Manager%'
+        AND counter_name IN (
+          N'Target Server Memory (KB)',
+          N'Total Server Memory (KB)',
+          N'Stolen Server Memory (KB)',
+          N'Locked Pages Allocated (KB)'
+        );
+
+  - query_name: mssql_memory_clerk_topn_ratio
+    query: |
+      ;WITH clerks AS (
+          SELECT
+              SUM(CAST(pages_kb AS float)) AS total_pages_kb
+          FROM sys.dm_os_memory_clerks WITH (NOLOCK)
+      ),
+      topn AS (
+          SELECT TOP (10)
+              CAST(pages_kb AS float) AS pages_kb
+          FROM sys.dm_os_memory_clerks WITH (NOLOCK)
+          WHERE pages_kb > 0
+          ORDER BY pages_kb DESC
+      )
+      SELECT
+          CAST(
+            CASE
+              WHEN c.total_pages_kb IS NULL OR c.total_pages_kb <= 0 THEN 0
+              ELSE (SELECT SUM(t.pages_kb) FROM topn AS t) * 100.0 / c.total_pages_kb
+            END AS float
+          ) AS topn_ratio_percent
+      FROM clerks AS c;
+
+  - query_name: mssql_memory_clerks
+    query: |
+      SELECT TOP (25)
+          ISNULL(type, N'') AS clerk_type,
+          ISNULL(name, N'') AS clerk_name,
+          CAST(SUM(pages_kb) AS float) AS size_kb
+      FROM sys.dm_os_memory_clerks WITH (NOLOCK)
+      GROUP BY type, name
+      HAVING SUM(pages_kb) > 0
+      ORDER BY SUM(pages_kb) DESC;
+
+  - query_name: mssql_resource_semaphores
+    query: |
+      SELECT
+          CAST(resource_semaphore_id AS nvarchar(20)) AS resource_semaphore_id,
+          CAST(pool_id AS nvarchar(20)) AS pool_id,
+          CAST(available_memory_kb AS float) / 1024.0 AS available_memory_mb,
+          CAST(granted_memory_kb AS float) / 1024.0 AS granted_memory_mb,
+          CAST(grantee_count AS float) AS grantee_count,
+          CAST(waiter_count AS float) AS waiter_count,
+          CAST(target_memory_kb AS float) / 1024.0 AS target_memory_mb,
+          CAST(max_target_memory_kb AS float) / 1024.0 AS max_memory_mb
+      FROM sys.dm_exec_query_resource_semaphores WITH (NOLOCK);
+
+  - query_name: mssql_memory_manager_mb
+    query: |
+      SELECT
+          RTRIM(REPLACE(counter_name, N' (KB)', N'')) AS counter,
+          CAST(cntr_value AS float) / 1024.0 AS value_mb
+      FROM sys.dm_os_performance_counters WITH (NOLOCK)
+      WHERE object_name LIKE N'%Memory Manager%'
+        AND counter_name IN (
+          N'Total Server Memory (KB)',
+          N'Target Server Memory (KB)',
+          N'Granted Workspace Memory (KB)',
+          N'Maximum Workspace Memory (KB)',
+          N'Reserved Server Memory (KB)'
+        );
+
+  - query_name: mssql_memory_active_grants
+    query: |
+      SELECT TOP (30)
+          CAST(r.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(r.database_id), N'') AS db,
+          ISNULL(s.login_name, N'') AS login_name,
+          ISNULL(r.wait_type, N'') AS wait_type,
+          LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(SUBSTRING(t.text, (r.statement_start_offset/2)+1,
+                CASE WHEN r.statement_end_offset = -1 THEN 8000
+                     WHEN r.statement_end_offset > r.statement_start_offset
+                       THEN ((r.statement_end_offset - r.statement_start_offset)/2)+1
+                     ELSE 8000 END), N''),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            8000) AS statement_snip,
+          CAST(r.granted_query_memory AS float) * 8.0 / 1024.0 AS granted_mb
+      FROM sys.dm_exec_requests AS r WITH (NOLOCK)
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON r.session_id = s.session_id
+      OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
+      WHERE r.session_id <> @@SPID
+        AND r.granted_query_memory >= 12800
+        AND ISNULL(s.program_name, N'') NOT LIKE N'%sql_exporter%'
+      ORDER BY r.granted_query_memory DESC;

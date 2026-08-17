@@ -1,0 +1,38 @@
+# Uses local env files; create them from the committed *.env.example files.
+#
+# Run (from this folder):
+#   cd <repository>\mcp
+#   docker compose -f docker-compose.mcp.yml up -d
+#
+# Note: the published host port (8101) must be in --allowed-hosts,
+# otherwise Cursor gets: forbidden: host not allowed
+
+services:
+  grafana:
+    image: grafana/mcp-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8101:8000"
+    env_file:
+      - ./mcp-grafana.env
+    command:
+      - "-t"
+      - "streamable-http"
+      - "--address"
+      - "0.0.0.0:8000"
+      - "--allowed-hosts"
+      - "127.0.0.1:8101,localhost:8101,127.0.0.1:8000,localhost:8000"
+      - "--allowed-origins"
+      - "*"
+
+  prometheus:
+    image: ghcr.io/pab1it0/prometheus-mcp-server:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8103:8080"
+    env_file:
+      - ./mcp-grafana.env
+    environment:
+      PROMETHEUS_MCP_SERVER_TRANSPORT: http
+      PROMETHEUS_MCP_BIND_HOST: "0.0.0.0"
+      PROMETHEUS_MCP_BIND_PORT: "8080"

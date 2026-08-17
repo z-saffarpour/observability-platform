@@ -1,0 +1,155 @@
+# Plan cache size, object-type breakdown, and single-use plan pressure.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_plan_cache
+
+min_interval: 120s
+
+metrics:
+  - metric_name: mssql_plan_cache_size_mb
+    type: gauge
+    help: 'Plan cache size (MB) by objtype.'
+    key_labels:
+      - objtype
+    values: [size_mb]
+    query_ref: mssql_plan_cache_by_type
+
+  - metric_name: mssql_plan_cache_plan_count
+    type: gauge
+    help: 'Cached plan count by objtype.'
+    key_labels:
+      - objtype
+    values: [plan_count]
+    query_ref: mssql_plan_cache_by_type
+
+  - metric_name: mssql_plan_cache_single_use_count
+    type: gauge
+    help: 'Plans with usecounts = 1 by objtype (ad-hoc pollution signal).'
+    key_labels:
+      - objtype
+    values: [single_use_count]
+    query_ref: mssql_plan_cache_by_type
+
+  - metric_name: mssql_plan_cache_total_size_mb
+    type: gauge
+    help: 'Total plan cache size (MB).'
+    values: [size_mb]
+    query_ref: mssql_plan_cache_totals
+
+  - metric_name: mssql_plan_cache_total_plans
+    type: gauge
+    help: 'Total cached plans.'
+    values: [plan_count]
+    query_ref: mssql_plan_cache_totals
+
+  - metric_name: mssql_plan_cache_single_use_ratio
+    type: gauge
+    help: 'Fraction of cached plans with usecounts = 1 (0..1).'
+    values: [single_use_ratio]
+    query_ref: mssql_plan_cache_totals
+
+  - metric_name: mssql_plan_cache_use_counts_sum
+    type: gauge
+    help: 'Sum of usecounts across all cached plans.'
+    values: [use_counts_sum]
+    query_ref: mssql_plan_cache_totals
+
+  - metric_name: mssql_plan_cache_db_size_mb
+    type: gauge
+    help: 'Plan cache size (MB) by database context (dbid plan attribute).'
+    key_labels:
+      - db
+    values: [size_mb]
+    query_ref: mssql_plan_cache_by_db
+
+  - metric_name: mssql_plan_cache_db_plan_count
+    type: gauge
+    help: 'Cached plan count by database context.'
+    key_labels:
+      - db
+    values: [plan_count]
+    query_ref: mssql_plan_cache_by_db
+
+  - metric_name: mssql_plan_cache_db_single_use_count
+    type: gauge
+    help: 'Single-use cached plans by database context.'
+    key_labels:
+      - db
+    values: [single_use_count]
+    query_ref: mssql_plan_cache_by_db
+
+  - metric_name: mssql_plan_cache_db_single_use_ratio
+    type: gauge
+    help: 'Fraction of cached plans with usecounts = 1 by database context (0..1).'
+    key_labels:
+      - db
+    values: [single_use_ratio]
+    query_ref: mssql_plan_cache_by_db
+
+  - metric_name: mssql_plan_cache_db_adhoc_size_mb
+    type: gauge
+    help: 'Adhoc plan cache size (MB) by database context.'
+    key_labels:
+      - db
+    values: [adhoc_size_mb]
+    query_ref: mssql_plan_cache_by_db
+
+  - metric_name: mssql_plan_cache_db_adhoc_single_use_ratio
+    type: gauge
+    help: 'Fraction of adhoc cached plans with usecounts = 1 by database context (0..1).'
+    key_labels:
+      - db
+    values: [adhoc_single_use_ratio]
+    query_ref: mssql_plan_cache_by_db
+
+queries:
+  - query_name: mssql_plan_cache_by_type
+    query: |
+      SELECT
+          ISNULL(objtype, N'') AS objtype,
+          CAST(SUM(CAST(size_in_bytes AS bigint)) AS float) / 1024.0 / 1024.0 AS size_mb,
+          CAST(COUNT(*) AS float) AS plan_count,
+          CAST(SUM(CASE WHEN usecounts = 1 THEN 1 ELSE 0 END) AS float) AS single_use_count
+      FROM sys.dm_exec_cached_plans WITH (NOLOCK)
+      GROUP BY objtype;
+
+  - query_name: mssql_plan_cache_totals
+    query: |
+      SELECT
+          CAST(SUM(CAST(size_in_bytes AS bigint)) AS float) / 1024.0 / 1024.0 AS size_mb,
+          CAST(COUNT(*) AS float) AS plan_count,
+          CAST(
+            CASE WHEN COUNT(*) = 0 THEN 0.0
+                 ELSE SUM(CASE WHEN usecounts = 1 THEN 1.0 ELSE 0.0 END) / COUNT(*)
+            END AS float
+          ) AS single_use_ratio,
+          CAST(SUM(CAST(usecounts AS bigint)) AS float) AS use_counts_sum
+      FROM sys.dm_exec_cached_plans WITH (NOLOCK);
+
+  - query_name: mssql_plan_cache_by_db
+    query: |
+      SELECT
+          ISNULL(DB_NAME(NULLIF(CONVERT(int, pa.value), 0)), N'') AS db,
+          CAST(SUM(CAST(cp.size_in_bytes AS bigint)) AS float) / 1024.0 / 1024.0 AS size_mb,
+          CAST(COUNT(*) AS float) AS plan_count,
+          CAST(SUM(CASE WHEN cp.usecounts = 1 THEN 1 ELSE 0 END) AS float) AS single_use_count,
+          CAST(
+            CASE WHEN COUNT(*) = 0 THEN 0.0
+                 ELSE SUM(CASE WHEN cp.usecounts = 1 THEN 1.0 ELSE 0.0 END) / COUNT(*)
+            END AS float
+          ) AS single_use_ratio,
+          CAST(SUM(CASE WHEN cp.objtype = N'Adhoc' THEN CAST(cp.size_in_bytes AS bigint) ELSE 0 END) AS float) / 1024.0 / 1024.0 AS adhoc_size_mb,
+          CAST(
+            CASE WHEN SUM(CASE WHEN cp.objtype = N'Adhoc' THEN 1 ELSE 0 END) = 0 THEN 0.0
+                 ELSE SUM(CASE WHEN cp.objtype = N'Adhoc' AND cp.usecounts = 1 THEN 1.0 ELSE 0.0 END)
+                      / SUM(CASE WHEN cp.objtype = N'Adhoc' THEN 1.0 ELSE 0.0 END)
+            END AS float
+          ) AS adhoc_single_use_ratio
+      FROM sys.dm_exec_cached_plans cp WITH (NOLOCK)
+      OUTER APPLY (
+          SELECT value
+          FROM sys.dm_exec_plan_attributes(cp.plan_handle)
+          WHERE attribute = N'dbid'
+      ) pa
+      GROUP BY ISNULL(DB_NAME(NULLIF(CONVERT(int, pa.value), 0)), N'');

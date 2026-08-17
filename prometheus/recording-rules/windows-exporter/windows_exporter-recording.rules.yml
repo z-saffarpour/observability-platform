@@ -1,0 +1,38 @@
+groups:
+  - name: windows_exporter.recording
+    rules:
+      - record: instance:windows_cpu_utilisation:rate5m
+        expr: 1 - avg by (instance, job) (rate(windows_cpu_time_total{mode="idle"}[5m]))
+
+      - record: instance:windows_memory_available_ratio
+        expr: windows_memory_available_bytes / windows_memory_physical_total_bytes
+
+      - record: instance:windows_memory_commit_ratio
+        expr: windows_memory_committed_bytes / windows_memory_commit_limit
+
+      - record: instance_volume:windows_disk_free_ratio
+        expr: windows_logical_disk_free_bytes / windows_logical_disk_size_bytes
+
+      - record: instance_volume:windows_logical_disk_read_latency_seconds:rate5m
+        expr: |
+          rate(windows_logical_disk_read_latency_seconds_total[5m])
+          / clamp_min(rate(windows_logical_disk_reads_total[5m]), 1)
+
+      - record: instance_volume:windows_logical_disk_write_latency_seconds:rate5m
+        expr: |
+          rate(windows_logical_disk_write_latency_seconds_total[5m])
+          / clamp_min(rate(windows_logical_disk_writes_total[5m]), 1)
+
+      - record: instance:windows_pagefile_free_ratio
+        expr: windows_pagefile_free_bytes / windows_pagefile_limit_bytes
+
+      - record: instance:windows_terminal_services_active_sessions
+        expr: sum by (instance, job) (windows_terminal_services_session_info{state="active",user!=""})
+
+      - record: instance:windows_terminal_services_disconnected_sessions
+        expr: sum by (instance, job) (windows_terminal_services_session_info{state="disconnected",user!=""})
+
+      - record: instance_mssql:buffer_cache_hit_ratio:rate5m
+        expr: |
+          rate(windows_mssql_bufman_buffer_cache_hits[5m])
+          / clamp_min(rate(windows_mssql_bufman_buffer_cache_lookups[5m]), 1)

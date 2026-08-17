@@ -1,0 +1,275 @@
+# Database configuration and drift signals.
+#
+# Permissions:
+#   GRANT VIEW ANY DATABASE TO
+#   Per-database CONNECT and VIEW DATABASE STATE are recommended for scoped
+#   configuration and Query Store state. Inaccessible databases are skipped.
+#
+collector_name: mssql_database_configuration
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_database_compatibility_level
+    type: gauge
+    help: 'Database compatibility level.'
+    key_labels: [db]
+    values: [compatibility_level]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_page_verify_option
+    type: gauge
+    help: 'Page verification mode: 0=NONE, 1=TORN_PAGE_DETECTION, 2=CHECKSUM.'
+    key_labels: [db]
+    values: [page_verify_option]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_auto_create_stats_enabled
+    type: gauge
+    help: '1 when AUTO_CREATE_STATISTICS is enabled.'
+    key_labels: [db]
+    values: [auto_create_stats_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_auto_update_stats_enabled
+    type: gauge
+    help: '1 when AUTO_UPDATE_STATISTICS is enabled.'
+    key_labels: [db]
+    values: [auto_update_stats_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_auto_update_stats_async_enabled
+    type: gauge
+    help: '1 when AUTO_UPDATE_STATISTICS_ASYNC is enabled.'
+    key_labels: [db]
+    values: [auto_update_stats_async_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_auto_close_enabled
+    type: gauge
+    help: '1 when AUTO_CLOSE is enabled; normally expected to be 0 on server workloads.'
+    key_labels: [db]
+    values: [auto_close_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_auto_shrink_enabled
+    type: gauge
+    help: '1 when AUTO_SHRINK is enabled; normally expected to be 0.'
+    key_labels: [db]
+    values: [auto_shrink_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_read_committed_snapshot_enabled
+    type: gauge
+    help: '1 when READ_COMMITTED_SNAPSHOT is enabled.'
+    key_labels: [db]
+    values: [read_committed_snapshot_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_snapshot_isolation_state
+    type: gauge
+    help: 'Snapshot isolation state: 0=OFF, 1=ON, 2=IN_TRANSITION_TO_OFF, 3=IN_TRANSITION_TO_ON.'
+    key_labels: [db]
+    values: [snapshot_isolation_state]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_forced_parameterization_enabled
+    type: gauge
+    help: '1 when PARAMETERIZATION FORCED is enabled.'
+    key_labels: [db]
+    values: [forced_parameterization_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_target_recovery_time_seconds
+    type: gauge
+    help: 'Configured target recovery time in seconds.'
+    key_labels: [db]
+    values: [target_recovery_time_seconds]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_delayed_durability
+    type: gauge
+    help: 'Delayed durability mode: 0=DISABLED, 1=ALLOWED, 2=FORCED; -1 when unsupported.'
+    key_labels: [db]
+    values: [delayed_durability]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_accelerated_recovery_enabled
+    type: gauge
+    help: '1 when Accelerated Database Recovery is enabled, 0 when disabled, -1 when unsupported.'
+    key_labels: [db]
+    values: [accelerated_recovery_enabled]
+    query_ref: mssql_database_configuration_base
+
+  - metric_name: mssql_database_query_store_actual_state
+    type: gauge
+    help: 'Query Store actual state: 0=OFF, 1=READ_ONLY, 2=READ_WRITE, 3=ERROR; -1 when unavailable.'
+    key_labels: [db]
+    values: [actual_state]
+    query_ref: mssql_database_configuration_query_store
+
+  - metric_name: mssql_database_query_store_desired_state
+    type: gauge
+    help: 'Query Store desired state: 0=OFF, 1=READ_ONLY, 2=READ_WRITE; -1 when unavailable.'
+    key_labels: [db]
+    values: [desired_state]
+    query_ref: mssql_database_configuration_query_store
+
+  - metric_name: mssql_database_query_store_readonly_reason
+    type: gauge
+    help: 'Query Store read-only reason bitmask; 0 means no read-only condition and -1 means unavailable.'
+    key_labels: [db]
+    values: [readonly_reason]
+    query_ref: mssql_database_configuration_query_store
+
+  - metric_name: mssql_database_scoped_configuration
+    type: gauge
+    help: 'Numeric database-scoped configuration value for selected optimizer settings.'
+    key_labels:
+      - db
+      - configuration
+    values: [configuration_value]
+    query_ref: mssql_database_configuration_scoped
+
+queries:
+  - query_name: mssql_database_configuration_base
+    query: |
+      DECLARE @sql nvarchar(max);
+      DECLARE @delayed_durability nvarchar(100) =
+          CASE WHEN COL_LENGTH(N'sys.databases', N'delayed_durability') IS NOT NULL
+               THEN N'CAST(d.delayed_durability AS float)'
+               ELSE N'CAST(-1 AS float)' END;
+      DECLARE @adr nvarchar(100) =
+          CASE WHEN COL_LENGTH(N'sys.databases', N'is_accelerated_database_recovery_on') IS NOT NULL
+               THEN N'CAST(d.is_accelerated_database_recovery_on AS float)'
+               ELSE N'CAST(-1 AS float)' END;
+
+      SET @sql = N'
+      SELECT
+          d.name AS db,
+          CAST(d.compatibility_level AS float) AS compatibility_level,
+          CAST(d.page_verify_option AS float) AS page_verify_option,
+          CAST(d.is_auto_create_stats_on AS float) AS auto_create_stats_enabled,
+          CAST(d.is_auto_update_stats_on AS float) AS auto_update_stats_enabled,
+          CAST(d.is_auto_update_stats_async_on AS float) AS auto_update_stats_async_enabled,
+          CAST(d.is_auto_close_on AS float) AS auto_close_enabled,
+          CAST(d.is_auto_shrink_on AS float) AS auto_shrink_enabled,
+          CAST(d.is_read_committed_snapshot_on AS float) AS read_committed_snapshot_enabled,
+          CAST(d.snapshot_isolation_state AS float) AS snapshot_isolation_state,
+          CAST(d.is_parameterization_forced AS float) AS forced_parameterization_enabled,
+          CAST(d.target_recovery_time_in_seconds AS float) AS target_recovery_time_seconds,
+          ' + @delayed_durability + N' AS delayed_durability,
+          ' + @adr + N' AS accelerated_recovery_enabled
+      FROM sys.databases AS d WITH (NOLOCK)
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL;';
+
+      EXEC sys.sp_executesql @sql;
+
+  - query_name: mssql_database_configuration_query_store
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#mssql_db_qs_config') IS NOT NULL
+          DROP TABLE #mssql_db_qs_config;
+      CREATE TABLE #mssql_db_qs_config (
+          db sysname NOT NULL,
+          actual_state float NOT NULL,
+          desired_state float NOT NULL,
+          readonly_reason float NOT NULL
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          IF OBJECT_ID(N''sys.database_query_store_options'') IS NOT NULL
+          BEGIN
+              INSERT INTO #mssql_db_qs_config (db, actual_state, desired_state, readonly_reason)
+              SELECT @db_in,
+                     CAST(actual_state AS float),
+                     CAST(desired_state AS float),
+                     CAST(readonly_reason AS float)
+              FROM sys.database_query_store_options;
+          END;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          IF NOT EXISTS (SELECT 1 FROM #mssql_db_qs_config WHERE db = @db)
+              INSERT INTO #mssql_db_qs_config VALUES (@db, -1, -1, -1);
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT db, actual_state, desired_state, readonly_reason
+      FROM #mssql_db_qs_config;
+
+  - query_name: mssql_database_configuration_scoped
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#mssql_db_scoped_config') IS NOT NULL
+          DROP TABLE #mssql_db_scoped_config;
+      CREATE TABLE #mssql_db_scoped_config (
+          db sysname NOT NULL,
+          configuration nvarchar(128) NOT NULL,
+          configuration_value float NOT NULL
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+          IF OBJECT_ID(N''sys.database_scoped_configurations'') IS NOT NULL
+          BEGIN
+              INSERT INTO #mssql_db_scoped_config (db, configuration, configuration_value)
+              SELECT @db_in,
+                     name,
+                     TRY_CONVERT(float, value)
+              FROM sys.database_scoped_configurations
+              WHERE name IN (
+                  N''MAXDOP'',
+                  N''LEGACY_CARDINALITY_ESTIMATION'',
+                  N''PARAMETER_SNIFFING'',
+                  N''QUERY_OPTIMIZER_HOTFIXES''
+              )
+                AND TRY_CONVERT(float, value) IS NOT NULL;
+          END;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT db, configuration, configuration_value
+      FROM #mssql_db_scoped_config;

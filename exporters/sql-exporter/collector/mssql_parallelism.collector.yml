@@ -1,0 +1,135 @@
+# Parallelism related waits, configs, and active parallel requests.
+#
+#   GRANT VIEW SERVER STATE TO
+#
+collector_name: mssql_parallelism
+
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_parallelism_wait_time_ms
+    type: gauge
+    help: 'Cumulative wait_time_ms for parallelism-related waits.'
+    key_labels:
+      - wait_type
+    values: [wait_time_ms]
+    query_ref: mssql_parallel_waits
+
+  - metric_name: mssql_parallelism_waiting_tasks
+    type: gauge
+    help: 'Cumulative waiting_tasks_count for parallelism-related waits.'
+    key_labels:
+      - wait_type
+    values: [waiting_tasks_count]
+    query_ref: mssql_parallel_waits
+
+  - metric_name: mssql_parallelism_configuration
+    type: gauge
+    help: 'Parallelism and related memory configs (MAXDOP, cost threshold, server memory, ad hoc).'
+    key_labels:
+      - name
+    values: [value]
+    query_ref: mssql_parallel_config
+
+  - metric_name: mssql_parallelism_active_request_elapsed_ms
+    type: gauge
+    help: 'Active parallel / large-grant requests (elapsed >= 5s).'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - dop
+      - wait_type
+      - statement_snip
+    values: [elapsed_ms]
+    query_ref: mssql_parallel_active
+
+  - metric_name: mssql_parallelism_active_request_dop
+    type: gauge
+    help: 'DOP of active parallel / large-grant requests (elapsed >= 5s).'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - dop
+      - wait_type
+      - statement_snip
+    values: [dop_value]
+    query_ref: mssql_parallel_active
+
+  - metric_name: mssql_parallelism_active_request_grant_mb
+    type: gauge
+    help: 'Granted memory MB for active parallel / large-grant requests (elapsed >= 5s).'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - dop
+      - wait_type
+      - statement_snip
+    values: [granted_mb]
+    query_ref: mssql_parallel_active
+
+queries:
+  - query_name: mssql_parallel_waits
+    query: |
+      SELECT
+          wait_type,
+          CAST(wait_time_ms AS float) AS wait_time_ms,
+          CAST(waiting_tasks_count AS float) AS waiting_tasks_count
+      FROM sys.dm_os_wait_stats WITH (NOLOCK)
+      WHERE wait_type IN (
+          N'CXPACKET', N'CXCONSUMER', N'CXSYNC_PORT', N'CXSYNC_CONSUMER',
+          N'EXCHANGE', N'RESOURCE_SEMAPHORE', N'RESOURCE_SEMAPHORE_QUERY_COMPILE',
+          N'PAGEIOLATCH_SH', N'PAGEIOLATCH_EX', N'IO_COMPLETION', N'ASYNC_NETWORK_IO'
+        );
+
+  - query_name: mssql_parallel_config
+    query: |
+      SELECT name, CAST(CAST(value_in_use AS nvarchar(32)) AS float) AS value
+      FROM sys.configurations WITH (NOLOCK)
+      WHERE name IN (
+          N'max degree of parallelism',
+          N'cost threshold for parallelism',
+          N'max server memory (MB)',
+          N'min server memory (MB)',
+          N'optimize for ad hoc workloads'
+        );
+
+  - query_name: mssql_parallel_active
+    query: |
+      SELECT TOP (30)
+          CAST(r.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(r.database_id), N'') AS db,
+          ISNULL(s.login_name, N'') AS login_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          CAST(ISNULL(r.dop, 0) AS nvarchar(20)) AS dop,
+          ISNULL(r.wait_type, N'') AS wait_type,
+          LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(SUBSTRING(t.text, (r.statement_start_offset/2)+1,
+                CASE WHEN r.statement_end_offset = -1 THEN 100
+                     WHEN r.statement_end_offset > r.statement_start_offset
+                       THEN ((r.statement_end_offset - r.statement_start_offset)/2)+1
+                     ELSE 100 END), N''),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            100) AS statement_snip,
+          CAST(r.total_elapsed_time AS float) AS elapsed_ms,
+          CAST(ISNULL(r.dop, 0) AS float) AS dop_value,
+          CAST(r.granted_query_memory AS float) * 8.0 / 1024.0 AS granted_mb
+      FROM sys.dm_exec_requests AS r WITH (NOLOCK)
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON r.session_id = s.session_id
+      OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
+      WHERE r.session_id <> @@SPID
+        AND r.total_elapsed_time >= 5000
+        AND (
+          ISNULL(r.dop, 0) > 1
+          OR r.granted_query_memory >= 128000
+          OR r.wait_type IN (N'RESOURCE_SEMAPHORE', N'CXPACKET', N'CXCONSUMER', N'PAGEIOLATCH_SH')
+        )
+        AND ISNULL(s.program_name, N'') NOT LIKE N'%sql_exporter%'
+      ORDER BY r.dop DESC, r.granted_query_memory DESC, r.total_elapsed_time DESC;

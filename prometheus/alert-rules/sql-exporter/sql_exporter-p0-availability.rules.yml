@@ -1,0 +1,69 @@
+# P0 — Critical availability (databases, backup, integrity, restore, scrape)
+groups:
+  - name: sql_exporter.p0.availability
+    interval: 30s
+    rules:
+      - alert: SqlExporterDown
+        expr: up{job=~"sql.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+          collector: scrape
+        annotations:
+          summary: "sql_exporter is unavailable on {{ $labels.instance }}"
+          description: "Prometheus has failed to scrape the SQL exporter target for five minutes."
+          runbook: "Check service prometheus_sql_exporter, port 9399, firewall, and scrape Basic Auth."
+
+      - alert: SqlDatabaseNotOnline
+        expr: mssql_database_state != 0
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+          collector: mssql_standard
+        annotations:
+          summary: "SQL Server database is not ONLINE"
+          description: "Database {{ $labels.db }} state code is {{ $value }}."
+          runbook: "Check database state (SUSPECT/RECOVERING/OFFLINE). Review ERRORLOG and recent failovers."
+
+      - alert: SqlBackupFullTooOld
+        expr: mssql_backup_age_seconds{backup_type="D",is_read_only="0"} > 90000 or mssql_backup_age_seconds{backup_type="D",is_read_only="0"} == -1
+        for: 15m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+          collector: mssql_backup
+        annotations:
+          summary: "Full database backup is missing or too old"
+          description: "Database {{ $labels.db }} has no recent full backup; age={{ $value | humanizeDuration }}."
+          runbook: "Verify backup jobs, disk/space targets, and msdb backup history. Threshold sample: 25h."
+
+      - alert: SqlDatabaseIntegrityAtRisk
+        expr: mssql_suspect_pages_total > 0 or mssql_checkdb_age_seconds > 604800
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+          collector: mssql_database_integrity
+        annotations:
+          summary: "Database integrity signal requires attention"
+          description: "Suspect pages exist or CHECKDB is older than seven days for {{ $labels.db }}."
+          runbook: "If suspect pages > 0, treat as critical corruption signal. Otherwise schedule/verify CHECKDB."
+
+      - alert: SqlRestoreSecondaryBehindRpo
+        expr: mssql_restore_gap_to_rpo_seconds > 1800
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+          collector: mssql_restore
+        annotations:
+          summary: "Restore secondary is behind its sample RPO"
+          description: "Restore gap for {{ $labels.db }} is {{ $value | humanizeDuration }}."
+          runbook: "Check restore/log-shipping jobs, file share access, and RPO threshold (sample 30m)."

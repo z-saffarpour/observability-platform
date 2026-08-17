@@ -1,0 +1,187 @@
+# Blocking / head-blocker metrics for Microsoft SQL Server.
+#
+# It is required that the SQL Server user has the following permissions:
+#
+#   GRANT VIEW SERVER STATE TO
+#   GRANT VIEW ANY DEFINITION TO
+#
+# Auto-loaded via collectors: [mssql_*] and collector_files: ["collector/*.collector.yml"]
+#
+collector_name: mssql_blocking
+
+# Needs fresher data than waits/IO, but 15s is too chatty on busy hosts.
+min_interval: 30s
+
+metrics:
+  - metric_name: mssql_blocking_count
+    type: gauge
+    help: 'Number of currently blocked sessions.'
+    values: [blocked_count]
+    query_ref: mssql_blocking_summary
+
+  - metric_name: mssql_blocking_head_count
+    type: gauge
+    help: 'Number of distinct head blockers.'
+    values: [head_blocker_count]
+    query_ref: mssql_blocking_summary
+
+  - metric_name: mssql_blocking_wait_ms
+    type: gauge
+    help: 'Blocked session wait time (ms).'
+    key_labels:
+      - session_id
+      - blocking_session_id
+      - db
+      - login_name
+      - program_name
+      - wait_type
+      - status
+      - command
+      - statement_snip
+    values: [wait_time_ms]
+    query_ref: mssql_blocking_details
+
+  - metric_name: mssql_blocking_elapsed_ms
+    type: gauge
+    help: 'Blocked session elapsed time (ms).'
+    key_labels:
+      - session_id
+      - blocking_session_id
+      - db
+      - login_name
+      - program_name
+      - wait_type
+      - status
+      - command
+      - statement_snip
+    values: [elapsed_ms]
+    query_ref: mssql_blocking_details
+
+  - metric_name: mssql_head_blocker_elapsed_ms
+    type: gauge
+    help: 'Head blocker session elapsed time (ms).'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - status
+      - command
+      - statement_snip
+      - blocked_count
+    values: [elapsed_ms]
+    query_ref: mssql_head_blockers
+
+  - metric_name: mssql_head_blocker_cpu_ms
+    type: gauge
+    help: 'Head blocker session CPU time (ms).'
+    key_labels:
+      - session_id
+      - db
+      - login_name
+      - program_name
+      - status
+      - command
+      - statement_snip
+      - blocked_count
+    values: [cpu_ms]
+    query_ref: mssql_head_blockers
+
+queries:
+  - query_name: mssql_blocking_summary
+    query: |
+      SELECT
+          CAST(COUNT(*) AS float) AS blocked_count,
+          CAST(COUNT(DISTINCT blocking_session_id) AS float) AS head_blocker_count
+      FROM sys.dm_exec_requests WITH (NOLOCK)
+      WHERE blocking_session_id <> 0;
+
+  - query_name: mssql_blocking_details
+    query: |
+      SELECT TOP (40)
+          CAST(r.session_id AS nvarchar(20)) AS session_id,
+          CAST(r.blocking_session_id AS nvarchar(20)) AS blocking_session_id,
+          ISNULL(DB_NAME(r.database_id), N'') AS db,
+          ISNULL(s.login_name, N'') AS login_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          ISNULL(r.wait_type, N'') AS wait_type,
+          r.status AS status,
+          r.command AS command,
+          LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(
+                SUBSTRING(
+                  t.text,
+                  (r.statement_start_offset / 2) + 1,
+                  CASE
+                    WHEN r.statement_end_offset = -1 THEN 120
+                    WHEN r.statement_end_offset > r.statement_start_offset
+                      THEN ((r.statement_end_offset - r.statement_start_offset) / 2) + 1
+                    ELSE 120
+                  END
+                ),
+                N''
+              ),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            120
+          ) AS statement_snip,
+          CAST(r.wait_time AS float) AS wait_time_ms,
+          CAST(r.total_elapsed_time AS float) AS elapsed_ms
+      FROM sys.dm_exec_requests AS r WITH (NOLOCK)
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON r.session_id = s.session_id
+      OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
+      WHERE r.blocking_session_id <> 0
+      ORDER BY r.wait_time DESC;
+
+  - query_name: mssql_head_blockers
+    query: |
+      ;WITH blocked AS (
+          SELECT
+              blocking_session_id AS session_id,
+              COUNT(*) AS blocked_count
+          FROM sys.dm_exec_requests WITH (NOLOCK)
+          WHERE blocking_session_id <> 0
+          GROUP BY blocking_session_id
+      )
+      SELECT TOP (20)
+          CAST(b.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(COALESCE(r.database_id, s.database_id)), N'') AS db,
+          ISNULL(s.login_name, N'') AS login_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          ISNULL(r.status, s.status) AS status,
+          ISNULL(r.command, N'') AS command,
+          LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(
+                SUBSTRING(
+                  t.text,
+                  (COALESCE(r.statement_start_offset, 0) / 2) + 1,
+                  CASE
+                    WHEN r.statement_end_offset IS NULL OR r.statement_end_offset = -1 THEN 120
+                    WHEN r.statement_end_offset > r.statement_start_offset
+                      THEN ((r.statement_end_offset - r.statement_start_offset) / 2) + 1
+                    ELSE 120
+                  END
+                ),
+                N''
+              ),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            120
+          ) AS statement_snip,
+          CAST(b.blocked_count AS nvarchar(20)) AS blocked_count,
+          CAST(ISNULL(r.total_elapsed_time, 0) AS float) AS elapsed_ms,
+          CAST(ISNULL(r.cpu_time, 0) AS float) AS cpu_ms
+      FROM blocked AS b
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON b.session_id = s.session_id
+      LEFT JOIN sys.dm_exec_requests AS r WITH (NOLOCK)
+          ON b.session_id = r.session_id
+      OUTER APPLY (
+          SELECT TOP (1) c.most_recent_sql_handle
+          FROM sys.dm_exec_connections AS c WITH (NOLOCK)
+          WHERE c.session_id = b.session_id
+          ORDER BY c.connect_time DESC
+      ) AS c
+      OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) AS t
+      ORDER BY b.blocked_count DESC, elapsed_ms DESC;

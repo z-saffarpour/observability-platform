@@ -1,0 +1,38 @@
+groups:
+  - name: windows_exporter.role.terminal
+    rules:
+      - alert: TerminalServicesNotRunning
+        expr: windows_service_state{state="running",name=~"(?i)TermService"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: terminal
+        annotations:
+          summary: "Remote Desktop Services is not running on {{ $labels.instance }}"
+          description: "TermService has not been running for three minutes."
+          runbook: "Start TermService and check RDS role event logs."
+
+      - alert: TerminalServerDisconnectedSessionsHigh
+        expr: instance:windows_terminal_services_disconnected_sessions > 20
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: terminal
+        annotations:
+          summary: "Many disconnected RDS sessions on {{ $labels.instance }}"
+          description: "There are {{ $value }} disconnected user sessions. Tune the threshold to server capacity and session policy."
+          runbook: "Review idle/disconnected session limits in Group Policy."
+
+      - alert: TerminalServerActiveSessionsHigh
+        expr: instance:windows_terminal_services_active_sessions > 50
+        for: 20m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: terminal
+        annotations:
+          summary: "High active RDS sessions on {{ $labels.instance }}"
+          description: "Active user sessions are {{ $value }} (default threshold 50)."
+          runbook: "Compare with host CPU/memory and licensed session capacity."

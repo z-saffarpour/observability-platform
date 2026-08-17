@@ -1,0 +1,289 @@
+# SQL Server Resource Governor configuration and runtime pressure.
+#
+# Permissions:
+#   GRANT VIEW ANY DEFINITION TO
+#   GRANT VIEW SERVER STATE TO                    -- SQL Server 2019 and older
+#   GRANT VIEW SERVER PERFORMANCE STATE TO        -- SQL Server 2022 and newer
+#
+collector_name: mssql_resource_governor
+
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_resource_governor_enabled
+    type: gauge
+    help: '1 when SQL Server Resource Governor is enabled.'
+    values: [enabled]
+    query_ref: mssql_resource_governor_status
+
+  - metric_name: mssql_resource_governor_reconfiguration_pending
+    type: gauge
+    help: '1 when stored Resource Governor configuration has not yet been applied.'
+    values: [reconfiguration_pending]
+    query_ref: mssql_resource_governor_status
+
+  - metric_name: mssql_resource_governor_pool_min_cpu_percent
+    type: gauge
+    help: 'Configured minimum CPU bandwidth percentage for the resource pool.'
+    key_labels: [pool]
+    values: [min_cpu_percent]
+    query_ref: mssql_resource_governor_pool_configuration
+
+  - metric_name: mssql_resource_governor_pool_max_cpu_percent
+    type: gauge
+    help: 'Configured maximum average CPU bandwidth percentage for the resource pool.'
+    key_labels: [pool]
+    values: [max_cpu_percent]
+    query_ref: mssql_resource_governor_pool_configuration
+
+  - metric_name: mssql_resource_governor_pool_min_memory_percent
+    type: gauge
+    help: 'Configured guaranteed query-workspace memory percentage for the resource pool.'
+    key_labels: [pool]
+    values: [min_memory_percent]
+    query_ref: mssql_resource_governor_pool_configuration
+
+  - metric_name: mssql_resource_governor_pool_max_memory_percent
+    type: gauge
+    help: 'Configured maximum query-workspace memory percentage for the resource pool.'
+    key_labels: [pool]
+    values: [max_memory_percent]
+    query_ref: mssql_resource_governor_pool_configuration
+
+  - metric_name: mssql_resource_governor_pool_cpu_usage_ms_total
+    type: counter
+    help: 'Cumulative CPU usage in milliseconds since Resource Governor statistics were reset.'
+    key_labels: [pool]
+    values: [total_cpu_usage_ms]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_cache_memory_kb
+    type: gauge
+    help: 'Current cache memory usage for the resource pool in kilobytes.'
+    key_labels: [pool]
+    values: [cache_memory_kb]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_compile_memory_kb
+    type: gauge
+    help: 'Current compile and stolen memory usage for the resource pool in kilobytes.'
+    key_labels: [pool]
+    values: [compile_memory_kb]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_used_memgrant_kb
+    type: gauge
+    help: 'Current memory used by query memory grants in the resource pool.'
+    key_labels: [pool]
+    values: [used_memgrant_kb]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_active_memgrant_count
+    type: gauge
+    help: 'Current number of active memory grants in the resource pool.'
+    key_labels: [pool]
+    values: [active_memgrant_count]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_active_memgrant_kb
+    type: gauge
+    help: 'Current active memory grant amount in kilobytes.'
+    key_labels: [pool]
+    values: [active_memgrant_kb]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_memgrant_waiter_count
+    type: gauge
+    help: 'Current number of queries waiting for a memory grant in the resource pool.'
+    key_labels: [pool]
+    values: [memgrant_waiter_count]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_max_memory_kb
+    type: gauge
+    help: 'Current maximum query-workspace memory available to the resource pool in kilobytes.'
+    key_labels: [pool]
+    values: [max_memory_kb]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_memgrant_timeouts_total
+    type: counter
+    help: 'Cumulative memory grant timeouts since Resource Governor statistics were reset.'
+    key_labels: [pool]
+    values: [total_memgrant_timeout_count]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_pool_out_of_memory_total
+    type: counter
+    help: 'Cumulative out-of-memory events since Resource Governor statistics were reset.'
+    key_labels: [pool]
+    values: [out_of_memory_count]
+    query_ref: mssql_resource_governor_pool_runtime
+
+  - metric_name: mssql_resource_governor_workload_group_info
+    type: gauge
+    help: 'Workload group metadata; value is always 1.'
+    key_labels:
+      - pool
+      - workload_group
+      - importance
+    static_value: 1
+    query_ref: mssql_resource_governor_group_configuration
+
+  - metric_name: mssql_resource_governor_group_request_max_memory_percent
+    type: gauge
+    help: 'Maximum pool workspace-memory percentage allowed for one request.'
+    key_labels:
+      - pool
+      - workload_group
+      - importance
+    values: [request_max_memory_percent]
+    query_ref: mssql_resource_governor_group_configuration
+
+  - metric_name: mssql_resource_governor_group_request_max_cpu_seconds
+    type: gauge
+    help: 'Configured CPU time limit per request in seconds; 0 means unlimited.'
+    key_labels:
+      - pool
+      - workload_group
+      - importance
+    values: [request_max_cpu_seconds]
+    query_ref: mssql_resource_governor_group_configuration
+
+  - metric_name: mssql_resource_governor_group_max_requests
+    type: gauge
+    help: 'Maximum concurrent requests for the workload group; 0 means unlimited.'
+    key_labels:
+      - pool
+      - workload_group
+      - importance
+    values: [group_max_requests]
+    query_ref: mssql_resource_governor_group_configuration
+
+  - metric_name: mssql_resource_governor_group_max_dop
+    type: gauge
+    help: 'Configured workload-group MAXDOP; 0 inherits the server or database setting.'
+    key_labels:
+      - pool
+      - workload_group
+      - importance
+    values: [max_dop]
+    query_ref: mssql_resource_governor_group_configuration
+
+  - metric_name: mssql_resource_governor_group_active_requests
+    type: gauge
+    help: 'Current active request count in the workload group.'
+    key_labels:
+      - pool
+      - workload_group
+    values: [active_request_count]
+    query_ref: mssql_resource_governor_group_runtime
+
+  - metric_name: mssql_resource_governor_group_queued_requests
+    type: gauge
+    help: 'Current queued request count in the workload group.'
+    key_labels:
+      - pool
+      - workload_group
+    values: [queued_request_count]
+    query_ref: mssql_resource_governor_group_runtime
+
+  - metric_name: mssql_resource_governor_group_requests_total
+    type: counter
+    help: 'Cumulative completed requests since Resource Governor statistics were reset.'
+    key_labels:
+      - pool
+      - workload_group
+    values: [total_request_count]
+    query_ref: mssql_resource_governor_group_runtime
+
+  - metric_name: mssql_resource_governor_group_queued_requests_total
+    type: counter
+    help: 'Cumulative requests queued by GROUP_MAX_REQUESTS since statistics were reset.'
+    key_labels:
+      - pool
+      - workload_group
+    values: [total_queued_request_count]
+    query_ref: mssql_resource_governor_group_runtime
+
+  - metric_name: mssql_resource_governor_group_cpu_usage_ms_total
+    type: counter
+    help: 'Cumulative CPU usage in milliseconds since Resource Governor statistics were reset.'
+    key_labels:
+      - pool
+      - workload_group
+    values: [total_cpu_usage_ms]
+    query_ref: mssql_resource_governor_group_runtime
+
+  - metric_name: mssql_resource_governor_group_cpu_limit_violations_total
+    type: counter
+    help: 'Cumulative requests exceeding the workload-group CPU limit.'
+    key_labels:
+      - pool
+      - workload_group
+    values: [total_cpu_limit_violation_count]
+    query_ref: mssql_resource_governor_group_runtime
+
+queries:
+  - query_name: mssql_resource_governor_status
+    query: |
+      SELECT
+          CAST(stored.is_enabled AS float) AS enabled,
+          CAST(effective.is_reconfiguration_pending AS float) AS reconfiguration_pending
+      FROM sys.resource_governor_configuration AS stored
+      CROSS JOIN sys.dm_resource_governor_configuration AS effective;
+
+  - query_name: mssql_resource_governor_pool_configuration
+    query: |
+      SELECT
+          name AS pool,
+          CAST(min_cpu_percent AS float) AS min_cpu_percent,
+          CAST(max_cpu_percent AS float) AS max_cpu_percent,
+          CAST(min_memory_percent AS float) AS min_memory_percent,
+          CAST(max_memory_percent AS float) AS max_memory_percent
+      FROM sys.resource_governor_resource_pools WITH (NOLOCK);
+
+  - query_name: mssql_resource_governor_pool_runtime
+    query: |
+      SELECT
+          name AS pool,
+          CAST(total_cpu_usage_ms AS float) AS total_cpu_usage_ms,
+          CAST(cache_memory_kb AS float) AS cache_memory_kb,
+          CAST(compile_memory_kb AS float) AS compile_memory_kb,
+          CAST(used_memgrant_kb AS float) AS used_memgrant_kb,
+          CAST(active_memgrant_count AS float) AS active_memgrant_count,
+          CAST(active_memgrant_kb AS float) AS active_memgrant_kb,
+          CAST(memgrant_waiter_count AS float) AS memgrant_waiter_count,
+          CAST(max_memory_kb AS float) AS max_memory_kb,
+          CAST(total_memgrant_timeout_count AS float) AS total_memgrant_timeout_count,
+          CAST(out_of_memory_count AS float) AS out_of_memory_count
+      FROM sys.dm_resource_governor_resource_pools WITH (NOLOCK);
+
+  - query_name: mssql_resource_governor_group_configuration
+    query: |
+      SELECT
+          p.name AS pool,
+          g.name AS workload_group,
+          g.importance,
+          CAST(g.request_max_memory_grant_percent AS float) AS request_max_memory_percent,
+          CAST(g.request_max_cpu_time_sec AS float) AS request_max_cpu_seconds,
+          CAST(g.group_max_requests AS float) AS group_max_requests,
+          CAST(g.max_dop AS float) AS max_dop
+      FROM sys.resource_governor_workload_groups AS g WITH (NOLOCK)
+      INNER JOIN sys.resource_governor_resource_pools AS p WITH (NOLOCK)
+        ON p.pool_id = g.pool_id;
+
+  - query_name: mssql_resource_governor_group_runtime
+    query: |
+      SELECT
+          p.name AS pool,
+          g.name AS workload_group,
+          CAST(g.active_request_count AS float) AS active_request_count,
+          CAST(g.queued_request_count AS float) AS queued_request_count,
+          CAST(g.total_request_count AS float) AS total_request_count,
+          CAST(g.total_queued_request_count AS float) AS total_queued_request_count,
+          CAST(g.total_cpu_usage_ms AS float) AS total_cpu_usage_ms,
+          CAST(g.total_cpu_limit_violation_count AS float) AS total_cpu_limit_violation_count
+      FROM sys.dm_resource_governor_workload_groups AS g WITH (NOLOCK)
+      INNER JOIN sys.dm_resource_governor_resource_pools AS p WITH (NOLOCK)
+        ON p.pool_id = g.pool_id;

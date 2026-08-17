@@ -1,0 +1,111 @@
+# Index fragmentation sample (LIMITED) — EXPENSIVE. Run rarely.
+# Prefer off-hours; do not enable on every busy OLTP host without need.
+#
+#   GRANT VIEW SERVER STATE TO
+#   GRANT VIEW ANY DEFINITION TO
+#
+collector_name: mssql_index_fragmentation
+
+# Very heavy DMV — default 6 hours.
+min_interval: 21600s
+
+metrics:
+  - metric_name: mssql_index_fragmentation_percent
+    type: gauge
+    help: 'Avg fragmentation percent (LIMITED mode) for large indexes above threshold.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+      - alloc_unit_type_desc
+    values: [avg_fragmentation_percent]
+    query_ref: mssql_index_fragmentation_top
+
+  - metric_name: mssql_index_fragmentation_page_count
+    type: gauge
+    help: 'Page count for fragmented indexes reported by this collector.'
+    key_labels:
+      - db
+      - schema_name
+      - table_name
+      - index_name
+      - index_type_desc
+      - alloc_unit_type_desc
+    values: [page_count]
+    query_ref: mssql_index_fragmentation_top
+
+queries:
+  - query_name: mssql_index_fragmentation_top
+    query: |
+      /* LIMITED scan of ONLINE user DBs excluding system DBs; only large indexes */
+      DECLARE @sql nvarchar(max) = N'';
+      DECLARE @db sysname;
+
+      IF OBJECT_ID('tempdb..#frag') IS NOT NULL DROP TABLE #frag;
+      CREATE TABLE #frag (
+          db sysname,
+          schema_name sysname,
+          table_name sysname,
+          index_name sysname NULL,
+          index_type_desc nvarchar(60),
+          alloc_unit_type_desc nvarchar(60),
+          avg_fragmentation_percent float,
+          page_count bigint
+      );
+
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND database_id > 4
+            AND is_read_only = 0
+            AND name NOT IN (N'SSISDB', N'Distribution');
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'
+          INSERT INTO #frag (db, schema_name, table_name, index_name, index_type_desc, alloc_unit_type_desc, avg_fragmentation_percent, page_count)
+          SELECT TOP (15)
+              @db_in,
+              OBJECT_SCHEMA_NAME(ips.object_id, DB_ID(@db_in)),
+              OBJECT_NAME(ips.object_id, DB_ID(@db_in)),
+              i.name,
+              ips.index_type_desc,
+              ips.alloc_unit_type_desc,
+              ips.avg_fragmentation_in_percent,
+              ips.page_count
+          FROM ' + QUOTENAME(@db) + N'.sys.dm_db_index_physical_stats(DB_ID(@db_in), NULL, NULL, NULL, N''LIMITED'') AS ips
+          INNER JOIN ' + QUOTENAME(@db) + N'.sys.indexes AS i WITH (NOLOCK)
+              ON ips.object_id = i.object_id AND ips.index_id = i.index_id
+          WHERE ips.page_count >= 10000
+            AND ips.avg_fragmentation_in_percent >= 30
+            AND ips.index_id > 0
+          ORDER BY ips.avg_fragmentation_in_percent DESC;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+              /* skip inaccessible DBs */
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT TOP (40)
+          db,
+          ISNULL(schema_name, N'') AS schema_name,
+          ISNULL(table_name, N'') AS table_name,
+          ISNULL(index_name, N'') AS index_name,
+          ISNULL(index_type_desc, N'') AS index_type_desc,
+          ISNULL(alloc_unit_type_desc, N'') AS alloc_unit_type_desc,
+          CAST(avg_fragmentation_percent AS float) AS avg_fragmentation_percent,
+          CAST(page_count AS float) AS page_count
+      FROM #frag
+      ORDER BY avg_fragmentation_percent DESC, page_count DESC;

@@ -1,0 +1,256 @@
+# tempdb metrics for Microsoft SQL Server.
+#
+# It is required that the SQL Server user has the following permissions:
+#
+#   GRANT VIEW SERVER STATE TO
+#   GRANT VIEW ANY DEFINITION TO
+#
+# Auto-loaded via collectors: [mssql_*] and collector_files: ["collector/*.collector.yml"]
+#
+collector_name: mssql_tempdb
+
+# tempdb space changes slower than request waits; keep scrape light on busy hosts.
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_tempdb_file_size_mb
+    type: gauge
+    help: 'tempdb file size (MB).'
+    key_labels:
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+    values: [size_mb]
+    query_ref: mssql_tempdb_files
+
+  - metric_name: mssql_tempdb_file_used_mb
+    type: gauge
+    help: 'tempdb file used space (MB).'
+    key_labels:
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+    values: [used_mb]
+    query_ref: mssql_tempdb_files
+
+  - metric_name: mssql_tempdb_file_free_mb
+    type: gauge
+    help: 'tempdb file free space (MB).'
+    key_labels:
+      - file_id
+      - type_desc
+      - logical_name
+      - physical_name
+    values: [free_mb]
+    query_ref: mssql_tempdb_files
+
+  - metric_name: mssql_tempdb_space_used_mb
+    type: gauge
+    help: 'tempdb space usage by category (MB).'
+    key_labels:
+      - usage
+    values: [used_mb]
+    query_ref: mssql_tempdb_space
+
+  - metric_name: mssql_tempdb_version_store_mb
+    type: gauge
+    help: 'tempdb version store size (MB).'
+    values: [version_store_mb]
+    query_ref: mssql_tempdb_version_store
+
+  - metric_name: mssql_tempdb_version_cleanup_rate_mb_s
+    type: gauge
+    help: 'tempdb version cleanup rate (MB/s) from SQLServer:Transactions perf counter.'
+    values: [version_cleanup_rate_mb_s]
+    query_ref: mssql_tempdb_version_store
+
+  - metric_name: mssql_tempdb_version_generation_rate_mb_s
+    type: gauge
+    help: 'tempdb version generation rate (MB/s) from SQLServer:Transactions perf counter.'
+    values: [version_generation_rate_mb_s]
+    query_ref: mssql_tempdb_version_store
+
+  - metric_name: mssql_tempdb_session_used_mb
+    type: gauge
+    help: 'Top sessions by tempdb space used (user + internal objects, MB).'
+    key_labels:
+      - session_id
+      - login_name
+      - program_name
+      - db
+    values: [used_mb]
+    query_ref: mssql_tempdb_top_sessions
+
+  - metric_name: mssql_tempdb_waiting_tasks_count
+    type: gauge
+    help: 'Current waiting tasks likely blocked by tempdb-related waits.'
+    values: [waiting_tasks_count]
+    query_ref: mssql_tempdb_waiting_tasks
+
+  - metric_name: mssql_tempdb_internal_object_mb
+    type: gauge
+    help: 'Current internal object space in tempdb (MB).'
+    values: [internal_object_mb]
+    query_ref: mssql_tempdb_space_breakdown
+
+  - metric_name: mssql_tempdb_user_object_mb
+    type: gauge
+    help: 'Current user object space in tempdb (MB).'
+    values: [user_object_mb]
+    query_ref: mssql_tempdb_space_breakdown
+
+  - metric_name: mssql_tempdb_spill_writes_mb
+    type: gauge
+    help: 'Active session tempdb internal allocation footprint (MB), spill pressure proxy.'
+    values: [spill_writes_mb]
+    query_ref: mssql_tempdb_spill_proxy
+
+  - metric_name: mssql_tempdb_metadata_contention_count
+    type: gauge
+    help: 'Current waiting tasks on tempdb allocation-map pages (metadata contention proxy).'
+    values: [contention_count]
+    query_ref: mssql_tempdb_metadata_contention
+
+queries:
+  - query_name: mssql_tempdb_waiting_tasks
+    query: |
+      SELECT
+          CAST(COUNT(*) AS float) AS waiting_tasks_count
+      FROM sys.dm_os_waiting_tasks WITH (NOLOCK)
+      WHERE (
+            wait_type LIKE N'PAGELATCH[_]%'
+            AND resource_description LIKE N'2:%'
+          )
+         OR wait_type IN (
+            N'WRITELOG',
+            N'IO_COMPLETION',
+            N'PAGEIOLATCH_SH', N'PAGEIOLATCH_EX', N'PAGEIOLATCH_UP'
+         );
+
+  - query_name: mssql_tempdb_space_breakdown
+    query: |
+      SELECT
+          CAST(SUM(user_object_reserved_page_count) AS float) * 8.0 / 1024.0 AS user_object_mb,
+          CAST(SUM(internal_object_reserved_page_count) AS float) * 8.0 / 1024.0 AS internal_object_mb
+      FROM tempdb.sys.dm_db_file_space_usage WITH (NOLOCK);
+
+  - query_name: mssql_tempdb_spill_proxy
+    query: |
+      SELECT
+          CAST(SUM(
+            CASE
+              WHEN (internal_objects_alloc_page_count - internal_objects_dealloc_page_count) > 0
+                THEN (internal_objects_alloc_page_count - internal_objects_dealloc_page_count)
+              ELSE 0
+            END
+          ) AS float) * 8.0 / 1024.0 AS spill_writes_mb
+      FROM tempdb.sys.dm_db_session_space_usage WITH (NOLOCK);
+
+  - query_name: mssql_tempdb_metadata_contention
+    query: |
+      SELECT
+          CAST(COUNT(*) AS float) AS contention_count
+      FROM sys.dm_os_waiting_tasks WITH (NOLOCK)
+      WHERE wait_type LIKE N'PAGELATCH[_]%'
+        AND (
+             resource_description LIKE N'2:1:1%'
+          OR resource_description LIKE N'2:1:2%'
+          OR resource_description LIKE N'2:1:3%'
+        );
+
+  - query_name: mssql_tempdb_files
+    query: |
+      SELECT
+          CAST(mf.file_id AS nvarchar(20)) AS file_id,
+          mf.type_desc AS type_desc,
+          mf.name AS logical_name,
+          mf.physical_name AS physical_name,
+          CAST(mf.size AS float) * 8.0 / 1024.0 AS size_mb,
+          CAST(
+            ISNULL(su.user_object_reserved_page_count, 0)
+            + ISNULL(su.internal_object_reserved_page_count, 0)
+            + ISNULL(su.version_store_reserved_page_count, 0)
+            + ISNULL(su.mixed_extent_page_count, 0)
+            AS float
+          ) * 8.0 / 1024.0 AS used_mb,
+          CAST(ISNULL(su.unallocated_extent_page_count, 0) AS float) * 8.0 / 1024.0 AS free_mb
+      FROM tempdb.sys.database_files AS mf WITH (NOLOCK)
+      LEFT JOIN tempdb.sys.dm_db_file_space_usage AS su WITH (NOLOCK)
+          ON mf.file_id = su.file_id;
+
+  - query_name: mssql_tempdb_space
+    query: |
+      SELECT usage, CAST(used_mb AS float) AS used_mb
+      FROM (
+          SELECT
+              CAST(SUM(user_object_reserved_page_count) AS float) * 8.0 / 1024.0 AS user_objects_mb,
+              CAST(SUM(internal_object_reserved_page_count) AS float) * 8.0 / 1024.0 AS internal_objects_mb,
+              CAST(SUM(version_store_reserved_page_count) AS float) * 8.0 / 1024.0 AS version_store_mb,
+              CAST(SUM(mixed_extent_page_count) AS float) * 8.0 / 1024.0 AS mixed_extent_mb,
+              CAST(SUM(unallocated_extent_page_count) AS float) * 8.0 / 1024.0 AS unallocated_mb
+          FROM tempdb.sys.dm_db_file_space_usage WITH (NOLOCK)
+      ) AS s
+      UNPIVOT (
+          used_mb FOR usage IN (
+              user_objects_mb, internal_objects_mb, version_store_mb, mixed_extent_mb, unallocated_mb
+          )
+      ) AS u;
+
+  - query_name: mssql_tempdb_version_store
+    query: |
+      IF OBJECT_ID(N'sys.dm_tran_version_store_space_usage', N'V') IS NULL
+      BEGIN
+          SELECT
+              CAST(SUM(version_store_reserved_page_count) AS float) * 8.0 / 1024.0 AS version_store_mb,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Cleanup rate (KB/s)'
+                 AND instance_name = N'') AS version_cleanup_rate_mb_s,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Generation rate (KB/s)'
+                 AND instance_name = N'') AS version_generation_rate_mb_s
+          FROM tempdb.sys.dm_db_file_space_usage WITH (NOLOCK);
+      END
+      ELSE
+      BEGIN
+          SELECT
+              CAST(SUM(reserved_space_kb) AS float) / 1024.0 AS version_store_mb,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Cleanup rate (KB/s)'
+                 AND instance_name = N'') AS version_cleanup_rate_mb_s,
+              (SELECT CAST(ISNULL(MAX(cntr_value), 0) AS float) / 1024.0
+               FROM sys.dm_os_performance_counters WITH (NOLOCK)
+               WHERE object_name LIKE N'%Transactions%'
+                 AND counter_name = N'Version Generation rate (KB/s)'
+                 AND instance_name = N'') AS version_generation_rate_mb_s
+          FROM sys.dm_tran_version_store_space_usage WITH (NOLOCK);
+      END
+
+  - query_name: mssql_tempdb_top_sessions
+    query: |
+      SELECT TOP (20)
+          CAST(tsu.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(s.login_name, N'') AS login_name,
+          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+          ISNULL(DB_NAME(s.database_id), N'') AS db,
+          CAST(
+            (tsu.user_objects_alloc_page_count - tsu.user_objects_dealloc_page_count)
+            + (tsu.internal_objects_alloc_page_count - tsu.internal_objects_dealloc_page_count)
+            AS float
+          ) * 8.0 / 1024.0 AS used_mb
+      FROM tempdb.sys.dm_db_session_space_usage AS tsu WITH (NOLOCK)
+      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+          ON tsu.session_id = s.session_id
+      WHERE tsu.session_id <> @@SPID
+        AND (
+          (tsu.user_objects_alloc_page_count - tsu.user_objects_dealloc_page_count)
+          + (tsu.internal_objects_alloc_page_count - tsu.internal_objects_dealloc_page_count)
+        ) > 128
+      ORDER BY used_mb DESC;

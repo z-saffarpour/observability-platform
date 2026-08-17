@@ -1,0 +1,50 @@
+groups:
+  - name: windows_exporter.role.cluster
+    rules:
+      - alert: WindowsClusterNodeNotUp
+        expr: windows_mscluster_node_state != 0
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: cluster
+        annotations:
+          summary: "Cluster node {{ $labels.name }} is not Up"
+          description: "Cluster node state is {{ $value }} (-1 unknown, 0 up, 1 down, 2 paused, 3 joining)."
+          runbook: "Check Failover Cluster Manager and cluster event logs."
+
+      - alert: WindowsClusterNetworkNotUp
+        expr: windows_mscluster_network_state != 3
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: cluster
+        annotations:
+          summary: "Cluster network {{ $labels.name }} is not Up"
+          description: "Cluster network state is {{ $value }} (-1 unknown, 0 unavailable, 1 down, 2 partitioned, 3 up)."
+          runbook: "Validate cluster network adapters and heartbeat paths."
+
+      - alert: WindowsClusterResourceFailed
+        expr: windows_mscluster_resource_state == 4
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: cluster
+        annotations:
+          summary: "Cluster resource {{ $labels.name }} has failed"
+          description: "Resource in group {{ $labels.owner_group }} has remained failed for three minutes."
+          runbook: "Inspect resource dependencies and recent failover attempts."
+
+      - alert: WindowsClusterResourceGroupUnhealthy
+        expr: windows_mscluster_resourcegroup_state == 2
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: cluster
+        annotations:
+          summary: "Cluster resource group {{ $labels.name }} has failed"
+          description: "The cluster resource group has remained failed for three minutes."
+          runbook: "Check owning node health and failed resources in the group."

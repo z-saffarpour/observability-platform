@@ -1,0 +1,89 @@
+# Certificate expiry + TDE encryption state.
+#
+#   GRANT VIEW ANY DEFINITION TO
+#   GRANT VIEW SERVER STATE TO
+#
+# Empty-safe when no user certificates / no TDE keys exist.
+#
+collector_name: mssql_certificates
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_certificate_expiry_days
+    type: gauge
+    help: 'Days until certificate expiry (negative = already expired).'
+    key_labels:
+      - db
+      - certificate
+      - subject
+    values: [expiry_days]
+    query_ref: mssql_certificate_expiry
+
+  - metric_name: mssql_tde_encryption_state
+    type: gauge
+    help: 'TDE encryption_state from dm_database_encryption_keys (0=none 1=unencrypted 2=encryption in progress 3=encrypted 4=key change 5=decryption in progress 6=protection change).'
+    key_labels:
+      - db
+    values: [encryption_state]
+    query_ref: mssql_tde_encryption_state
+
+queries:
+  - query_name: mssql_certificate_expiry
+    query: |
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID('tempdb..#certs') IS NOT NULL DROP TABLE #certs;
+      CREATE TABLE #certs (
+          db sysname,
+          certificate sysname,
+          subject nvarchar(4000),
+          expiry_days float
+      );
+
+      -- Include master (TDE / server certs) + online user DBs; skip tempdb/model/msdb.
+      DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND HAS_DBACCESS(name) = 1
+            AND (database_id = 1 OR database_id > 4);
+
+      OPEN dbs;
+      FETCH NEXT FROM dbs INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'
+          INSERT INTO #certs (db, certificate, subject, expiry_days)
+          SELECT
+              @db_in,
+              c.name,
+              LEFT(ISNULL(c.subject, N''''), 200),
+              CAST(DATEDIFF(DAY, SYSUTCDATETIME(), c.expiry_date) AS float)
+          FROM ' + QUOTENAME(@db) + N'.sys.certificates AS c;';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db_in sysname', @db_in = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          FETCH NEXT FROM dbs INTO @db;
+      END
+      CLOSE dbs;
+      DEALLOCATE dbs;
+
+      SELECT
+          db,
+          certificate,
+          ISNULL(subject, N'') AS subject,
+          expiry_days
+      FROM #certs;
+
+  - query_name: mssql_tde_encryption_state
+    query: |
+      SELECT
+          DB_NAME(database_id) AS db,
+          CAST(encryption_state AS float) AS encryption_state
+      FROM sys.dm_database_encryption_keys WITH (NOLOCK)
+      WHERE DB_NAME(database_id) IS NOT NULL;
