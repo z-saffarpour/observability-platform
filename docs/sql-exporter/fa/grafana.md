@@ -39,7 +39,7 @@
 | `sqlx-locks.json` | mssql_locks |
 | `sqlx-transactions-long.json` | mssql_transactions_long |
 | `sqlx-waits.json` | mssql_waits |
-| `sqlx-heavy-queries.json` | mssql_heavy_queries |
+| `sqlx-heavy-queries.json` | mssql_heavy_queries + mssql_plan_cache_hotspots |
 | `sqlx-parallelism.json` | mssql_parallelism |
 | `sqlx-plan-cache.json` | mssql_plan_cache |
 | `sqlx-query-store.json` | mssql_query_store |

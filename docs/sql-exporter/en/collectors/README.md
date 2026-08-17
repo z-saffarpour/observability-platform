@@ -22,7 +22,8 @@ This folder contains a dedicated guide for each collector.
 | `mssql_errorlog_signals.md` | `300s` | `1` | ERRORLOG signal counters for selected SQL errors (last N hours). |
 | `mssql_file_io.md` | `180s` | `16` | Per-file I/O latency metrics for Microsoft SQL Server. |
 | `mssql_hadr_cluster.md` | `30s` | `11` | AG listeners, WSFC quorum/members, and FCI node ownership. |
-| `mssql_heavy_queries.md` | `60s` | `13` | Heavy / active query metrics for Microsoft SQL Server. |
+| `mssql_heavy_queries.md` | `60s` | `4` | Active heavy-request metrics for Microsoft SQL Server. |
+| `mssql_plan_cache_hotspots.md` | `5m` | `9` | Historical plan-cache CPU, duration, and memory-grant hotspots. |
 | `mssql_index_fragmentation.md` | `21600s` | `2` | Index fragmentation sample (LIMITED) — EXPENSIVE. Run rarely. |
 | `mssql_index_usage.md` | `300s` | `19` | Index usage ops: hot indexes, ratios, unused/write-heavy candidates, DB rollup. |
 | `mssql_instance_configuration.md` | `300s` | `7` | Instance sp_configure drift (value vs in_use), IFI, uptime, global trace flags. |

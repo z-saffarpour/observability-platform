@@ -1,0 +1,365 @@
+# Plan-cache hotspot metrics for Microsoft SQL Server.
+#
+# Required permissions:
+#   GRANT VIEW SERVER STATE TO <login>;
+#   GRANT VIEW ANY DEFINITION TO <login>;
+#
+# Candidate rows are bounded before SQL text and plan attributes are expanded.
+# statement_snip intentionally preserves up to 8000 Unicode characters.
+collector_name: mssql_plan_cache_hotspots
+
+# Plan-cache rankings change less frequently and are expensive to materialize.
+min_interval: 5m
+
+metrics:
+  # Top statements from plan cache (historical hot spots)
+  #
+  - metric_name: mssql_top_query_total_worker_ms
+    type: gauge
+    help: 'Top cached statements by total CPU/worker time (ms).'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [total_worker_ms]
+    query_ref: mssql_top_cached_by_cpu
+
+  - metric_name: mssql_top_query_avg_elapsed_ms
+    type: gauge
+    help: 'Average elapsed/duration time (ms) for top cached statements by total worker time.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [avg_elapsed_ms]
+    query_ref: mssql_top_cached_by_cpu
+
+  - metric_name: mssql_top_query_execution_count
+    type: gauge
+    help: 'Execution count for top cached statements by total worker time.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [execution_count]
+    query_ref: mssql_top_cached_by_cpu
+
+  - metric_name: mssql_top_query_total_elapsed_ms
+    type: gauge
+    help: 'Top cached statements by total elapsed/duration time (ms) — wall-clock query runtime.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [total_elapsed_ms]
+    query_ref: mssql_top_cached_by_elapsed
+
+  - metric_name: mssql_top_query_avg_duration_ms
+    type: gauge
+    help: 'Average duration/elapsed time (ms) for top cached statements ranked by total elapsed.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [avg_duration_ms]
+    query_ref: mssql_top_cached_by_elapsed
+
+  - metric_name: mssql_top_query_elapsed_execution_count
+    type: gauge
+    help: 'Execution count for top cached statements ranked by total elapsed time.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [execution_count]
+    query_ref: mssql_top_cached_by_elapsed
+
+  - metric_name: mssql_top_query_max_grant_mb
+    type: gauge
+    help: 'Top cached statements by max memory grant (MB), grant >= 1GB.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [max_grant_mb]
+    query_ref: mssql_top_cached_by_grant
+
+  - metric_name: mssql_top_query_max_used_grant_mb
+    type: gauge
+    help: 'Max used memory grant (MB) for top grant statements.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [max_used_grant_mb]
+    query_ref: mssql_top_cached_by_grant
+
+  - metric_name: mssql_top_query_grant_execution_count
+    type: gauge
+    help: 'Execution count for top cached statements ranked by max memory grant.'
+    key_labels:
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+    values: [execution_count]
+    query_ref: mssql_top_cached_by_grant
+
+queries:
+  - query_name: mssql_top_cached_by_cpu
+    query: |
+      ;WITH candidates AS
+      (
+        SELECT TOP (250)
+            qs.sql_handle,
+            qs.plan_handle,
+            qs.statement_start_offset,
+            qs.statement_end_offset,
+            qs.query_hash,
+            qs.total_worker_time,
+            qs.total_elapsed_time,
+            qs.execution_count
+        FROM sys.dm_exec_query_stats AS qs WITH (NOLOCK)
+        WHERE qs.execution_count > 0
+        ORDER BY qs.total_worker_time DESC
+      ),
+      raw AS
+      (
+        SELECT
+          ISNULL(DB_NAME(NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0)), N'') AS db,
+          ISNULL(
+            OBJECT_SCHEMA_NAME(st.objectid, NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0))
+              + N'.' + OBJECT_NAME(st.objectid, NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0)),
+            N'(ad-hoc)'
+          ) AS obj,
+          ISNULL(CONVERT(varchar(18), qs.query_hash, 1), N'') AS query_hash,
+          CONVERT(nvarchar(max), LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(
+                SUBSTRING(
+                  st.text,
+                  (qs.statement_start_offset / 2) + 1,
+                  CASE
+                    WHEN qs.statement_end_offset = -1 THEN 8000
+                    WHEN qs.statement_end_offset > qs.statement_start_offset
+                      THEN ((qs.statement_end_offset - qs.statement_start_offset) / 2) + 1
+                    ELSE 8000
+                  END
+                ),
+                N''
+              ),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            8000
+          )) AS statement_snip,
+          CAST(qs.total_worker_time AS float) / 1000.0 AS total_worker_ms,
+          CAST(qs.total_elapsed_time AS float) AS total_elapsed_us,
+          CAST(qs.execution_count AS float) AS execution_count
+        FROM candidates AS qs
+        CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
+        OUTER APPLY (
+          SELECT CONVERT(int, value) AS dbid
+          FROM sys.dm_exec_plan_attributes(qs.plan_handle)
+          WHERE attribute = N'dbid'
+        ) AS pa
+        WHERE st.text NOT LIKE N'%dm_exec_query_stats%'
+          AND st.text NOT LIKE N'%mssql_top_cached%'
+          AND st.text NOT LIKE N'%sql_exporter%'
+      ),
+      aggregated AS
+      (
+        SELECT
+            db,
+            obj,
+            query_hash,
+            statement_snip,
+            SUM(total_worker_ms) AS total_worker_ms,
+            SUM(total_elapsed_us) / 1000.0 / NULLIF(SUM(execution_count), 0.0) AS avg_elapsed_ms,
+            SUM(execution_count) AS execution_count
+        FROM raw
+        GROUP BY db, obj, query_hash, statement_snip
+      )
+      SELECT TOP (25)
+          db,
+          obj,
+          query_hash,
+          statement_snip,
+          CAST(total_worker_ms AS float) AS total_worker_ms,
+          CAST(avg_elapsed_ms AS float) AS avg_elapsed_ms,
+          CAST(execution_count AS float) AS execution_count
+      FROM aggregated
+      ORDER BY total_worker_ms DESC;
+
+  - query_name: mssql_top_cached_by_elapsed
+    query: |
+      ;WITH candidates AS
+      (
+        SELECT TOP (250)
+            qs.sql_handle,
+            qs.plan_handle,
+            qs.statement_start_offset,
+            qs.statement_end_offset,
+            qs.query_hash,
+            qs.total_elapsed_time,
+            qs.execution_count
+        FROM sys.dm_exec_query_stats AS qs WITH (NOLOCK)
+        WHERE qs.execution_count > 0
+        ORDER BY qs.total_elapsed_time DESC
+      ),
+      raw AS
+      (
+        SELECT
+          ISNULL(DB_NAME(NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0)), N'') AS db,
+          ISNULL(
+            OBJECT_SCHEMA_NAME(st.objectid, NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0))
+              + N'.' + OBJECT_NAME(st.objectid, NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0)),
+            N'(ad-hoc)'
+          ) AS obj,
+          ISNULL(CONVERT(varchar(18), qs.query_hash, 1), N'') AS query_hash,
+          CONVERT(nvarchar(max), LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(
+                SUBSTRING(
+                  st.text,
+                  (qs.statement_start_offset / 2) + 1,
+                  CASE
+                    WHEN qs.statement_end_offset = -1 THEN 8000
+                    WHEN qs.statement_end_offset > qs.statement_start_offset
+                      THEN ((qs.statement_end_offset - qs.statement_start_offset) / 2) + 1
+                    ELSE 8000
+                  END
+                ),
+                N''
+              ),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            8000
+          )) AS statement_snip,
+          CAST(qs.total_elapsed_time AS float) / 1000.0 AS total_elapsed_ms,
+          CAST(qs.execution_count AS float) AS execution_count
+        FROM candidates AS qs
+        CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
+        OUTER APPLY (
+          SELECT CONVERT(int, value) AS dbid
+          FROM sys.dm_exec_plan_attributes(qs.plan_handle)
+          WHERE attribute = N'dbid'
+        ) AS pa
+        WHERE st.text NOT LIKE N'%dm_exec_query_stats%'
+          AND st.text NOT LIKE N'%mssql_top_cached%'
+          AND st.text NOT LIKE N'%sql_exporter%'
+      ),
+      aggregated AS
+      (
+        SELECT
+            db,
+            obj,
+            query_hash,
+            statement_snip,
+            SUM(total_elapsed_ms) AS total_elapsed_ms,
+            SUM(total_elapsed_ms) / NULLIF(SUM(execution_count), 0.0) AS avg_duration_ms,
+            SUM(execution_count) AS execution_count
+        FROM raw
+        GROUP BY db, obj, query_hash, statement_snip
+      )
+      SELECT TOP (25)
+          db,
+          obj,
+          query_hash,
+          statement_snip,
+          CAST(total_elapsed_ms AS float) AS total_elapsed_ms,
+          CAST(avg_duration_ms AS float) AS avg_duration_ms,
+          CAST(execution_count AS float) AS execution_count
+      FROM aggregated
+      ORDER BY total_elapsed_ms DESC;
+
+  - query_name: mssql_top_cached_by_grant
+    query: |
+      ;WITH candidates AS
+      (
+        SELECT TOP (250)
+            qs.sql_handle,
+            qs.plan_handle,
+            qs.statement_start_offset,
+            qs.statement_end_offset,
+            qs.query_hash,
+            qs.max_grant_kb,
+            qs.max_used_grant_kb,
+            qs.execution_count
+        FROM sys.dm_exec_query_stats AS qs WITH (NOLOCK)
+        WHERE qs.max_grant_kb >= 1024 * 1024
+          AND qs.execution_count > 0
+        ORDER BY qs.max_grant_kb DESC
+      ),
+      raw AS
+      (
+        SELECT
+          ISNULL(DB_NAME(NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0)), N'') AS db,
+          ISNULL(
+            OBJECT_SCHEMA_NAME(st.objectid, NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0))
+              + N'.' + OBJECT_NAME(st.objectid, NULLIF(COALESCE(NULLIF(pa.dbid, 0), st.dbid), 0)),
+            N'(ad-hoc)'
+          ) AS obj,
+          ISNULL(CONVERT(varchar(18), qs.query_hash, 1), N'') AS query_hash,
+          CONVERT(nvarchar(max), LEFT(
+            REPLACE(REPLACE(REPLACE(
+              ISNULL(
+                SUBSTRING(
+                  st.text,
+                  (qs.statement_start_offset / 2) + 1,
+                  CASE
+                    WHEN qs.statement_end_offset = -1 THEN 8000
+                    WHEN qs.statement_end_offset > qs.statement_start_offset
+                      THEN ((qs.statement_end_offset - qs.statement_start_offset) / 2) + 1
+                    ELSE 8000
+                  END
+                ),
+                N''
+              ),
+              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+            8000
+          )) AS statement_snip,
+          CAST(qs.max_grant_kb AS float) / 1024.0 AS max_grant_mb,
+          CAST(qs.max_used_grant_kb AS float) / 1024.0 AS max_used_grant_mb,
+          CAST(qs.execution_count AS float) AS execution_count
+        FROM candidates AS qs
+        CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
+        OUTER APPLY (
+          SELECT CONVERT(int, value) AS dbid
+          FROM sys.dm_exec_plan_attributes(qs.plan_handle)
+          WHERE attribute = N'dbid'
+        ) AS pa
+        WHERE st.text NOT LIKE N'%dm_exec_query_stats%'
+          AND st.text NOT LIKE N'%mssql_top_cached%'
+          AND st.text NOT LIKE N'%sql_exporter%'
+      ),
+      aggregated AS
+      (
+        SELECT
+            db,
+            obj,
+            query_hash,
+            statement_snip,
+            MAX(max_grant_mb) AS max_grant_mb,
+            MAX(max_used_grant_mb) AS max_used_grant_mb,
+            SUM(execution_count) AS execution_count
+        FROM raw
+        GROUP BY db, obj, query_hash, statement_snip
+      )
+      SELECT TOP (25)
+          db,
+          obj,
+          query_hash,
+          statement_snip,
+          CAST(max_grant_mb AS float) AS max_grant_mb,
+          CAST(max_used_grant_mb AS float) AS max_used_grant_mb,
+          CAST(execution_count AS float) AS execution_count
+      FROM aggregated
+      ORDER BY max_grant_mb DESC;
+
+

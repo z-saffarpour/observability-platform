@@ -22,7 +22,8 @@
 | `mssql_errorlog_signals.md` | `300s` | `1` | شمارنده‌های سیگنال ERRORLOG برای خطاهای منتخب SQL |
 | `mssql_file_io.md` | `180s` | `16` | متریک‌های تأخیر I/O به‌ازای هر فایل برای Microsoft SQL Server |
 | `mssql_hadr_cluster.md` | `30s` | `11` | AG Listener، quorum/اعضای WSFC و مالکیت نود FCI |
-| `mssql_heavy_queries.md` | `60s` | `13` | متریک‌های query سنگین / فعال برای Microsoft SQL Server |
+| `mssql_heavy_queries.md` | `60s` | `4` | متریک‌های درخواست‌های فعال و سنگین SQL Server |
+| `mssql_plan_cache_hotspots.md` | `5m` | `9` | نقاط داغ تاریخی plan cache بر اساس CPU، duration و memory grant |
 | `mssql_index_fragmentation.md` | `21600s` | `2` | نمونه fragmentation ایندکس (LIMITED) — خیلی سنگین، فقط گاهی اجرا شود |
 | `mssql_index_usage.md` | `300s` | `19` | مصرف سبک ایندکس (TOP ایندکس‌های داغ) — نه fragmentation |
 | `mssql_instance_configuration.md` | `300s` | `7` | drift تنظیمات instance (value در برابر in_use)، IFI، uptime، Trace Flagهای Global |

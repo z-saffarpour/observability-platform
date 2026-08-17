@@ -251,7 +251,8 @@ These files have been moved to `sql_exporter_removed/`; their unique content has
 | `mssql_tempdb` | 60s | tempdb space, version store, top sessions, waiting tasks, spill/load contention |
 | `mssql_file_io` | 180s | stall/latency per file + volume space + pending requests/bytes + queue depth + p95 latency |
 | `mssql_blocking` | 30s | blocked sessions / head blocker |
-| `mssql_heavy_queries` | 60s | active heavy requests + top plan cache |
+| `mssql_heavy_queries` | 60s | active heavy requests |
+| `mssql_plan_cache_hotspots` | 5m | top plan-cache CPU, duration, and memory-grant hotspots |
 | `mssql_log_usage` | 60s | log percentage and volume |
 | `mssql_connections_detail` | 60s | sessions by login/program/host/database |
 | `mssql_database_size_growth` | 300s | data/log size growth and file growth |
@@ -329,6 +330,7 @@ collectors:
   - mssql_job_inventory
   - mssql_alwayson
   - mssql_heavy_queries
+  - mssql_plan_cache_hotspots
   - mssql_waits
   - mssql_memory
   - mssql_tempdb
@@ -463,6 +465,7 @@ collectors:
   - mssql_alwayson_events
   - mssql_hadr_cluster
   - mssql_heavy_queries
+  - mssql_plan_cache_hotspots
   - mssql_tempdb
   - mssql_blocking
   - mssql_log_usage

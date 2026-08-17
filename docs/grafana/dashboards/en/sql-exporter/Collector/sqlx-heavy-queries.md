@@ -4,7 +4,7 @@
 
 > This file is generated from the dashboard JSON; do not edit it manually.
 
-Heavy / active query ops view: session KPIs (excludes background workers), fleet rollup, live session detail + contention waits, breakdowns, and plan-cache CPU/duration/grant hotspots. Collector: mssql_heavy_queries (60s).
+Heavy-query operations view: live sessions come from `mssql_heavy_queries` (60s), while historical CPU/duration/grant rankings come from `mssql_plan_cache_hotspots` (5m).
 
 ## Details
 

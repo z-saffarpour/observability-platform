@@ -250,7 +250,8 @@ GRANT VIEW ANY DEFINITION TO [DOMAIN\SqlExporterAccount];
 | `mssql_tempdb` | ۶۰s | فضای tempdb، version store، top sessions، waiting tasks، spill/load contention |
 | `mssql_file_io` | ۱۸۰s | stall/latency per file + volume space + pending requests/bytes + queue depth + p95 latency |
 | `mssql_blocking` | ۳۰s | blocked sessions / head blocker |
-| `mssql_heavy_queries` | ۶۰s | درخواست‌های فعال سنگین + Top plan cache |
+| `mssql_heavy_queries` | ۶۰s | درخواست‌های فعال سنگین |
+| `mssql_plan_cache_hotspots` | ۵m | کوئری‌های برتر plan cache بر اساس CPU، زمان اجرا و memory grant |
 | `mssql_log_usage` | ۶۰s | درصد و حجم log |
 | `mssql_connections_detail` | ۶۰s | نشست‌ها بر اساس login/program/host/db |
 | `mssql_database_size_growth` | ۳۰۰s | رشد حجم data/log و فایل‌ها |
@@ -328,6 +329,7 @@ collectors:
   - mssql_job_inventory
   - mssql_alwayson
   - mssql_heavy_queries
+  - mssql_plan_cache_hotspots
   - mssql_waits
   - mssql_memory
   - mssql_tempdb
@@ -462,6 +464,7 @@ collectors:
   - mssql_alwayson_events
   - mssql_hadr_cluster
   - mssql_heavy_queries
+  - mssql_plan_cache_hotspots
   - mssql_tempdb
   - mssql_blocking
   - mssql_log_usage
