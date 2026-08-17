@@ -270,6 +270,7 @@ foreach ($computer in $Computers) {
         Error        = $null
     }
     $session = $null
+    $stageDir = $null
     Write-Step "===== $computer =====" Yellow
 
     try {
@@ -483,7 +484,11 @@ foreach ($computer in $Computers) {
                     -CurrentAppParameters $listenSource `
                     -CurrentServicePath $originalServicePath `
                     -DefaultAddress ':9399'
-                $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfgPath -WebConfigFile $webPath -ListenAddress $listenAddress
+                $appParameters = Get-ObservabilityExporterAppParameters `
+                    -ConfigFile $cfgPath `
+                    -WebConfigFile $webPath `
+                    -ListenAddress $listenAddress `
+                    -LogFormat 'json'
                 $serviceCommand = ('"{0}" {1}' -f $targetExe, $appParameters)
                 if ($method -eq 'NSSM') {
                     $nssmDir = 'C:\Program Files\Observability\Tools\NSSM'
@@ -556,10 +561,6 @@ foreach ($computer in $Computers) {
                 if ($wasRunning) { Start-Service -Name $SvcName -ErrorAction SilentlyContinue }
                 throw "Upgrade failed and executable was rolled back to $oldVersion. Cause: $upgradeError"
             }
-            finally {
-                Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-
             $backupParent = Join-Path $installPath '_backup'
             if (Test-Path -LiteralPath $backupParent) {
                 @(Get-ChildItem -LiteralPath $backupParent -Directory -Filter 'upgrade_*' |
@@ -599,7 +600,22 @@ foreach ($computer in $Computers) {
         Write-Step "  ERROR: $($_.Exception.Message)" Red
     }
     finally {
-        if ($null -ne $session) { Remove-PSSession -Session $session -ErrorAction SilentlyContinue }
+        if ($null -ne $session) {
+            if (-not [string]::IsNullOrWhiteSpace($stageDir)) {
+                try {
+                    Invoke-Command -Session $session -ScriptBlock {
+                        param($StageDir)
+                        if (Test-Path -LiteralPath $StageDir) { Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction Stop }
+                        $stagingRoot = Split-Path -Parent $StageDir
+                        if ((Test-Path -LiteralPath $stagingRoot -PathType Container) -and @((Get-ChildItem -LiteralPath $stagingRoot -Force -ErrorAction Stop)).Count -eq 0) {
+                            Remove-Item -LiteralPath $stagingRoot -Force -ErrorAction Stop
+                        }
+                    } -ArgumentList $stageDir -ErrorAction Stop
+                    Write-Step '  Staging files removed.' DarkGray
+                } catch { Write-Step ("  WARNING: Could not remove staging files: {0}" -f $_.Exception.Message) DarkYellow }
+            }
+            Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+        }
         $results += [pscustomobject]$row
         Write-Host ''
     }

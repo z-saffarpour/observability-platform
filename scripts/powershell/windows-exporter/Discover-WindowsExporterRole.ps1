@@ -37,7 +37,25 @@ begin {
         $hasSql = [bool]($serviceNames -match '^(MSSQLSERVER|MSSQL\$.+)$')
         $hasSsas = [bool]($serviceNames -match '^(MSSQLServerOLAPService|MSOLAP\$.+)$')
         $hasPbirs = [bool]($serviceNames -match '^(PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*)$')
-        $hasCluster = [bool]($serviceNames -contains 'ClusSvc')
+        $hasClusterService = [bool]($serviceNames -contains 'ClusSvc')
+        $hasCluster = if ($hasClusterService) {
+            try {
+                # ClusSvc can remain installed on a server that is not a healthy
+                # cluster node. The mscluster collector initializes through this
+                # WMI provider and exits the exporter when the provider is broken
+                # or unavailable, so validate it before recommending a profile.
+                @(
+                    Get-CimInstance `
+                        -Namespace 'root\MSCluster' `
+                        -ClassName 'MSCluster_Cluster' `
+                        -ErrorAction Stop
+                ).Count -gt 0
+            } catch {
+                $false
+            }
+        } else {
+            $false
+        }
         $hasAx2012 = [bool]($serviceNames -match '^AOS60\$.+$')
         $hasServiceFabric = [bool]($serviceNames -contains 'FabricHostSvc')
         $windowsFeatureCommand = Get-Command Get-WindowsFeature -ErrorAction SilentlyContinue

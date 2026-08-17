@@ -197,6 +197,7 @@ else { Write-Host 'Profile: preserve existing --config.file' -ForegroundColor Cy
 $results = @()
 foreach ($computer in $Computers) {
     $session = $null
+    $stage = $null
     $row = [ordered]@{Computer=$computer;Method=$null;Previous=$null;Current=$null;Profile=$(if ($AutoProfile) { 'Auto' } else { $profileFile });Status='Skipped';Backup=$null;Error=$null}
     Write-Host "`n===== $computer =====" -ForegroundColor Yellow
     try {
@@ -385,7 +386,11 @@ foreach ($computer in $Computers) {
                     -CurrentAppParameters $listenSource `
                     -CurrentServicePath $originalPathName `
                     -DefaultAddress ':9182'
-                $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfg -WebConfigFile $web -ListenAddress $listenAddress
+                $appParameters = Get-ObservabilityExporterAppParameters `
+                    -ConfigFile $cfg `
+                    -WebConfigFile $web `
+                    -ListenAddress $listenAddress `
+                    -LogFormat 'json'
                 if ($method -eq 'NSSM') {
                     if (-not (Test-Path $parameters)) { throw "NSSM parameters key was not found: $parameters" }
                     $logDir = Join-Path $root 'log'
@@ -445,8 +450,6 @@ foreach ($computer in $Computers) {
                 }
                 if ($wasRunning) { Start-Service $Name -ErrorAction SilentlyContinue }
                 throw "Upgrade failed and rollback to $old completed. Cause: $cause"
-            } finally {
-                Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
             }
             Get-ChildItem (Join-Path $root '_backup') -Directory -Filter 'upgrade_*' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $Limit | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
             [pscustomobject]@{
@@ -468,7 +471,20 @@ foreach ($computer in $Computers) {
         $row.Error = $_.Exception.Message
         Write-Host "ERROR: $($row.Error)" -ForegroundColor Red
     } finally {
-        if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
+        if ($session) {
+            if (-not [string]::IsNullOrWhiteSpace($stage)) {
+                try {
+                    Invoke-Command -Session $session -ScriptBlock {
+                        param($StageDir)
+                        if (Test-Path -LiteralPath $StageDir) { Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction Stop }
+                        $stagingRoot = Split-Path -Parent $StageDir
+                        if ((Test-Path -LiteralPath $stagingRoot -PathType Container) -and @((Get-ChildItem -LiteralPath $stagingRoot -Force -ErrorAction Stop)).Count -eq 0) { Remove-Item -LiteralPath $stagingRoot -Force -ErrorAction Stop }
+                    } -ArgumentList $stage -ErrorAction Stop
+                    Write-Host 'Staging files removed.' -ForegroundColor DarkGray
+                } catch { Write-Host "WARNING: Could not remove staging files: $($_.Exception.Message)" -ForegroundColor DarkYellow }
+            }
+            Remove-PSSession $session -ErrorAction SilentlyContinue
+        }
         $results += [pscustomobject]$row
     }
 }

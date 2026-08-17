@@ -147,7 +147,7 @@ function Resolve-ObservabilitySqlServerServiceDependency {
     $fromDsn = Get-ObservabilitySqlServerServiceFromDataSourceName -DataSourceName $DataSourceName
     if ($fromDsn) { return @($fromDsn) }
 
-    $engineServices = Get-ObservabilitySqlServerEngineServiceNames
+    $engineServices = @(Get-ObservabilitySqlServerEngineServiceNames)
     if ($engineServices.Count -eq 0) { return @() }
     if ($engineServices.Count -eq 1) { return $engineServices }
     if ($engineServices -contains 'MSSQLSERVER') { return @('MSSQLSERVER') }
@@ -186,9 +186,11 @@ function Set-ObservabilitySqlServerServiceDependency {
 
     if ($DependencyMode -eq 'None') { return @() }
 
-    $deps = Resolve-ObservabilitySqlServerServiceDependency `
-        -DependencyMode $DependencyMode `
-        -DataSourceName $DataSourceName
+    $deps = @(
+        Resolve-ObservabilitySqlServerServiceDependency `
+            -DependencyMode $DependencyMode `
+            -DataSourceName $DataSourceName
+    )
 
     if ($deps.Count -eq 0) { return @() }
 

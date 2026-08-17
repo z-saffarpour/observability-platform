@@ -170,6 +170,7 @@ elseif ($AutoProfile) { Write-Host 'Profile: auto-detect per server' -Foreground
 $results = @()
 foreach ($computer in $Computers) {
     $session = $null
+    $stage = $null
     $row = [ordered]@{ Computer=$computer; Profile=$(if ($AutoProfile) { 'Auto' } else { $profileFile }); Deploy='Skipped'; Service='Skipped'; Backup=$null; Error=$null }
     Write-Host "`n===== $computer =====" -ForegroundColor Yellow
     try {
@@ -289,7 +290,11 @@ foreach ($computer in $Computers) {
             $cfg = if ($ProfileName) { Join-Path $dstProfiles $ProfileName } else { Join-Path $configDir 'windows_exporter.yml' }
             $web = Join-Path $configDir 'web-config.yml'
             if (-not (Test-Path -LiteralPath $cfg -PathType Leaf)) { throw "Config file was not found: $cfg" }
-            $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfg -WebConfigFile $web -ListenAddress $Listen
+            $appParameters = Get-ObservabilityExporterAppParameters `
+                -ConfigFile $cfg `
+                -WebConfigFile $web `
+                -ListenAddress $Listen `
+                -LogFormat 'json'
             $imagePath = ('"{0}" {1}' -f $exe, $appParameters)
             if ($svc -and $detectedMethod -ne $ServiceMode) {
                 Invoke-ObservabilitySc -Arguments @('delete',$Name)
@@ -306,7 +311,11 @@ foreach ($computer in $Computers) {
                 if (-not (Test-Path -LiteralPath $parameters)) { throw "NSSM parameters key was not found: $parameters" }
                 $logDir = Join-Path $Root 'log'
                 New-Item -Path $logDir -ItemType Directory -Force | Out-Null
-                $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfg -WebConfigFile $web -ListenAddress $Listen
+                $appParameters = Get-ObservabilityExporterAppParameters `
+                    -ConfigFile $cfg `
+                    -WebConfigFile $web `
+                    -ListenAddress $Listen `
+                    -LogFormat 'json'
                 Set-ItemProperty -LiteralPath $parameters -Name Application -Value $exe
                 Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value $appParameters
                 Set-ItemProperty -LiteralPath $parameters -Name AppDirectory -Value $Root
@@ -326,14 +335,29 @@ foreach ($computer in $Computers) {
             if (-not [Diagnostics.EventLog]::SourceExists($Name)) { New-EventLog -LogName Application -Source $Name }
             Write-EventLog -LogName Application -Source $Name -EntryType Information -EventId 1001 `
                 -Message "Windows service installed or refreshed. Mode=$ServiceMode; InstallPath=$Root; Profile=$ProfileName"
-            Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
             [pscustomobject]@{ Status=$runningSvc.Status.ToString(); Backup=$backup; ImagePath=$imagePath; Profile=$ProfileName; Method=$ServiceMode }
         } -ArgumentList $InstallRoot,$ServiceName,$ServiceDisplayName,$ServiceDescription,$stage,$account,$password,$ServiceTimeoutSec,$package,$chosenProfile,$ServiceMode,$ListenAddress
         $row.Deploy='OK'; $row.Service=$deployed.Status; $row.Backup=$deployed.Backup
         if ($deployed.Profile) { $row.Profile = $deployed.Profile }
         Write-Host "Service: $($deployed.Status)`nProfile: $($row.Profile)`nBackup: $($deployed.Backup)" -ForegroundColor Green
     } catch { $row.Error=$_.Exception.Message; Write-Host "ERROR: $($row.Error)" -ForegroundColor Red }
-    finally { if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }; $results += [pscustomobject]$row }
+    finally {
+        if ($session) {
+            if (-not [string]::IsNullOrWhiteSpace($stage)) {
+                try {
+                    Invoke-Command -Session $session -ScriptBlock {
+                        param($StageDir)
+                        if (Test-Path -LiteralPath $StageDir) { Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction Stop }
+                        $stagingRoot = Split-Path -Parent $StageDir
+                        if ((Test-Path -LiteralPath $stagingRoot -PathType Container) -and @((Get-ChildItem -LiteralPath $stagingRoot -Force -ErrorAction Stop)).Count -eq 0) { Remove-Item -LiteralPath $stagingRoot -Force -ErrorAction Stop }
+                    } -ArgumentList $stage -ErrorAction Stop
+                    Write-Host 'Staging files removed.' -ForegroundColor DarkGray
+                } catch { Write-Host "WARNING: Could not remove staging files: $($_.Exception.Message)" -ForegroundColor DarkYellow }
+            }
+            Remove-PSSession $session -ErrorAction SilentlyContinue
+        }
+        $results += [pscustomobject]$row
+    }
 }
 $results | Format-Table -AutoSize
 if (@($results | Where-Object Error).Count) { exit 1 }

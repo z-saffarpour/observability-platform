@@ -93,7 +93,14 @@ foreach ($computer in @($Computers | ForEach-Object { $_.Trim() } | Where-Object
         $row.LegacyTaskRemoved = $remote.LegacyTaskRemoved
     } catch { $row.Error = $_.Exception.Message }
     finally {
-        if ($session -and $stage) { Invoke-Command -Session $session -ScriptBlock { param($Path) Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue } -ArgumentList $stage -ErrorAction SilentlyContinue }
+        if ($session -and $stage) {
+            Invoke-Command -Session $session -ScriptBlock {
+                param($Path)
+                if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue }
+                $stagingRoot = Split-Path -Parent $Path
+                if ((Test-Path -LiteralPath $stagingRoot -PathType Container) -and @((Get-ChildItem -LiteralPath $stagingRoot -Force -ErrorAction SilentlyContinue)).Count -eq 0) { Remove-Item -LiteralPath $stagingRoot -Force -ErrorAction SilentlyContinue }
+            } -ArgumentList $stage -ErrorAction SilentlyContinue
+        }
         if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         $results += [pscustomobject]$row
     }

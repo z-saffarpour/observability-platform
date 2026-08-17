@@ -430,7 +430,7 @@ function Get-ServiceAccountContext {
 }
 
 $layout = Resolve-SourceLayout -Root $SourceRoot -SkipCollectorFolder:$SkipCollectors
-$Computers = Resolve-ComputerList -InputComputers $Computers
+$Computers = @(Resolve-ComputerList -InputComputers $Computers)
 
 if ($Computers.Count -eq 0) {
     throw 'No target servers were resolved.'
@@ -514,6 +514,7 @@ foreach ($computer in $Computers) {
     Write-Step ("===== {0} =====" -f $computer) 'Yellow'
 
     $session = $null
+    $stage = $null
     try {
         if (-not $PSCmdlet.ShouldProcess($computer, "Install/update $ServiceName")) {
             $row.Deploy = 'WhatIf'
@@ -657,7 +658,11 @@ foreach ($computer in $Computers) {
             $exePath = Join-Path $InstallPath 'bin\sql_exporter.exe'
             $cfgPath = Join-Path $InstallPath 'config\sql_exporter.yml'
             $webCfgPath = Join-Path $InstallPath 'config\web-config.yml'
-            $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfgPath -WebConfigFile $webCfgPath -ListenAddress $Listen
+            $appParameters = Get-ObservabilityExporterAppParameters `
+                -ConfigFile $cfgPath `
+                -WebConfigFile $webCfgPath `
+                -ListenAddress $Listen `
+                -LogFormat 'json'
             $binaryPath = ('"{0}" {1}' -f $exePath, $appParameters)
             $stdoutLog = Join-Path $logDir "$SvcName.out.log"
             $stderrLog = Join-Path $logDir "$SvcName.err.log"
@@ -737,10 +742,6 @@ foreach ($computer in $Computers) {
             Write-EventLog -LogName Application -Source $SvcName -EntryType Information -EventId 1001 `
                 -Message "Windows service installed and started. Mode=$ServiceMode; InstallPath=$InstallPath"
 
-            if (Test-Path -LiteralPath $StageDir) {
-                Remove-Item -LiteralPath $StageDir -Recurse -Force
-            }
-
             [pscustomobject]@{
                 InstallPath        = $InstallPath
                 BackupPath         = $backupRoot
@@ -786,6 +787,27 @@ foreach ($computer in $Computers) {
     }
     finally {
         if ($null -ne $session) {
+            if (-not [string]::IsNullOrWhiteSpace($stage)) {
+                try {
+                    Invoke-Command -Session $session -ScriptBlock {
+                        param($StageDir)
+
+                        if (Test-Path -LiteralPath $StageDir) {
+                            Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction Stop
+                        }
+
+                        $stagingRoot = Split-Path -Parent $StageDir
+                        if ((Test-Path -LiteralPath $stagingRoot -PathType Container) -and
+                            @((Get-ChildItem -LiteralPath $stagingRoot -Force -ErrorAction Stop)).Count -eq 0) {
+                            Remove-Item -LiteralPath $stagingRoot -Force -ErrorAction Stop
+                        }
+                    } -ArgumentList $stage -ErrorAction Stop
+                    Write-Step '  Staging files removed.' 'DarkGray'
+                }
+                catch {
+                    Write-Step ("  WARNING: Could not remove staging files: {0}" -f $_.Exception.Message) 'DarkYellow'
+                }
+            }
             Remove-PSSession -Session $session -ErrorAction SilentlyContinue
         }
     }

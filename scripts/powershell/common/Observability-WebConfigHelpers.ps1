@@ -218,10 +218,18 @@ function Get-ObservabilityExporterAppParameters {
     param(
         [Parameter(Mandatory)][string]$ConfigFile,
         [Parameter(Mandatory)][string]$WebConfigFile,
-        [Parameter(Mandatory)][string]$ListenAddress
+        [Parameter(Mandatory)][string]$ListenAddress,
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('logfmt', 'json')]
+        [string]$LogFormat
     )
 
-    return ('--config.file="{0}" --web.listen-address="{1}" --web.config.file="{2}"' -f $ConfigFile, $ListenAddress, $WebConfigFile)
+    $parameters = '--config.file="{0}" --web.listen-address="{1}" --web.config.file="{2}"' -f $ConfigFile, $ListenAddress, $WebConfigFile
+    if (-not [string]::IsNullOrWhiteSpace($LogFormat)) {
+        $parameters += ' --log.format="{0}"' -f $LogFormat
+    }
+
+    return $parameters
 }
 
 function Resolve-ObservabilityListenAddressForUpgrade {
