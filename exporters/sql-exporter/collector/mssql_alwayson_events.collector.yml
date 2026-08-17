@@ -61,27 +61,42 @@ queries:
           ELSE
           BEGIN
               BEGIN TRY
+                  IF OBJECT_ID(N'tempdb..#alwayson_events') IS NOT NULL
+                      DROP TABLE #alwayson_events;
+
+                  CREATE TABLE #alwayson_events
+                  (
+                      availability_group_name nvarchar(256) NOT NULL,
+                      replica_id uniqueidentifier NULL
+                  );
+
+                  INSERT INTO #alwayson_events (availability_group_name, replica_id)
+                  SELECT
+                      ISNULL(
+                          x.event_data.value(N'(event/data[@name="availability_group_name"]/value)[1]', N'nvarchar(256)'),
+                          N''
+                      ),
+                      TRY_CONVERT(
+                          uniqueidentifier,
+                          x.event_data.value(N'(event/data[@name="availability_replica_id"]/value)[1]', N'nvarchar(64)')
+                      )
+                  FROM sys.fn_xe_file_target_read_file(@path, NULL, NULL, NULL) AS f
+                  CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS x
+                  WHERE f.object_name = N'availability_replica_state_change'
+                    AND x.event_data.value(N'(event/@timestamp)[1]', N'datetime2')
+                        >= DATEADD(HOUR, -24, SYSUTCDATETIME());
+
                   ;WITH flaps AS
                   (
                       SELECT
-                          ISNULL(
-                              x.event_data.value(N'(event/data[@name="availability_group_name"]/value)[1]', N'nvarchar(256)'),
-                              N''
-                          ) AS availability_group_name,
+                          e.availability_group_name,
                           ISNULL(ar.replica_server_name, N'') AS replica_server,
                           CAST(COUNT_BIG(*) AS float) AS sync_state_flaps_24h
-                      FROM sys.fn_xe_file_target_read_file(@path, NULL, NULL, NULL) AS f
-                      CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS x
+                      FROM #alwayson_events AS e
                       LEFT JOIN sys.availability_replicas AS ar
-                          ON ar.replica_id = TRY_CONVERT(
-                              uniqueidentifier,
-                              x.event_data.value(N'(event/data[@name="availability_replica_id"]/value)[1]', N'nvarchar(64)')
-                          )
-                      WHERE f.object_name = N'availability_replica_state_change'
-                        AND x.event_data.value(N'(event/@timestamp)[1]', N'datetime2')
-                            >= DATEADD(HOUR, -24, SYSUTCDATETIME())
+                          ON ar.replica_id = e.replica_id
                       GROUP BY
-                          x.event_data.value(N'(event/data[@name="availability_group_name"]/value)[1]', N'nvarchar(256)'),
+                          e.availability_group_name,
                           ar.replica_server_name
                   )
                   SELECT
