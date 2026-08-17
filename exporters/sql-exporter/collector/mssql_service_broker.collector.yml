@@ -493,7 +493,7 @@ queries:
                  1,
                  CAST((SELECT COUNT(*) FROM sys.service_queues WHERE is_ms_shipped = 0) AS float),
                  CAST((SELECT COUNT(*) FROM sys.services WHERE is_ms_shipped = 0) AS float),
-                 CAST(d.is_honor_broker_priority AS float),
+                 CAST(d.is_honor_broker_priority_on AS float),
                  CONVERT(nvarchar(36), d.service_broker_guid),
                  1,
                  CAST((SELECT COUNT(*) FROM sys.routes) AS float),
@@ -510,7 +510,7 @@ queries:
           SELECT @db,
                  CAST(d.is_broker_enabled AS float),
                  0, -1, -1,
-                 CAST(d.is_honor_broker_priority AS float),
+                 CAST(d.is_honor_broker_priority_on AS float),
                  CONVERT(nvarchar(36), d.service_broker_guid),
                  1, -1, -1, -1, -1
           FROM sys.databases d WITH (NOLOCK) WHERE d.name = @db;
@@ -752,7 +752,7 @@ queries:
           WHERE 1 = 0;
         ELSE
           SELECT
-            COALESCE(NULLIF(connection_state_desc, N''), N'unknown') AS connection_state,
+            COALESCE(NULLIF(state_desc, N''), N'unknown') AS connection_state,
             COALESCE(NULLIF(login_state_desc, N''), N'unknown') AS login_state,
             CAST(COUNT_BIG(*) AS float) AS connection_count,
             CAST(SUM(CAST(is_send_flow_controlled AS float)) AS float) AS send_flow_controlled,
@@ -762,7 +762,7 @@ queries:
             CAST(SUM(CONVERT(float, total_fragments_sent)) AS float) AS fragments_sent,
             CAST(SUM(CONVERT(float, total_fragments_received)) AS float) AS fragments_received
           FROM sys.dm_broker_connections WITH (NOLOCK)
-          GROUP BY COALESCE(NULLIF(connection_state_desc, N''), N'unknown'),
+          GROUP BY COALESCE(NULLIF(state_desc, N''), N'unknown'),
                    COALESCE(NULLIF(login_state_desc, N''), N'unknown');
       END TRY
       BEGIN CATCH
