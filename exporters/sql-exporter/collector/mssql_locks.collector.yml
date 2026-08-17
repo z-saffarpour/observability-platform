@@ -87,15 +87,24 @@ metrics:
 queries:
   - query_name: mssql_locks_summary
     query: |
+      ;WITH normalized_locks AS
+      (
+          SELECT
+              ISNULL(resource_type, N'') AS resource_type,
+              ISNULL(request_mode, N'') AS request_mode,
+              ISNULL(request_status, N'') AS request_status,
+              ISNULL(DB_NAME(resource_database_id), N'') AS db
+          FROM sys.dm_tran_locks WITH (NOLOCK)
+          WHERE request_session_id > 50
+      )
       SELECT TOP (50)
-          ISNULL(resource_type, N'') AS resource_type,
-          ISNULL(request_mode, N'') AS request_mode,
-          ISNULL(request_status, N'') AS request_status,
-          ISNULL(DB_NAME(resource_database_id), N'') AS db,
+          resource_type,
+          request_mode,
+          request_status,
+          db,
           CAST(COUNT(*) AS float) AS lock_count
-      FROM sys.dm_tran_locks WITH (NOLOCK)
-      WHERE request_session_id > 50
-      GROUP BY resource_type, request_mode, request_status, resource_database_id
+      FROM normalized_locks
+      GROUP BY resource_type, request_mode, request_status, db
       ORDER BY COUNT(*) DESC;
 
   - query_name: mssql_locks_waiting_count
