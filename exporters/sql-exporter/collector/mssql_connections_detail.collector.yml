@@ -173,15 +173,15 @@ queries:
     query: |
       SELECT
           CASE
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 60
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 60
                   THEN N'lt_1m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 300
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 300
                   THEN N'1_5m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 1800
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 1800
                   THEN N'5_30m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 3600
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 3600
                   THEN N'30_60m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 14400
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 14400
                   THEN N'1_4h'
               ELSE N'gt_4h'
           END AS idle_bucket,
@@ -191,15 +191,15 @@ queries:
         AND status = N'sleeping'
       GROUP BY
           CASE
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 60
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 60
                   THEN N'lt_1m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 300
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 300
                   THEN N'1_5m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 1800
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 1800
                   THEN N'5_30m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 3600
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 3600
                   THEN N'30_60m'
-              WHEN DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 14400
+              WHEN DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) < 14400
                   THEN N'1_4h'
               ELSE N'gt_4h'
           END;
@@ -211,12 +211,12 @@ queries:
           LEFT(ISNULL(program_name, N''), 64) AS program_name,
           LEFT(ISNULL(host_name, N''), 64) AS host_name,
           CAST(COUNT(*) AS float) AS session_count,
-          CAST(MAX(DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME())) AS float)
+          CAST(MAX(DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME())) AS float)
               AS max_idle_seconds
       FROM sys.dm_exec_sessions WITH (NOLOCK)
       WHERE is_user_process = 1
         AND status = N'sleeping'
-        AND DATEDIFF(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) >= 300
+        AND DATEDIFF_BIG(second, ISNULL(last_request_end_time, login_time), SYSDATETIME()) >= 300
       GROUP BY
           login_name,
           LEFT(ISNULL(program_name, N''), 64),
