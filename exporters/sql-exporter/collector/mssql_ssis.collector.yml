@@ -282,6 +282,56 @@ metrics:
     values: [message_count]
     query_ref: mssql_ssis_event_errors_24h
 
+  # --- control-flow task duration (catalog.executable_statistics) ---
+  - metric_name: mssql_ssis_control_last_duration_seconds
+    type: gauge
+    help: 'Last completed Control Flow task duration (seconds) per package/control in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - control
+      - execution_id
+      - result_desc
+    values: [duration_seconds]
+    query_ref: mssql_ssis_control_last
+
+  - metric_name: mssql_ssis_control_last_result
+    type: gauge
+    help: 'Last completed Control Flow task result code (0 success, 1 failure, 2 completion, 3 cancelled).'
+    key_labels:
+      - folder
+      - project
+      - package
+      - control
+      - execution_id
+      - result_desc
+    values: [execution_result]
+    query_ref: mssql_ssis_control_last
+
+  - metric_name: mssql_ssis_control_max_duration_seconds
+    type: gauge
+    help: 'Max Control Flow task duration (seconds) per package/control in last 24h.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - control
+    values: [max_duration_seconds]
+    query_ref: mssql_ssis_control_max_24h
+
+  - metric_name: mssql_ssis_control_running_duration_seconds
+    type: gauge
+    help: 'Elapsed seconds of currently running Control Flow tasks.'
+    key_labels:
+      - folder
+      - project
+      - package
+      - control
+      - execution_id
+    values: [duration_seconds]
+    query_ref: mssql_ssis_control_running
+
 queries:
   - query_name: mssql_ssisdb_files
     query: |
@@ -712,4 +762,116 @@ queries:
             AND message_type IN (110, 120)
           GROUP BY package_name, message_type
           ORDER BY COUNT(*) DESC;
+      END
+
+  - query_name: mssql_ssis_control_last
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(128)) AS control,
+                 CAST(N'' AS nvarchar(20)) AS execution_id, CAST(N'' AS nvarchar(30)) AS result_desc,
+                 CAST(NULL AS float) AS duration_seconds, CAST(NULL AS float) AS execution_result
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          ;WITH ranked AS
+          (
+              SELECT
+                  ISNULL(e.folder_name, N'') AS folder,
+                  ISNULL(e.project_name, N'') AS project,
+                  ISNULL(e.package_name, N'') AS package,
+                  LEFT(ISNULL(x.executable_name, N''), 128) AS control,
+                  CAST(s.execution_id AS nvarchar(20)) AS execution_id,
+                  CASE s.execution_result
+                    WHEN 0 THEN N'success' WHEN 1 THEN N'failure'
+                    WHEN 2 THEN N'completion' WHEN 3 THEN N'cancelled'
+                    ELSE CAST(s.execution_result AS nvarchar(20))
+                  END AS result_desc,
+                  CAST(s.execution_duration AS float) / 1000.0 AS duration_seconds,
+                  CAST(s.execution_result AS float) AS execution_result,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY e.folder_name, e.project_name, e.package_name, x.executable_name
+                    ORDER BY s.end_time DESC, s.execution_id DESC
+                  ) AS rn
+              FROM SSISDB.catalog.executable_statistics AS s WITH (NOLOCK)
+              INNER JOIN SSISDB.catalog.executables AS x WITH (NOLOCK)
+                  ON x.executable_id = s.executable_id
+              INNER JOIN SSISDB.catalog.executions AS e WITH (NOLOCK)
+                  ON e.execution_id = s.execution_id
+              WHERE s.end_time IS NOT NULL
+                AND s.start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+                AND ISNULL(x.package_path, N'') <> N'\Package'
+          )
+          SELECT TOP (80)
+              folder,
+              project,
+              package,
+              control,
+              execution_id,
+              result_desc,
+              duration_seconds,
+              execution_result
+          FROM ranked
+          WHERE rn = 1
+          ORDER BY duration_seconds DESC;
+      END
+
+  - query_name: mssql_ssis_control_max_24h
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(128)) AS control,
+                 CAST(NULL AS float) AS max_duration_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (50)
+              ISNULL(e.folder_name, N'') AS folder,
+              ISNULL(e.project_name, N'') AS project,
+              ISNULL(e.package_name, N'') AS package,
+              LEFT(ISNULL(x.executable_name, N''), 128) AS control,
+              CAST(MAX(s.execution_duration) AS float) / 1000.0 AS max_duration_seconds
+          FROM SSISDB.catalog.executable_statistics AS s WITH (NOLOCK)
+          INNER JOIN SSISDB.catalog.executables AS x WITH (NOLOCK)
+              ON x.executable_id = s.executable_id
+          INNER JOIN SSISDB.catalog.executions AS e WITH (NOLOCK)
+              ON e.execution_id = s.execution_id
+          WHERE s.end_time IS NOT NULL
+            AND s.start_time >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+            AND ISNULL(x.package_path, N'') <> N'\Package'
+          GROUP BY e.folder_name, e.project_name, e.package_name, x.executable_name
+          ORDER BY MAX(s.execution_duration) DESC;
+      END
+
+  - query_name: mssql_ssis_control_running
+    query: |
+      IF DB_ID(N'SSISDB') IS NULL
+      BEGIN
+          SELECT CAST(N'' AS nvarchar(128)) AS folder, CAST(N'' AS nvarchar(128)) AS project,
+                 CAST(N'' AS nvarchar(260)) AS package, CAST(N'' AS nvarchar(128)) AS control,
+                 CAST(N'' AS nvarchar(20)) AS execution_id, CAST(NULL AS float) AS duration_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          SELECT TOP (50)
+              ISNULL(e.folder_name, N'') AS folder,
+              ISNULL(e.project_name, N'') AS project,
+              ISNULL(e.package_name, N'') AS package,
+              LEFT(ISNULL(x.executable_name, N''), 128) AS control,
+              CAST(s.execution_id AS nvarchar(20)) AS execution_id,
+              CAST(DATEDIFF(SECOND, s.start_time, SYSDATETIMEOFFSET()) AS float) AS duration_seconds
+          FROM SSISDB.catalog.executable_statistics AS s WITH (NOLOCK)
+          INNER JOIN SSISDB.catalog.executables AS x WITH (NOLOCK)
+              ON x.executable_id = s.executable_id
+          INNER JOIN SSISDB.catalog.executions AS e WITH (NOLOCK)
+              ON e.execution_id = s.execution_id
+          WHERE s.end_time IS NULL
+            AND e.status IN (2, 5, 8)
+            AND ISNULL(x.package_path, N'') <> N'\Package'
+          ORDER BY s.start_time ASC;
       END
