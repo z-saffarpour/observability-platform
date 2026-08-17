@@ -87,6 +87,17 @@ With a collector profile (same UX as windows_exporter `-Profile sql-server.yml`)
   -RemoteCredential (Get-Credential)
 ```
 
+With custom listen address and Basic Auth:
+
+```powershell
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+```
+
 ### Upgrade an existing installation
 
 ```powershell
@@ -106,10 +117,22 @@ With a collector profile (same UX as windows_exporter `-Profile sql-server.yml`)
   -RemoteCredential (Get-Credential)
 ```
 
+Preserve web-config and change listen port on upgrade:
+
+```powershell
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+```
+
 Notes:
 - Requires PowerShell Remoting (WinRM) access to target servers.
 - Creates/updates `prometheus_sql_exporter` service using native Windows service APIs.
 - Deploys `sql_exporter.exe`, `sql_exporter.yml`, `web-config.yml`, `profiles\`, and `collector\` (unless `-SkipCollectors` on Install).
+- `-ListenAddress` sets `--web.listen-address` (default `:9399`).
+- `-BasicAuthUsername` + `-BasicAuthHash` (or `-BasicAuthPassword` / `-WebConfigPath`) enable Basic Auth during install/upgrade; `-PreserveWebConfig` keeps the remote file on upgrade.
 - `-Profile <name>.yml` writes the collectors list from `profiles/` into `sql_exporter.yml`.
 - Without `-Profile`, Upgrade preserves the remote config; it backs up before replacement and rolls back on failure.
 

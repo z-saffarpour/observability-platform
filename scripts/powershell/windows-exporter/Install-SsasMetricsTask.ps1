@@ -27,6 +27,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot '..\common\Observability-NssmServiceHelpers.ps1')
+
 $scriptNames = @(
     'Collect-SsasMetrics.ps1',
     'Collect-SsasPerformanceCounters.ps1',
@@ -116,18 +118,22 @@ if ($PSCmdlet.ShouldProcess($ServiceName, 'Install or update SSAS metrics Window
                 throw "NSSM failed: nssm $($Arguments -join ' ')`n$($result -join [Environment]::NewLine)"
             }
         }
-        Invoke-Nssm -Arguments @('install', $ServiceName, $powershellExe, $loopArguments)
+        Invoke-Nssm -Arguments @('install', $ServiceName, $powershellExe)
+        $parameters = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName\Parameters"
+        if (-not (Test-Path -LiteralPath $parameters)) {
+            throw "NSSM parameters key was not found: $parameters"
+        }
+        Set-ItemProperty -LiteralPath $parameters -Name Application -Value $powershellExe
+        Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value $loopArguments
+        Set-ItemProperty -LiteralPath $parameters -Name AppDirectory -Value $InstallRoot
+        Set-ObservabilityNssmLogging -ParametersKey $parameters -StdoutLog (Join-Path $logDir 'prometheus_windows_ssas.out.log') -StderrLog (Join-Path $logDir 'prometheus_windows_ssas.err.log')
+        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppExit', 'Default', 'Restart')
         Invoke-Nssm -Arguments @('set', $ServiceName, 'DisplayName', $DisplayName)
         Invoke-Nssm -Arguments @('set', $ServiceName, 'Description', 'Collects Microsoft SSAS metrics for Prometheus windows_exporter.')
         Invoke-Nssm -Arguments @('set', $ServiceName, 'Start', 'SERVICE_AUTO_START')
         Invoke-Nssm -Arguments @('set', $ServiceName, 'ObjectName', 'LocalSystem')
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppDirectory', $InstallRoot)
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppStdout', (Join-Path $logDir 'prometheus_windows_ssas.out.log'))
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppStderr', (Join-Path $logDir 'prometheus_windows_ssas.err.log'))
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppRotateFiles', '1')
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppRotateBytes', '10485760')
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppExit', 'Default', 'Restart')
-        Invoke-Nssm -Arguments @('set', $ServiceName, 'AppThrottle', '5000')
+        Invoke-ObservabilitySc -Arguments @('config', $ServiceName, ('binPath= ' + ('"{0}"' -f $NssmPath)))
+        Register-ObservabilityNssmEventSource -NssmExe $NssmPath
     }
     else {
         $serviceArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ServiceName "{1}" -CollectorScript "{2}" -ConfigPath "{3}" -IntervalMinutes {4}' -f `
@@ -137,21 +143,14 @@ if ($PSCmdlet.ShouldProcess($ServiceName, 'Install or update SSAS metrics Window
             New-Service -Name $ServiceName -DisplayName $DisplayName -BinaryPathName $binaryPath -StartupType Automatic | Out-Null
         }
         else {
-            $output = & sc.exe config $ServiceName ('binPath= ' + $binaryPath) 'start= auto' ('DisplayName= ' + $DisplayName) 2>&1
-            if ($LASTEXITCODE -ne 0) { throw "sc.exe config failed: $($output -join [Environment]::NewLine)" }
+            Invoke-ObservabilitySc -Arguments @('config', $ServiceName, ('binPath= ' + $binaryPath), 'start= auto', ('DisplayName= ' + $DisplayName))
         }
     }
-    $description = & sc.exe description $ServiceName 'Collects Microsoft SSAS metrics for Prometheus windows_exporter.' 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "sc.exe description failed: $($description -join [Environment]::NewLine)" }
-    $failure = & sc.exe failure $ServiceName 'reset= 86400' 'actions= restart/60000/restart/60000/restart/60000' 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "sc.exe failure configuration failed: $($failure -join [Environment]::NewLine)" }
-    & sc.exe failureflag $ServiceName 1 | Out-Null
+    Invoke-ObservabilitySc -Arguments @('description', $ServiceName, 'Collects Microsoft SSAS metrics for Prometheus windows_exporter.')
+    Invoke-ObservabilitySc -Arguments @('failure', $ServiceName, 'reset= 86400', 'actions= restart/60000/restart/60000/restart/60000')
+    Invoke-ObservabilitySc -Arguments @('failureflag', $ServiceName, '1')
 
-    Start-Service -Name $ServiceName
-    $service = Get-Service -Name $ServiceName
-    $service.WaitForStatus('Running', [TimeSpan]::FromSeconds($ServiceTimeoutSec))
-    $service.Refresh()
-    if ($service.Status -ne 'Running') { throw "Service did not reach Running state: $ServiceName" }
+    $service = Start-ObservabilityManagedService -Name $ServiceName -TimeoutSec $ServiceTimeoutSec -LogDirectory $logDir -ProcessLabel 'powershell.exe'
     Write-EventLog -LogName Application -Source $ServiceName -EntryType Information -EventId 1001 `
         -Message "Windows service installed and started. Mode=$ServiceMode; ConfigPath=$configPath; IntervalMinutes=$IntervalMinutes"
 

@@ -84,6 +84,9 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 | `-Computers` | (required) | Host names or list from a file |
 | `-SourceRoot` | package root | Package path on the client |
 | `-InstallRoot` | Program Files path above | Install path on the target |
+| `-ListenAddress` | `:9182` | Scrape address/port (`--web.listen-address`) |
+| `-WebConfigPath` | — | Deploy a custom `web-config.yml` from the client |
+| `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | Enable Basic Auth during install (hash recommended; password needs Python + `bcrypt` on client) |
 | `-Profile` / `-AutoProfile` | — | Role config selection |
 | `-ServiceAccountMode` | `LocalSystem` | `LocalSystem`, `LocalService`, `NetworkService`, `Credential`, `gMSA`, `NtService` |
 | `-ServiceCredential` | — | For `Credential` mode |
@@ -133,6 +136,20 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
   -RemoteCredential (Get-Credential)
 # After NtService, harden ACLs for the virtual account:
 # .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'
+
+# Listen address and Basic Auth (bcrypt hash)
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
+# Custom web-config.yml from the client
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -WebConfigPath 'C:\Secrets\windows-exporter-web-config.yml' `
+  -RemoteCredential (Get-Credential)
 ```
 
 ## Remote upgrade
@@ -155,6 +172,10 @@ Script: `scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1`
 | `-Computers` | (required) | Target hosts |
 | `-ExpectedVersion` | `0.31.8` | Expected package and post-install version |
 | `-InstallRoot` | (auto-detect) | Only if the exe path cannot be detected |
+| `-ListenAddress` | (empty = preserve service) | Override `--web.listen-address` |
+| `-WebConfigPath` | — | Deploy custom `web-config.yml` |
+| `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | Enable or replace Basic Auth |
+| `-PreserveWebConfig` | off | Keep remote `web-config.yml`; mutually exclusive with web-config/Basic Auth params |
 | `-Profile` / `-AutoProfile` | preserve current | Change `--config.file` |
 | `-ServiceAccountMode` | preserve current | `LocalSystem`, `LocalService`, `NetworkService`, `Credential`, `gMSA`, `NtService` |
 | `-ServiceCredential` | — | For `Credential` mode |
@@ -194,6 +215,26 @@ Script: `scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1`
 .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
   -Computers SQL01 `
   -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+
+# Upgrade binary only; preserve listen address and web-config.yml
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# Change listen port; keep existing Basic Auth
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# Enable or replace Basic Auth during upgrade
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
   -RemoteCredential (Get-Credential)
 ```
 

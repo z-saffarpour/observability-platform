@@ -5,8 +5,8 @@
 - File: `collector/mssql_ssis.collector.yml`
 - collector_name: `mssql_ssis`
 - min_interval: `60s`
-- metric count: `28`
-- shared query_ref values: `mssql_ssis_event_errors_24h`, `mssql_ssis_executions_by_status_1h`, `mssql_ssis_failed_by_package`, `mssql_ssis_failed_last`, `mssql_ssis_failed_messages`, `mssql_ssis_failed_recent`, `mssql_ssis_failed_total`, `mssql_ssis_inventory`, `mssql_ssis_operations_24h`, `mssql_ssis_operations_running`, `mssql_ssis_running`, `mssql_ssis_running_count`, `mssql_ssis_succeeded_top`, `mssql_ssisdb_exec_24h`, `mssql_ssisdb_failed_count`, `mssql_ssisdb_files`, `mssql_ssisdb_log`
+- metric count: `32`
+- shared query_ref values: `mssql_ssis_control_last`, `mssql_ssis_control_max_24h`, `mssql_ssis_control_running`, `mssql_ssis_event_errors_24h`, `mssql_ssis_executions_by_status_1h`, `mssql_ssis_failed_by_package`, `mssql_ssis_failed_last`, `mssql_ssis_failed_messages`, `mssql_ssis_failed_recent`, `mssql_ssis_failed_total`, `mssql_ssis_inventory`, `mssql_ssis_operations_24h`, `mssql_ssis_operations_running`, `mssql_ssis_running`, `mssql_ssis_running_count`, `mssql_ssis_succeeded_top`, `mssql_ssisdb_exec_24h`, `mssql_ssisdb_failed_count`, `mssql_ssisdb_files`, `mssql_ssisdb_log`
 
 ## Purpose
 
@@ -58,6 +58,10 @@
 | `mssql_ssis_operations_24h` | `gauge` | `operation_type`, `status_desc` | `operation_count` | query_ref=`mssql_ssis_operations_24h` | SSISDB operations in last 24 hours grouped by type and status. |
 | `mssql_ssis_operation_running_seconds` | `gauge` | `operation_id`, `operation_type`, `object_name`, `caller_name` | `duration_seconds` | query_ref=`mssql_ssis_operations_running` | Currently running SSISDB operations duration (seconds). |
 | `mssql_ssis_event_errors_24h` | `gauge` | `package`, `message_type_desc` | `message_count` | query_ref=`mssql_ssis_event_errors_24h` | SSISDB event_messages with error/warning in last 24h by package. |
+| `mssql_ssis_control_last_duration_seconds` | `gauge` | `folder`, `project`, `package`, `control`, `execution_id`, `result_desc` | `duration_seconds` | query_ref=`mssql_ssis_control_last` | Last completed Control Flow task duration (seconds) per package/control in last 24h. |
+| `mssql_ssis_control_last_result` | `gauge` | `folder`, `project`, `package`, `control`, `execution_id`, `result_desc` | `execution_result` | query_ref=`mssql_ssis_control_last` | Last completed Control Flow task result code (0 success, 1 failure, 2 completion, 3 cancelled). |
+| `mssql_ssis_control_max_duration_seconds` | `gauge` | `folder`, `project`, `package`, `control` | `max_duration_seconds` | query_ref=`mssql_ssis_control_max_24h` | Max Control Flow task duration (seconds) per package/control in last 24h. |
+| `mssql_ssis_control_running_duration_seconds` | `gauge` | `folder`, `project`, `package`, `control`, `execution_id` | `duration_seconds` | query_ref=`mssql_ssis_control_running` | Elapsed seconds of currently running Control Flow tasks. |
 
 ## Operational notes
 

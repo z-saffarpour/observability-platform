@@ -339,6 +339,9 @@ Test-WSMan -ComputerName SERVER01</code></pre>
           <tr><td><code>-Computers</code></td><td>(الزامی)</td><td>نام سرورها یا لیست از فایل</td></tr>
           <tr><td><code>-SourceRoot</code></td><td>ریشه پکیج</td><td>مسیر پکیج روی کلاینت</td></tr>
           <tr><td><code>-InstallRoot</code></td><td>مسیر Program Files بالا</td><td>مسیر نصب روی مقصد</td></tr>
+          <tr><td><code>-ListenAddress</code></td><td><code>:9182</code></td><td>آدرس/پورت scrape (<code>--web.listen-address</code>)</td></tr>
+          <tr><td><code>-WebConfigPath</code></td><td>—</td><td>deploy <code>web-config.yml</code> سفارشی</td></tr>
+          <tr><td><code>-BasicAuthUsername</code> / <code>-BasicAuthHash</code></td><td>—</td><td>فعال‌سازی Basic Auth در نصب</td></tr>
           <tr><td><code>-ServiceMode</code></td><td><code>ServiceBase</code></td><td><code>ServiceBase</code> یا <code>NSSM</code>؛ NSSM در <code>C:\Program Files\Observability\Tools\NSSM\nssm.exe</code> مستقر می‌شود</td></tr>
           <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>—</td><td>انتخاب کانفیگ نقش</td></tr>
           <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td><code>LocalSystem</code>، <code>LocalService</code>، <code>NetworkService</code>، <code>Credential</code>، <code>gMSA</code>، <code>NtService</code></td></tr>
@@ -394,7 +397,15 @@ Test-WSMan -ComputerName SERVER01</code></pre>
   -ServiceAccountMode NtService `
   -RemoteCredential (Get-Credential)
 # پس از NtService، ACL مسیر نصب را برای حساب مجازی تنظیم کنید:
-# .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'</code></pre>
+# .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'
+
+# آدرس Listen و Basic Auth
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)</code></pre>
 
       <h2 id="upgrade">آپگرید ریموت</h2>
       <p>اسکریپت: <code>scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1</code></p>
@@ -418,6 +429,8 @@ Test-WSMan -ComputerName SERVER01</code></pre>
           <tr><td><code>-Computers</code></td><td>(الزامی)</td><td>سرورهای هدف</td></tr>
           <tr><td><code>-ExpectedVersion</code></td><td><code>0.31.8</code></td><td>نسخه مورد انتظار باینری پکیج و پس از نصب</td></tr>
           <tr><td><code>-InstallRoot</code></td><td>(تشخیص خودکار)</td><td>فقط اگر مسیر exe قابل تشخیص نباشد</td></tr>
+          <tr><td><code>-ListenAddress</code></td><td>(خالی = حفظ سرویس)</td><td>override <code>--web.listen-address</code></td></tr>
+          <tr><td><code>-PreserveWebConfig</code></td><td>خاموش</td><td>حفظ <code>web-config.yml</code> ریموت</td></tr>
           <tr><td><code>-ServiceMode</code></td><td><code>Preserve</code></td><td>حفظ و اعتبارسنجی حالت نصب‌شده <code>ServiceBase</code>/<code>NSSM</code></td></tr>
           <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>حفظ فعلی</td><td>تغییر <code>--config.file</code></td></tr>
           <tr><td><code>-ServiceAccountMode</code></td><td>حفظ فعلی</td><td><code>LocalSystem</code>، <code>LocalService</code>، <code>NetworkService</code>، <code>Credential</code>، <code>gMSA</code>، <code>NtService</code></td></tr>
@@ -463,6 +476,13 @@ Test-WSMan -ComputerName SERVER01</code></pre>
 .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
   -Computers SQL01 `
   -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+
+# حفظ web-config؛ تغییر پورت
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -PreserveWebConfig `
   -RemoteCredential (Get-Credential)</code></pre>
 
       <h2 id="uninstall">حذف ریموت</h2>

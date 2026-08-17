@@ -39,6 +39,20 @@
   .\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
     -Computers sql-host-01 `
     -InstallRoot 'D:\Monitoring\sql_exporter'
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -ListenAddress ':9399' `
+    -PreserveWebConfig `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -BasicAuthUsername 'scrape_user' `
+    -BasicAuthPassword (Read-Host -AsSecureString 'Password') `
+    -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
@@ -63,7 +77,32 @@ param(
     [string]$InstallRoot,
 
     [Parameter(Mandatory = $false)]
+    [string]$ListenAddress,
+
+    [Parameter(Mandatory = $false)]
+    [string]$WebConfigPath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$BasicAuthUsername,
+
+    [Parameter(Mandatory = $false)]
+    [SecureString]$BasicAuthPassword,
+
+    [Parameter(Mandatory = $false)]
+    [string]$BasicAuthHash,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$PreserveWebConfig,
+
+    [Parameter(Mandatory = $false)]
     [string]$Profile,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('Auto', 'None')]
+    [string]$SqlServerServiceDependency = 'Auto',
+
+    [Parameter(Mandatory = $false)]
+    [string]$SqlServerServiceName,
 
     [Parameter(Mandatory = $false)]
     [pscredential]$RemoteCredential,
@@ -83,6 +122,16 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$serviceHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-NssmServiceHelpers.ps1'
+$webConfigHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-WebConfigHelpers.ps1'
+if (-not (Test-Path -LiteralPath $serviceHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $serviceHelpersPath"
+}
+if (-not (Test-Path -LiteralPath $webConfigHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $webConfigHelpersPath"
+}
+. $webConfigHelpersPath
 
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
     $SourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
@@ -173,11 +222,38 @@ if ($Computers.Count -eq 0) {
     throw 'No target servers were resolved.'
 }
 
+if ($PreserveWebConfig -and (
+        -not [string]::IsNullOrWhiteSpace($WebConfigPath) -or
+        -not [string]::IsNullOrWhiteSpace($BasicAuthUsername) -or
+        $null -ne $BasicAuthPassword -or
+        -not [string]::IsNullOrWhiteSpace($BasicAuthHash))) {
+    throw 'Use either -PreserveWebConfig or web-config/Basic Auth parameters, not both.'
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ListenAddress)) {
+    Test-ObservabilityListenAddress -Address $ListenAddress
+}
+
+$deployWebConfig = $null
+$tempWebConfigPath = $null
+if (-not $PreserveWebConfig) {
+    $deployWebConfig = Resolve-ObservabilityWebConfigDeployment `
+        -TemplatePath $sourceWebConfig `
+        -WebConfigPath $WebConfigPath `
+        -BasicAuthUsername $BasicAuthUsername `
+        -BasicAuthPassword $BasicAuthPassword `
+        -BasicAuthHash $BasicAuthHash
+    $tempWebConfigPath = if ($deployWebConfig -ne $sourceWebConfig) { $deployWebConfig } else { $null }
+}
+
 Write-Step "Source root      : $exporterSource"
 Write-Step "Target version   : $ExpectedVersion"
 Write-Step "Service          : $ServiceName"
 Write-Step ("Install override : {0}" -f $(if ($InstallRoot) { $InstallRoot } else { '<auto-detect>' }))
+Write-Step ("Listen address   : {0}" -f $(if ($ListenAddress) { $ListenAddress } elseif ($PreserveWebConfig) { '<preserve remote>' } else { '<preserve service>' }))
+Write-Step ("Web config       : {0}" -f $(if ($PreserveWebConfig) { '<preserve remote>' } elseif ($WebConfigPath) { $WebConfigPath } elseif ($BasicAuthUsername) { "Basic Auth user=$BasicAuthUsername" } else { '<package default>' }))
 Write-Step ("Profile          : {0}" -f $(if ($profileLeaf) { $profileLeaf } else { '<preserve remote sql_exporter.yml>' }))
+Write-Step ("SQL dependency   : {0}" -f $(if ($SqlServerServiceName) { $SqlServerServiceName } else { $SqlServerServiceDependency }))
 Write-Step "Hosts            : $($Computers -join ', ')"
 Write-Host ''
 
@@ -211,17 +287,23 @@ foreach ($computer in $Computers) {
             $path
         }
         Copy-Item -LiteralPath $SourceExe -Destination (Join-Path $stageDir 'sql_exporter.exe') -ToSession $session -Force
-        Copy-Item -LiteralPath $sourceWebConfig -Destination (Join-Path $stageDir 'web-config.yml') -ToSession $session -Force
+        if (-not $PreserveWebConfig) {
+            Copy-Item -LiteralPath $deployWebConfig -Destination (Join-Path $stageDir 'web-config.yml') -ToSession $session -Force
+        }
         Copy-Item -LiteralPath $sourceVersionFile -Destination (Join-Path $stageDir 'sql_exporter_version.ini') -ToSession $session -Force
         Copy-Item -LiteralPath $sourceNssm -Destination (Join-Path $stageDir 'nssm.exe') -ToSession $session -Force
         Copy-Item -Path (Join-Path $sourceCollectors '*') -Destination (Join-Path $stageDir 'collector') -ToSession $session -Recurse -Force
         Copy-Item -Path (Join-Path $sourceProfiles '*') -Destination (Join-Path $stageDir 'profiles') -ToSession $session -Force
+        Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stageDir 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+        Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stageDir 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
 
         $upgrade = Invoke-Command -Session $session -ScriptBlock {
-            param($SvcName, $StageDir, $Version, $RootOverride, $TimeoutSec, $BackupLimit, $ProfileName, $ServiceMode)
+            param($SvcName, $StageDir, $Version, $RootOverride, $TimeoutSec, $BackupLimit, $ProfileName, $ServiceMode, $ListenOverride, $PreserveWebConfig, $SqlDependencyMode, $SqlDependencyServiceName)
 
             Set-StrictMode -Version Latest
             $ErrorActionPreference = 'Stop'
+            . (Join-Path $StageDir 'Observability-NssmServiceHelpers.ps1')
+            . (Join-Path $StageDir 'Observability-WebConfigHelpers.ps1')
 
             function Wait-ServiceState {
                 param([string]$Name, [string]$State, [int]$Timeout)
@@ -356,7 +438,12 @@ foreach ($computer in $Computers) {
                 $cfgPath = Join-Path $configDir 'sql_exporter.yml'
                 $webPath = Join-Path $configDir 'web-config.yml'
                 Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter.exe') -Destination $targetExe -Force
-                Copy-Item -LiteralPath (Join-Path $StageDir 'web-config.yml') -Destination $webPath -Force
+                if (-not $PreserveWebConfig) {
+                    Copy-Item -LiteralPath (Join-Path $StageDir 'web-config.yml') -Destination $webPath -Force
+                }
+                elseif (-not (Test-Path -LiteralPath $webPath -PathType Leaf)) {
+                    throw "Remote web-config.yml was not found at $webPath and -PreserveWebConfig was set."
+                }
                 Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter_version.ini') -Destination (Join-Path $versionDir 'sql_exporter_version.ini') -Force
                 if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf)) {
                     $legacyConfig = Join-Path $installPath 'sql_exporter.yml'
@@ -390,7 +477,14 @@ foreach ($computer in $Computers) {
                         -ProfileLeaf $ProfileName
                 }
 
-                $serviceCommand = ('"{0}" --config.file "{1}" --web.config.file "{2}"' -f $targetExe, $cfgPath, $webPath)
+                $listenSource = if ($originalNssmParameters) { $originalNssmParameters } else { $originalServicePath }
+                $listenAddress = Resolve-ObservabilityListenAddressForUpgrade `
+                    -RequestedAddress $ListenOverride `
+                    -CurrentAppParameters $listenSource `
+                    -CurrentServicePath $originalServicePath `
+                    -DefaultAddress ':9399'
+                $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfgPath -WebConfigFile $webPath -ListenAddress $listenAddress
+                $serviceCommand = ('"{0}" {1}' -f $targetExe, $appParameters)
                 if ($method -eq 'NSSM') {
                     $nssmDir = 'C:\Program Files\Observability\Tools\NSSM'
                     New-Item -Path $nssmDir -ItemType Directory -Force | Out-Null
@@ -401,18 +495,16 @@ foreach ($computer in $Computers) {
                     $logDir = Join-Path $installPath 'log'
                     New-Item -Path $logDir -ItemType Directory -Force | Out-Null
                     Set-ItemProperty -LiteralPath $nssmParameters -Name Application -Value $targetExe
-                    Set-ItemProperty -LiteralPath $nssmParameters -Name AppParameters -Value ('--config.file "{0}" --web.config.file "{1}"' -f $cfgPath, $webPath)
+                    Set-ItemProperty -LiteralPath $nssmParameters -Name AppParameters -Value $appParameters
                     Set-ItemProperty -LiteralPath $nssmParameters -Name AppDirectory -Value $installPath
-                    Set-ItemProperty -LiteralPath $nssmParameters -Name AppStdout -Value (Join-Path $logDir "$SvcName.out.log")
-                    Set-ItemProperty -LiteralPath $nssmParameters -Name AppStderr -Value (Join-Path $logDir "$SvcName.err.log")
-                    Set-ItemProperty -LiteralPath $nssmParameters -Name AppRotateFiles -Value 1 -Type DWord
-                    Set-ItemProperty -LiteralPath $nssmParameters -Name AppRotateBytes -Value 10485760 -Type DWord
-                    $scNssm = & sc.exe config $SvcName ('binPath= ' + ('"{0}"' -f $centralNssm)) 2>&1
-                    if ($LASTEXITCODE -ne 0) { throw "sc.exe config NSSM path failed: $($scNssm -join [Environment]::NewLine)" }
+                    Set-ObservabilityNssmLogging -ParametersKey $nssmParameters -StdoutLog (Join-Path $logDir "$SvcName.out.log") -StderrLog (Join-Path $logDir "$SvcName.err.log")
+                    & $centralNssm set $SvcName AppExit Default Restart | Out-Null
+                    Register-ObservabilityNssmEventSource -NssmExe $centralNssm
+                    if ($service.StartName) { Grant-ObservabilityServiceLogAccess -Path $logDir -Account $service.StartName }
+                    Invoke-ObservabilitySc -Arguments @('config', $SvcName, ('binPath= ' + ('"{0}"' -f $centralNssm)))
                 }
                 else {
-                    $scOutput = & sc.exe config $SvcName ('binPath= ' + $serviceCommand) 2>&1
-                    if ($LASTEXITCODE -ne 0) { throw "sc.exe config failed: $($scOutput -join [Environment]::NewLine)" }
+                    Invoke-ObservabilitySc -Arguments @('config', $SvcName, ('binPath= ' + $serviceCommand))
                 }
 
                 $installedVersion = Read-Version -Path $targetExe
@@ -420,8 +512,13 @@ foreach ($computer in $Computers) {
                     throw "Installed version is '$installedVersion'; expected '$Version'."
                 }
 
-                Start-Service -Name $SvcName -ErrorAction Stop
-                Wait-ServiceState -Name $SvcName -State 'Running' -Timeout $TimeoutSec
+                $dependencyMode = if ($SqlDependencyServiceName) { $SqlDependencyServiceName } else { $SqlDependencyMode }
+                $dependencyServices = Set-ObservabilitySqlServerServiceDependency `
+                    -ServiceName $SvcName `
+                    -DependencyMode $dependencyMode `
+                    -DataSourceName (Get-ObservabilitySqlExporterDataSourceNameFromConfig -ConfigPath $cfgPath)
+
+                Start-ObservabilityManagedService -Name $SvcName -TimeoutSec $TimeoutSec -LogDirectory (Join-Path $installPath 'log') -ProcessLabel 'sql_exporter.exe' | Out-Null
                 if (-not [Diagnostics.EventLog]::SourceExists($SvcName)) { New-EventLog -LogName Application -Source $SvcName }
                 Write-EventLog -LogName Application -Source $SvcName -EntryType Information -EventId 1002 `
                     -Message "Windows service upgraded. Mode=$method; Version=$installedVersion; InstallPath=$installPath; Profile=$ProfileName"
@@ -454,7 +551,7 @@ foreach ($computer in $Computers) {
                     }
                 }
                 elseif ($originalServicePath) {
-                    & sc.exe config $SvcName ('binPath= ' + $originalServicePath) | Out-Null
+                    Invoke-ObservabilitySc -Arguments @('config', $SvcName, ('binPath= ' + $originalServicePath))
                 }
                 if ($wasRunning) { Start-Service -Name $SvcName -ErrorAction SilentlyContinue }
                 throw "Upgrade failed and executable was rolled back to $oldVersion. Cause: $upgradeError"
@@ -479,8 +576,9 @@ foreach ($computer in $Computers) {
                 Backup     = $backupDir
                 Executable = $targetExe
                 Profile    = $ProfileName
+                SqlDependencies = ($dependencyServices -join '/')
             }
-        } -ArgumentList $ServiceName, $stageDir, $ExpectedVersion, $InstallRoot, $ServiceTimeoutSec, $KeepBackups, $profileLeaf, $ServiceMode
+        } -ArgumentList $ServiceName, $stageDir, $ExpectedVersion, $InstallRoot, $ServiceTimeoutSec, $KeepBackups, $profileLeaf, $ServiceMode, $ListenAddress, ([bool]$PreserveWebConfig), $SqlServerServiceDependency, $SqlServerServiceName
 
         $row.Method = $upgrade.Method
         $row.Previous = $upgrade.Previous
@@ -505,6 +603,10 @@ foreach ($computer in $Computers) {
         $results += [pscustomobject]$row
         Write-Host ''
     }
+}
+
+if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
+    [IO.File]::Delete($tempWebConfigPath)
 }
 
 Write-Step '===== Summary =====' Yellow

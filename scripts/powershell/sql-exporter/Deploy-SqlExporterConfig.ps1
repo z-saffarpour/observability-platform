@@ -228,7 +228,13 @@ function Restart-ExporterService {
             $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds($Timeout))
         }
 
-        Start-Service -Name $SvcName -ErrorAction Stop
+        $svc.Refresh()
+        if ($svc.Status -eq 'Paused') {
+            Resume-Service -Name $SvcName -ErrorAction Stop
+        }
+        elseif ($svc.Status -ne 'Running') {
+            Start-Service -Name $SvcName -ErrorAction Stop
+        }
         $svc.Refresh()
         $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds($Timeout))
 

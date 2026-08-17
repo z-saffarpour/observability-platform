@@ -45,6 +45,35 @@
     -Computers sql-host-01 `
     -ServiceAccountMode gMSA `
     -ServiceAccount 'DOMAIN\SqlExporterAccount$'
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -ListenAddress ':9399' `
+    -BasicAuthUsername 'scrape_user' `
+    -BasicAuthHash '$2a$12$...' `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -ListenAddress '127.0.0.1:9399' `
+    -WebConfigPath 'C:\Secrets\sql-exporter-web-config.yml' `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -TargetName 'sql-prod-01' `
+    -DataSourceName 'sqlserver://sql-prod-01:1433?trusted+connection=yes&encrypt=true&TrustServerCertificate=true&app+name=sql_exporter' `
+    -SqlServerServiceDependency Auto `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -SqlServerServiceName 'MSSQL$INSTANCE01' `
+    -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -75,7 +104,32 @@ param(
     [string]$ListenAddress = ':9399',
 
     [Parameter(Mandatory = $false)]
+    [string]$WebConfigPath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$BasicAuthUsername,
+
+    [Parameter(Mandatory = $false)]
+    [SecureString]$BasicAuthPassword,
+
+    [Parameter(Mandatory = $false)]
+    [string]$BasicAuthHash,
+
+    [Parameter(Mandatory = $false)]
     [string]$Profile,
+
+    [Parameter(Mandatory = $false)]
+    [string]$TargetName,
+
+    [Parameter(Mandatory = $false)]
+    [string]$DataSourceName,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('Auto', 'None')]
+    [string]$SqlServerServiceDependency = 'Auto',
+
+    [Parameter(Mandatory = $false)]
+    [string]$SqlServerServiceName,
 
     [Parameter(Mandatory = $false)]
     [ValidateSet('LocalSystem', 'LocalService', 'NetworkService', 'Credential', 'gMSA', 'NtService')]
@@ -103,6 +157,16 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$serviceHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-NssmServiceHelpers.ps1'
+$webConfigHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-WebConfigHelpers.ps1'
+if (-not (Test-Path -LiteralPath $serviceHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $serviceHelpersPath"
+}
+if (-not (Test-Path -LiteralPath $webConfigHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $webConfigHelpersPath"
+}
+. $webConfigHelpersPath
 
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
     $SourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
@@ -237,6 +301,57 @@ function New-SqlExporterConfigWithProfile {
     [IO.File]::WriteAllText($OutputPath, $newConfig, $utf8)
 }
 
+function ConvertTo-SqlExporterYamlSingleQuoted {
+    param([Parameter(Mandatory)][string]$Value)
+
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
+function Set-SqlExporterTargetSettings {
+    param(
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [string]$Name,
+        [string]$DataSourceName,
+        [Parameter(Mandatory)][string]$OutputPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name) -and [string]::IsNullOrWhiteSpace($DataSourceName)) {
+        if ($ConfigPath -ne $OutputPath) {
+            Copy-Item -LiteralPath $ConfigPath -Destination $OutputPath -Force
+        }
+        return
+    }
+
+    $config = Get-Content -LiteralPath $ConfigPath -Raw
+    if ([string]::IsNullOrWhiteSpace($config)) {
+        throw "Config is empty: $ConfigPath"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        $nameValue = ConvertTo-SqlExporterYamlSingleQuoted -Value $Name.Trim()
+        $config = [regex]::Replace($config, '(?m)^(\s{2}name:\s*).*$', {
+            param($match)
+            return $match.Groups[1].Value + $nameValue
+        }, 1)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($DataSourceName)) {
+        $dsnValue = ConvertTo-SqlExporterYamlSingleQuoted -Value $DataSourceName.Trim()
+        $config = [regex]::Replace($config, '(?m)^(\s{2}data_source_name:\s*).*$', {
+            param($match)
+            return $match.Groups[1].Value + $dsnValue
+        }, 1)
+    }
+
+    $outDir = Split-Path -Parent $OutputPath
+    if (-not (Test-Path -LiteralPath $outDir)) {
+        New-Item -Path $outDir -ItemType Directory -Force | Out-Null
+    }
+
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [IO.File]::WriteAllText($OutputPath, $config, $utf8)
+}
+
 function New-RemoteSession {
     param(
         [string]$ComputerName,
@@ -335,6 +450,19 @@ if (-not [string]::IsNullOrWhiteSpace($Profile)) {
     $configToDeploy = $tempConfigPath
 }
 
+if (-not [string]::IsNullOrWhiteSpace($TargetName) -or -not [string]::IsNullOrWhiteSpace($DataSourceName)) {
+    if (-not $tempConfigPath) {
+        $tempConfigPath = Join-Path $env:TEMP ("sql_exporter-target-{0}.yml" -f [guid]::NewGuid().ToString('N'))
+    }
+
+    Set-SqlExporterTargetSettings `
+        -ConfigPath $configToDeploy `
+        -Name $TargetName `
+        -DataSourceName $DataSourceName `
+        -OutputPath $tempConfigPath
+    $configToDeploy = $tempConfigPath
+}
+
 # The deployed config lives in config\ and collectors are its sibling directory.
 if (-not $tempConfigPath) {
     $tempConfigPath = Join-Path $env:TEMP ("sql_exporter-layout-{0}.yml" -f [guid]::NewGuid().ToString('N'))
@@ -344,6 +472,15 @@ $deployConfig = $deployConfig.Replace('"collector/*.collector.yml"', '"../collec
 [IO.File]::WriteAllText($tempConfigPath, $deployConfig, (New-Object Text.UTF8Encoding $false))
 $configToDeploy = $tempConfigPath
 
+Test-ObservabilityListenAddress -Address $ListenAddress
+$webConfigToDeploy = Resolve-ObservabilityWebConfigDeployment `
+    -TemplatePath $layout.WebConfig `
+    -WebConfigPath $WebConfigPath `
+    -BasicAuthUsername $BasicAuthUsername `
+    -BasicAuthPassword $BasicAuthPassword `
+    -BasicAuthHash $BasicAuthHash
+$tempWebConfigPath = if ($webConfigToDeploy -ne $layout.WebConfig) { $webConfigToDeploy } else { $null }
+
 $svcContext = Get-ServiceAccountContext -Mode $ServiceAccountMode -Account $ServiceAccount -Credential $ServiceCredential
 
 Write-Step ("Source root     : {0}" -f $layout.Root)
@@ -351,6 +488,10 @@ Write-Step ("Install root    : {0}" -f $InstallRoot)
 Write-Step ("Service         : {0}" -f $ServiceName)
 Write-Step ("Display name    : {0}" -f $ServiceDisplayName)
 Write-Step ("Listen address  : {0}" -f $ListenAddress)
+Write-Step ("Web config      : {0}" -f $(if ($WebConfigPath) { $WebConfigPath } elseif ($BasicAuthUsername) { "Basic Auth user=$BasicAuthUsername" } else { '<package default>' }))
+Write-Step ("Target name     : {0}" -f $(if ($TargetName) { $TargetName } else { '<package default>' }))
+Write-Step ("Data source     : {0}" -f $(if ($DataSourceName) { $DataSourceName } else { '<package default>' }))
+Write-Step ("SQL dependency  : {0}" -f $(if ($SqlServerServiceName) { $SqlServerServiceName } else { $SqlServerServiceDependency }))
 Write-Step ("Service account : {0} ({1})" -f $svcContext.Account, $svcContext.Mode)
 Write-Step ("Profile         : {0}" -f ($(if ($profileLeaf) { $profileLeaf } else { '<default sql_exporter.yml collectors>' })))
 Write-Step ("Collectors      : {0}" -f ($(if ($SkipCollectors) { 'Skip' } else { 'Deploy' })))
@@ -408,12 +549,14 @@ foreach ($computer in $Computers) {
 
         Copy-Item -Path $layout.ExePath -Destination (Join-Path $stage 'sql_exporter.exe') -ToSession $session -Force
         Copy-Item -Path $configToDeploy -Destination (Join-Path $stage 'sql_exporter.yml') -ToSession $session -Force
-        Copy-Item -Path $layout.WebConfig -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
+        Copy-Item -Path $webConfigToDeploy -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
         Copy-Item -Path $layout.VersionPath -Destination (Join-Path $stage 'sql_exporter_version.ini') -ToSession $session -Force
         Copy-Item -Path (Join-Path $layout.ProfilesDir '*') -Destination (Join-Path $stage 'profiles') -ToSession $session -Force
         if (-not $SkipCollectors) {
             Copy-Item -Path (Join-Path $layout.CollectorDir '*') -Destination (Join-Path $stage 'collector') -ToSession $session -Force -Recurse
         }
+        Copy-Item -Path $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+        Copy-Item -Path $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
 
         $deployResult = Invoke-Command -Session $session -ScriptBlock {
             param(
@@ -428,19 +571,16 @@ foreach ($computer in $Computers) {
                 $SvcPassword,
                 $DeployCollectors,
                 $ServiceMode,
-                $ProfileName
+                $ProfileName,
+                $SqlDependencyMode,
+                $SqlDependencyServiceName,
+                $DataSourceNameForDependency
             )
 
             Set-StrictMode -Version Latest
             $ErrorActionPreference = 'Stop'
-
-            function Invoke-Sc {
-                param([string[]]$Arguments)
-                $out = & sc.exe @Arguments 2>&1
-                if ($LASTEXITCODE -ne 0) {
-                    throw ("sc.exe failed: sc.exe {0}`n{1}" -f ($Arguments -join ' '), ($out -join [Environment]::NewLine))
-                }
-            }
+            . (Join-Path $StageDir 'Observability-NssmServiceHelpers.ps1')
+            . (Join-Path $StageDir 'Observability-WebConfigHelpers.ps1')
 
             function Wait-ServiceStatus {
                 param([string]$Name, [string]$Status, [int]$Timeout)
@@ -517,7 +657,13 @@ foreach ($computer in $Computers) {
             $exePath = Join-Path $InstallPath 'bin\sql_exporter.exe'
             $cfgPath = Join-Path $InstallPath 'config\sql_exporter.yml'
             $webCfgPath = Join-Path $InstallPath 'config\web-config.yml'
-            $binaryPath = ('"{0}" --config.file "{1}" --web.listen-address "{2}" --web.config.file "{3}"' -f $exePath, $cfgPath, $Listen, $webCfgPath)
+            $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfgPath -WebConfigFile $webCfgPath -ListenAddress $Listen
+            $binaryPath = ('"{0}" {1}' -f $exePath, $appParameters)
+            $stdoutLog = Join-Path $logDir "$SvcName.out.log"
+            $stderrLog = Join-Path $logDir "$SvcName.err.log"
+            if ($SvcAccount) {
+                Grant-ObservabilityServiceLogAccess -Path $logDir -Account $SvcAccount
+            }
 
             $svc = Get-Service -Name $SvcName -ErrorAction SilentlyContinue
             if ($ServiceMode -eq 'NSSM') {
@@ -531,57 +677,59 @@ foreach ($computer in $Computers) {
                 }
                 if (-not (Test-Path -LiteralPath $nssmExe)) { throw "nssm.exe not found at $nssmExe" }
 
-                $appParams = ('--config.file "{0}" --web.listen-address "{1}" --web.config.file "{2}"' -f $cfgPath, $Listen, $webCfgPath)
                 if ($null -eq $svc) {
-                    Invoke-Nssm -Executable $nssmExe -Arguments @('install', $SvcName, $exePath, $appParams)
+                    Invoke-Nssm -Executable $nssmExe -Arguments @('install', $SvcName, $exePath)
                 }
                 else {
-                    # Reinstall to ensure args and path are updated
                     Invoke-Nssm -Executable $nssmExe -Arguments @('remove', $SvcName, 'confirm')
-                    Invoke-Nssm -Executable $nssmExe -Arguments @('install', $SvcName, $exePath, $appParams)
+                    Invoke-Nssm -Executable $nssmExe -Arguments @('install', $SvcName, $exePath)
                 }
 
+                $parameters = "HKLM:\SYSTEM\CurrentControlSet\Services\$SvcName\Parameters"
+                if (-not (Test-Path -LiteralPath $parameters)) {
+                    throw "NSSM parameters key was not found: $parameters"
+                }
+                Set-ItemProperty -LiteralPath $parameters -Name Application -Value $exePath
+                Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value $appParameters
+                Set-ItemProperty -LiteralPath $parameters -Name AppDirectory -Value $InstallPath
+                Set-ObservabilityNssmLogging -ParametersKey $parameters -StdoutLog $stdoutLog -StderrLog $stderrLog
+                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppExit', 'Default', 'Restart')
                 Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'DisplayName', $Display)
                 Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'Description', $Description)
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppDirectory', $InstallPath)
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppStdout', (Join-Path $logDir "$SvcName.out.log"))
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppStderr', (Join-Path $logDir "$SvcName.err.log"))
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppRotateFiles', '1')
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppRotateBytes', '10485760')
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppExit', 'Default', 'Restart')
-                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'AppThrottle', '5000')
+                Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'Start', 'SERVICE_AUTO_START')
+                Invoke-ObservabilitySc -Arguments @('config', $SvcName, ('binPath= ' + ('"{0}"' -f $nssmExe)))
+                Register-ObservabilityNssmEventSource -NssmExe $nssmExe
 
-                # Set service account (ObjectName supports account and optional password)
                 if ($SvcAccount) {
-                    # nssm expects LocalSystem as 'LocalSystem', service accounts like LocalService/NetworkService as 'NT AUTHORITY\LocalService' etc.
                     if ($SvcPassword -ne '') {
                         Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'ObjectName', $SvcAccount, $SvcPassword)
                     }
                     else {
-                        # For accounts without password (LocalSystem, LocalService, NetworkService, gMSA without password), pass only the account name
                         Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'ObjectName', $SvcAccount)
                     }
                 }
-
-                # Ensure service start type is automatic
-                Invoke-Sc -Arguments @('config', $SvcName, 'start= auto')
             }
             else {
                 if ($null -eq $svc) {
                     New-Service -Name $SvcName -DisplayName $Display -BinaryPathName $binaryPath -StartupType Automatic | Out-Null
                 }
                 else {
-                    Invoke-Sc -Arguments @('config', $SvcName, ('binPath= ' + $binaryPath), 'start= auto', ('DisplayName= ' + $Display))
+                    Invoke-ObservabilitySc -Arguments @('config', $SvcName, ('binPath= ' + $binaryPath), 'start= auto', ('DisplayName= ' + $Display))
                 }
 
                 $scArgs2 = @('config', $SvcName, ('obj= ' + $SvcAccount))
                 if ($SvcPassword -ne '') { $scArgs2 += ('password= ' + $SvcPassword) }
-                Invoke-Sc -Arguments $scArgs2
-                Invoke-Sc -Arguments @('description', $SvcName, $Description)
+                Invoke-ObservabilitySc -Arguments $scArgs2
+                Invoke-ObservabilitySc -Arguments @('description', $SvcName, $Description)
             }
 
-            Start-Service -Name $SvcName -ErrorAction Stop
-            $svc = Wait-ServiceStatus -Name $SvcName -Status 'Running' -Timeout $TimeoutSec
+            $dependencyMode = if ($SqlDependencyServiceName) { $SqlDependencyServiceName } else { $SqlDependencyMode }
+            $dependencyServices = Set-ObservabilitySqlServerServiceDependency `
+                -ServiceName $SvcName `
+                -DependencyMode $dependencyMode `
+                -DataSourceName $DataSourceNameForDependency
+
+            $svc = Start-ObservabilityManagedService -Name $SvcName -TimeoutSec $TimeoutSec -LogDirectory $logDir -ProcessLabel 'sql_exporter.exe'
 
             if (-not [Diagnostics.EventLog]::SourceExists($SvcName)) {
                 New-EventLog -LogName Application -Source $SvcName
@@ -601,6 +749,7 @@ foreach ($computer in $Computers) {
                 BinaryPath         = $binaryPath
                 CollectorsDeployed = [bool]$DeployCollectors
                 Profile            = $ProfileName
+                SqlDependencies    = ($dependencyServices -join '/')
             }
         } -ArgumentList `
             $InstallRoot, `
@@ -614,7 +763,10 @@ foreach ($computer in $Computers) {
             $svcContext.Password, `
             (-not $SkipCollectors), `
             $ServiceMode, `
-            $profileLeaf
+            $profileLeaf, `
+            $SqlServerServiceDependency, `
+            $SqlServerServiceName, `
+            $DataSourceName
 
         $row.Deploy = 'OK'
         $row.Service = $deployResult.ServiceStatus
@@ -622,6 +774,9 @@ foreach ($computer in $Computers) {
 
         Write-Step ("  Deploy OK   : {0}" -f $deployResult.InstallPath) 'Green'
         Write-Step ("  Profile     : {0}" -f ($(if ($row.Profile) { $row.Profile } else { '<default>' }))) 'DarkGray'
+        if ($deployResult.SqlDependencies) {
+            Write-Step ("  SQL depends : {0}" -f $deployResult.SqlDependencies) 'DarkGray'
+        }
         Write-Step ("  Backup path : {0}" -f $deployResult.BackupPath) 'DarkGray'
         Write-Step ("  Service     : {0}" -f $deployResult.ServiceStatus) 'Green'
     }
@@ -642,6 +797,9 @@ foreach ($computer in $Computers) {
 finally {
     if ($tempConfigPath -and (Test-Path -LiteralPath $tempConfigPath)) {
         [IO.File]::Delete($tempConfigPath)
+    }
+    if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
+        [IO.File]::Delete($tempWebConfigPath)
     }
 }
 

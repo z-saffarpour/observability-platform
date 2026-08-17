@@ -224,6 +224,7 @@ begin {
         $web = Join-Path $Root 'config\web-config.yml'
         $collectorDir = Join-Path $Root 'collector'
         $textDir = Join-Path $Root 'textfile_inputs'
+        $logDir = Join-Path $Root 'log'
 
         if (-not $NoAcl) {
             if (-not (Test-Path -LiteralPath $Root)) {
@@ -242,13 +243,21 @@ begin {
             } else {
                 Add-Row 'Create collector' 'OK' 'Already exists'
             }
+            if (-not (Test-Path -LiteralPath $logDir)) {
+                New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+                Add-Row 'Create log' 'OK' $logDir
+            } else {
+                Add-Row 'Create log' 'OK' 'Already exists'
+            }
 
             Set-HardenedAcl -Path $Root -ServiceAccount $account -AllowServiceWrite:$false
             Set-HardenedAcl -Path $collectorDir -ServiceAccount $account -AllowServiceWrite:$false
             Set-HardenedAcl -Path $textDir -ServiceAccount $account -AllowServiceWrite:$true
+            Set-HardenedAcl -Path $logDir -ServiceAccount $account -AllowServiceWrite:$true
             Add-Row 'ACL InstallRoot' 'OK' 'Administrators+SYSTEM Full; service ReadAndExecute (unless LocalSystem)'
             Add-Row 'ACL collector' 'OK' 'Administrators+SYSTEM Full; service ReadAndExecute (unless LocalSystem)'
             Add-Row 'ACL textfile_inputs' 'OK' 'Administrators+SYSTEM Full; service Modify (unless LocalSystem)'
+            Add-Row 'ACL log' 'OK' 'Administrators+SYSTEM Full; service Modify for NSSM stdout/stderr (unless LocalSystem)'
 
             if (Test-Path -LiteralPath $web) {
                 Set-HardenedAcl -Path $web -ServiceAccount $account -AllowServiceWrite:$false

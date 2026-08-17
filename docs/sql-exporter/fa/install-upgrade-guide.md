@@ -132,7 +132,47 @@ Test-WSMan -ComputerName sql-host-01
 
 پوشه `profiles\` کپی می‌شود و فهرست `collectors:` پروفایل داخل `sql_exporter.yml` نوشته می‌شود.
 
-### ۳) حساب سرویس (اختیاری)
+### ۳) آدرس Listen و Basic Auth (اختیاری)
+
+اسکریپت‌های نصب ریموت `--web.listen-address` را تنظیم می‌کنند و `web-config.yml` را در آرگومان‌های سرویس deploy می‌کنند.
+
+**آدرس Listen** — پیش‌فرض `:9399`. مثال: `:9399`، `127.0.0.1:9399`، `0.0.0.0:9399`.
+
+**Basic Auth** — در پکیج پیش‌فرض غیرفعال است. برای فعال‌سازی هنگام نصب یکی از روش‌های زیر را بدهید:
+
+| روش | پارامترها |
+|-----|-----------|
+| hash bcrypt آماده (پیشنهادی) | `-BasicAuthUsername` + `-BasicAuthHash` |
+| hash از رمز روی کلاینت | `-BasicAuthUsername` + `-BasicAuthPassword` (نیاز به Python با ماژول `bcrypt` روی ماشینی که اسکریپت اجرا می‌شود) |
+| فایل سفارشی | `-WebConfigPath` (مسیر کامل `web-config.yml`؛ با پارامترهای Basic Auth ترکیب نشود) |
+
+```powershell
+# نصب با پورت و Basic Auth (hash bcrypt)
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
+# نصب با رمز (کلاینت باید Python + bcrypt داشته باشد)
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress '127.0.0.1:9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthPassword (Read-Host -AsSecureString 'Password') `
+  -RemoteCredential (Get-Credential)
+
+# deploy فایل web-config.yml سفارشی
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -WebConfigPath 'C:\Secrets\sql-exporter-web-config.yml' `
+  -RemoteCredential (Get-Credential)
+```
+
+راهنمای ساخت hash دستی و تنظیم Prometheus: [راهنمای نصب و کانفیگ — پورت scrape و Basic Auth](install-config-guide.md).
+
+### ۴) حساب سرویس (اختیاری)
 
 پیش‌فرض: `LocalSystem`
 
@@ -170,7 +210,11 @@ Test-WSMan -ComputerName sql-host-01
 | `-SourceRoot` | ریشه پروژه | منبع پکیج |
 | `-InstallRoot` | مسیر Program Files بالا | مسیر نصب روی مقصد |
 | `-ServiceName` | `prometheus_sql_exporter` | نام سرویس ویندوز |
-| `-ListenAddress` | `:9399` | آدرس/پورت scrape |
+| `-ListenAddress` | `:9399` | آدرس/پورت scrape (`--web.listen-address`) |
+| `-WebConfigPath` | (خالی) | deploy فایل `web-config.yml` سفارشی از کلاینت |
+| `-BasicAuthUsername` | (خالی) | نام کاربر Basic Auth (با `-BasicAuthHash` یا `-BasicAuthPassword`) |
+| `-BasicAuthHash` | (خالی) | hash bcrypt آماده |
+| `-BasicAuthPassword` | (خالی) | رمز SecureString؛ روی کلاینت hash می‌شود (نیاز به Python + `bcrypt`) |
 | `-Profile` | (خالی) | اعمال collectors از `profiles/<name>.yml` داخل `sql_exporter.yml` |
 | `-ServiceAccountMode` | `LocalSystem` | نوع حساب سرویس |
 | `-RemoteCredential` | (خالی) | اعتبار WinRM |
@@ -230,6 +274,32 @@ Test-WSMan -ComputerName sql-host-01
   -InstallRoot 'D:\Monitoring\sql_exporter'
 ```
 
+### ۴) آدرس Listen و Basic Auth (اختیاری)
+
+در اپگرید، اگر `-ListenAddress` ندهید، آدرس از سرویس فعلی **حفظ** می‌شود. بدون پارامتر web-config، پیش‌فرض پکیج deploy می‌شود (Basic Auth خاموش). با `-PreserveWebConfig` فایل `web-config.yml` ریموت دست‌نخورده می‌ماند (با `-WebConfigPath` یا پارامترهای Basic Auth هم‌زمان استفاده نشود).
+
+```powershell
+# فقط باینری؛ حفظ listen و web-config.yml فعلی
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# تغییر پورت؛ حفظ Basic Auth موجود
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# فعال‌سازی یا جایگزینی Basic Auth
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+```
+
 ### پارامترهای مهم ارتقا
 
 | پارامتر | پیش‌فرض | کاربرد |
@@ -239,6 +309,10 @@ Test-WSMan -ComputerName sql-host-01
 | `-ExpectedVersion` | `0.24.4` | نسخه مورد انتظار باینری |
 | `-ServiceName` | `prometheus_sql_exporter` | نام سرویس |
 | `-InstallRoot` | (خالی = تشخیص خودکار) | اجبار مسیر نصب |
+| `-ListenAddress` | (خالی = حفظ سرویس) | override `--web.listen-address` |
+| `-WebConfigPath` | (خالی) | deploy `web-config.yml` سفارشی |
+| `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | (خالی) | فعال‌سازی یا جایگزینی Basic Auth |
+| `-PreserveWebConfig` | خاموش | حفظ `web-config.yml` ریموت؛ با web-config/Basic Auth ترکیب نشود |
 | `-Profile` | (خالی) | اعمال collectors از `profiles/<name>.yml`؛ بدون آن کانفیگ ریموت حفظ می‌شود |
 | `-RemoteCredential` | (خالی) | اعتبار WinRM |
 | `-ServiceTimeoutSec` | `60` | مهلت stop/start سرویس |

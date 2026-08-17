@@ -395,7 +395,10 @@ function Start-ExporterService {
         param($SvcName, $Timeout)
 
         $svc = Get-Service -Name $SvcName -ErrorAction Stop
-        if ($svc.Status -ne 'Running') {
+        if ($svc.Status -eq 'Paused') {
+            Resume-Service -Name $SvcName -ErrorAction Stop
+        }
+        elseif ($svc.Status -ne 'Running') {
             Start-Service -Name $SvcName -ErrorAction Stop
         }
         $svc.Refresh()

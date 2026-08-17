@@ -137,6 +137,8 @@ scripts/sql/Create-SqlExporterLogin.sql
 پیش‌فرض upstream و اسکریپت نصب: **`:9399`**
 
 - نصب ریموت: پارامتر `-ListenAddress` (مثال: `-ListenAddress ':9399'`)
+- Basic Auth در نصب/اپگرید ریموت: `-BasicAuthUsername` + `-BasicAuthHash` (پیشنهادی) یا `-BasicAuthPassword` (نیاز به Python با `bcrypt` روی کلاینت)؛ یا `-WebConfigPath` برای فایل سفارشی
+- اپگرید ریموت: بدون `-ListenAddress` آدرس فعلی سرویس حفظ می‌شود؛ با `-PreserveWebConfig` فایل `web-config.yml` ریموت حفظ می‌شود
 - دستی: فلگ `--web.listen-address=:9399` روی سرویس / ImagePath
 
 روی فایروال host، پورت انتخاب‌شده را برای scrape از Prometheus باز کن.
@@ -169,7 +171,7 @@ basic_auth_users:
 
 می‌توانی چند کاربر اضافه کنی؛ هر کلید یک username و هر مقدار hash همان کاربر است.
 
-3. مطمئن شو سرویس با `--web.config.file` به همین فایل اشاره می‌کند (اسکریپت `Install-SqlExporterRemote.ps1` این کار را انجام می‌دهد).
+3. مطمئن شو سرویس با `--web.config.file` به همین فایل اشاره می‌کند (`Install-SqlExporterRemote.ps1` و `Upgrade-SqlExporterRemote.ps1` این کار را انجام می‌دهند؛ در صورت امکان به‌جای ویرایش دستی از `-BasicAuthUsername` + `-BasicAuthHash` یا `-WebConfigPath` در نصب/اپگرید استفاده کن).
 
 4. سرویس را Restart کن:
 

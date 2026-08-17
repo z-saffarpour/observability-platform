@@ -20,6 +20,19 @@
   .\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 -Computers SQL01,SQL02 -AutoProfile -RemoteCredential (Get-Credential)
 .EXAMPLE
   .\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 -Computers SQL01 -ServiceAccountMode NtService -RemoteCredential (Get-Credential)
+.EXAMPLE
+  .\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+    -Computers SERVER01 `
+    -ListenAddress ':9182' `
+    -BasicAuthUsername 'scrape_user' `
+    -BasicAuthHash '$2a$12$...' `
+    -RemoteCredential (Get-Credential)
+.EXAMPLE
+  .\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+    -Computers SERVER01 `
+    -ListenAddress '0.0.0.0:9182' `
+    -WebConfigPath 'C:\Secrets\windows-exporter-web-config.yml' `
+    -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -29,6 +42,11 @@ param(
     [string]$ServiceName = 'prometheus_windows_exporter',
     [string]$ServiceDisplayName = 'Prometheus Windows Exporter',
     [string]$ServiceDescription = 'Prometheus Windows Exporter service',
+    [string]$ListenAddress = ':9182',
+    [string]$WebConfigPath,
+    [string]$BasicAuthUsername,
+    [SecureString]$BasicAuthPassword,
+    [string]$BasicAuthHash,
     [string]$Profile,
     [switch]$AutoProfile,
     [ValidateSet('LocalSystem','LocalService','NetworkService','Credential','gMSA','NtService')]
@@ -42,6 +60,16 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$serviceHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-NssmServiceHelpers.ps1'
+$webConfigHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-WebConfigHelpers.ps1'
+if (-not (Test-Path -LiteralPath $serviceHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $serviceHelpersPath"
+}
+if (-not (Test-Path -LiteralPath $webConfigHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $webConfigHelpersPath"
+}
+. $webConfigHelpersPath
 
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
     $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
@@ -125,7 +153,18 @@ $account = switch ($ServiceAccountMode) {
 }
 $password = if ($ServiceAccountMode -eq 'Credential') { Get-PlainText $ServiceCredential.Password } else { '' }
 
-Write-Host "Source: $exporterSource`nTargets: $($Computers -join ', ')`nService account: $account" -ForegroundColor Cyan
+Test-ObservabilityListenAddress -Address $ListenAddress
+$webConfigToDeploy = Resolve-ObservabilityWebConfigDeployment `
+    -TemplatePath $packageSources['web-config.yml'] `
+    -WebConfigPath $WebConfigPath `
+    -BasicAuthUsername $BasicAuthUsername `
+    -BasicAuthPassword $BasicAuthPassword `
+    -BasicAuthHash $BasicAuthHash
+$tempWebConfigPath = if ($webConfigToDeploy -ne $packageSources['web-config.yml']) { $webConfigToDeploy } else { $null }
+
+Write-Host "Source: $exporterSource`nTargets: $($Computers -join ', ')`nService account: $account`nListen address: $ListenAddress" -ForegroundColor Cyan
+if ($WebConfigPath) { Write-Host "Web config: $WebConfigPath" -ForegroundColor Cyan }
+elseif ($BasicAuthUsername) { Write-Host "Web config: Basic Auth user=$BasicAuthUsername" -ForegroundColor Cyan }
 if ($profileFile) { Write-Host "Profile: $profileFile" -ForegroundColor Cyan }
 elseif ($AutoProfile) { Write-Host 'Profile: auto-detect per server' -ForegroundColor Cyan }
 $results = @()
@@ -151,8 +190,10 @@ foreach ($computer in $Computers) {
             $path
         }
         foreach ($item in $package) {
+            if ($item -eq 'web-config.yml') { continue }
             Copy-Item -LiteralPath $packageSources[$item] -Destination (Join-Path $stage $item) -ToSession $session -Force
         }
+        Copy-Item -LiteralPath $webConfigToDeploy -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
         Copy-Item -LiteralPath $profilesSource -Destination $stage -ToSession $session -Recurse -Force
         $stageScripts = Join-Path $stage 'scripts'
         Invoke-Command -Session $session -ScriptBlock {
@@ -163,14 +204,14 @@ foreach ($computer in $Computers) {
         if (Test-Path -LiteralPath $scriptsSsasSource -PathType Container) {
             Copy-Item -LiteralPath $scriptsSsasSource -Destination (Join-Path $stageScripts 'ssas') -ToSession $session -Recurse -Force
         }
+        Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+        Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
 
         $deployed = Invoke-Command -Session $session -ScriptBlock {
-            param($Root,$Name,$Display,$Description,$Stage,$Account,$Password,$Timeout,$Items,$ProfileName,$ServiceMode)
+            param($Root,$Name,$Display,$Description,$Stage,$Account,$Password,$Timeout,$Items,$ProfileName,$ServiceMode,$Listen)
             Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'
-            function Invoke-Sc([string[]]$Arguments) {
-                $text = & sc.exe @Arguments 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "sc.exe failed: $($text -join [Environment]::NewLine)" }
-            }
+            . (Join-Path $Stage 'Observability-NssmServiceHelpers.ps1')
+            . (Join-Path $Stage 'Observability-WebConfigHelpers.ps1')
             function Invoke-Nssm([string]$Executable,[string[]]$Arguments) {
                 $text = & $Executable @Arguments 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "NSSM failed: nssm $($Arguments -join ' ')`n$($text -join [Environment]::NewLine)" }
@@ -248,44 +289,46 @@ foreach ($computer in $Computers) {
             $cfg = if ($ProfileName) { Join-Path $dstProfiles $ProfileName } else { Join-Path $configDir 'windows_exporter.yml' }
             $web = Join-Path $configDir 'web-config.yml'
             if (-not (Test-Path -LiteralPath $cfg -PathType Leaf)) { throw "Config file was not found: $cfg" }
-            $imagePath = ('"{0}" --config.file="{1}" --web.config.file="{2}"' -f $exe,$cfg,$web)
+            $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfg -WebConfigFile $web -ListenAddress $Listen
+            $imagePath = ('"{0}" {1}' -f $exe, $appParameters)
             if ($svc -and $detectedMethod -ne $ServiceMode) {
-                Invoke-Sc @('delete',$Name)
+                Invoke-ObservabilitySc -Arguments @('delete',$Name)
                 $deadline = (Get-Date).AddSeconds($Timeout)
                 while ((Get-Service -Name $Name -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
                 if (Get-Service -Name $Name -ErrorAction SilentlyContinue) { throw "Service could not be replaced within $Timeout seconds: $Name" }
                 $svc = $null
             }
             if (-not $svc -and $ServiceMode -eq 'NSSM') {
-                Invoke-Nssm $nssmTarget @('install',$Name,$exe,('--config.file="{0}" --web.config.file="{1}"' -f $cfg,$web))
-                Invoke-Nssm $nssmTarget @('set',$Name,'DisplayName',$Display)
-                Invoke-Nssm $nssmTarget @('set',$Name,'Description',$Description)
+                Invoke-Nssm $nssmTarget @('install',$Name,$exe)
             }
             elseif (-not $svc) { New-Service -Name $Name -DisplayName $Display -BinaryPathName $imagePath -StartupType Automatic | Out-Null }
             if ($ServiceMode -eq 'NSSM') {
                 if (-not (Test-Path -LiteralPath $parameters)) { throw "NSSM parameters key was not found: $parameters" }
                 $logDir = Join-Path $Root 'log'
                 New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+                $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfg -WebConfigFile $web -ListenAddress $Listen
                 Set-ItemProperty -LiteralPath $parameters -Name Application -Value $exe
-                Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value ('--config.file="{0}" --web.config.file="{1}"' -f $cfg,$web)
+                Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value $appParameters
                 Set-ItemProperty -LiteralPath $parameters -Name AppDirectory -Value $Root
-                Set-ItemProperty -LiteralPath $parameters -Name AppStdout -Value (Join-Path $logDir "$Name.out.log")
-                Set-ItemProperty -LiteralPath $parameters -Name AppStderr -Value (Join-Path $logDir "$Name.err.log")
-                Set-ItemProperty -LiteralPath $parameters -Name AppRotateFiles -Value 1 -Type DWord
-                Set-ItemProperty -LiteralPath $parameters -Name AppRotateBytes -Value 10485760 -Type DWord
-                Invoke-Sc @('config',$Name,('binPath= ' + ('"{0}"' -f $nssmTarget)))
-                Invoke-Sc @('config',$Name,'start= auto',('DisplayName= ' + $Display))
+                Set-ObservabilityNssmLogging -ParametersKey $parameters -StdoutLog (Join-Path $logDir "$Name.out.log") -StderrLog (Join-Path $logDir "$Name.err.log")
+                Invoke-Nssm $nssmTarget @('set',$Name,'AppExit','Default','Restart')
+                Invoke-Nssm $nssmTarget @('set',$Name,'DisplayName',$Display)
+                Invoke-Nssm $nssmTarget @('set',$Name,'Description',$Description)
+                Invoke-Nssm $nssmTarget @('set',$Name,'Start','SERVICE_AUTO_START')
+                Invoke-ObservabilitySc -Arguments @('config',$Name,('binPath= ' + ('"{0}"' -f $nssmTarget)))
+                Register-ObservabilityNssmEventSource -NssmExe $nssmTarget
+                if ($Account) { Grant-ObservabilityServiceLogAccess -Path $logDir -Account $Account }
             }
-            else { Invoke-Sc @('config',$Name,('binPath= ' + $imagePath),'start= auto',('DisplayName= ' + $Display)) }
+            else { Invoke-ObservabilitySc -Arguments @('config',$Name,('binPath= ' + $imagePath),'start= auto',('DisplayName= ' + $Display)) }
             $accountArgs = @('config',$Name,('obj= ' + $Account)); if ($Password) { $accountArgs += ('password= ' + $Password) }
-            Invoke-Sc $accountArgs; Invoke-Sc @('description',$Name,$Description)
-            Start-Service $Name; Wait-State 'Running'
+            Invoke-ObservabilitySc -Arguments $accountArgs; Invoke-ObservabilitySc -Arguments @('description',$Name,$Description)
+            $runningSvc = Start-ObservabilityManagedService -Name $Name -TimeoutSec $Timeout -LogDirectory (Join-Path $Root 'log') -ProcessLabel 'windows_exporter.exe'
             if (-not [Diagnostics.EventLog]::SourceExists($Name)) { New-EventLog -LogName Application -Source $Name }
             Write-EventLog -LogName Application -Source $Name -EntryType Information -EventId 1001 `
                 -Message "Windows service installed or refreshed. Mode=$ServiceMode; InstallPath=$Root; Profile=$ProfileName"
             Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
-            [pscustomobject]@{ Status=(Get-Service $Name).Status.ToString(); Backup=$backup; ImagePath=$imagePath; Profile=$ProfileName; Method=$ServiceMode }
-        } -ArgumentList $InstallRoot,$ServiceName,$ServiceDisplayName,$ServiceDescription,$stage,$account,$password,$ServiceTimeoutSec,$package,$chosenProfile,$ServiceMode
+            [pscustomobject]@{ Status=$runningSvc.Status.ToString(); Backup=$backup; ImagePath=$imagePath; Profile=$ProfileName; Method=$ServiceMode }
+        } -ArgumentList $InstallRoot,$ServiceName,$ServiceDisplayName,$ServiceDescription,$stage,$account,$password,$ServiceTimeoutSec,$package,$chosenProfile,$ServiceMode,$ListenAddress
         $row.Deploy='OK'; $row.Service=$deployed.Status; $row.Backup=$deployed.Backup
         if ($deployed.Profile) { $row.Profile = $deployed.Profile }
         Write-Host "Service: $($deployed.Status)`nProfile: $($row.Profile)`nBackup: $($deployed.Backup)" -ForegroundColor Green
@@ -294,3 +337,6 @@ foreach ($computer in $Computers) {
 }
 $results | Format-Table -AutoSize
 if (@($results | Where-Object Error).Count) { exit 1 }
+if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
+    [IO.File]::Delete($tempWebConfigPath)
+}

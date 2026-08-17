@@ -327,6 +327,9 @@ Test-WSMan -ComputerName SERVER01</code></pre>
           <tr><td><code>-Computers</code></td><td>(required)</td><td>Host names or list from a file</td></tr>
           <tr><td><code>-SourceRoot</code></td><td>package root</td><td>Package path on the client</td></tr>
           <tr><td><code>-InstallRoot</code></td><td>Program Files path above</td><td>Install path on the target</td></tr>
+          <tr><td><code>-ListenAddress</code></td><td><code>:9182</code></td><td>Scrape address/port (<code>--web.listen-address</code>)</td></tr>
+          <tr><td><code>-WebConfigPath</code></td><td>—</td><td>Deploy custom <code>web-config.yml</code></td></tr>
+          <tr><td><code>-BasicAuthUsername</code> / <code>-BasicAuthHash</code></td><td>—</td><td>Enable Basic Auth during install</td></tr>
           <tr><td><code>-ServiceMode</code></td><td><code>ServiceBase</code></td><td><code>ServiceBase</code> or <code>NSSM</code>; NSSM is deployed to <code>C:\Program Files\Observability\Tools\NSSM\nssm.exe</code></td></tr>
           <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>—</td><td>Role config selection</td></tr>
           <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td><code>LocalSystem</code>, <code>LocalService</code>, <code>NetworkService</code>, <code>Credential</code>, <code>gMSA</code>, <code>NtService</code></td></tr>
@@ -376,7 +379,15 @@ Test-WSMan -ComputerName SERVER01</code></pre>
   -ServiceAccountMode NtService `
   -RemoteCredential (Get-Credential)
 # After NtService, harden ACLs for the virtual account:
-# .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'</code></pre>
+# .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'
+
+# Listen address and Basic Auth
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)</code></pre>
 
       <h2 id="upgrade">Remote upgrade</h2>
       <p>Script: <code>scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1</code></p>
@@ -400,6 +411,8 @@ Test-WSMan -ComputerName SERVER01</code></pre>
           <tr><td><code>-Computers</code></td><td>(required)</td><td>Target hosts</td></tr>
           <tr><td><code>-ExpectedVersion</code></td><td><code>0.31.8</code></td><td>Expected package and post-install version</td></tr>
           <tr><td><code>-InstallRoot</code></td><td>(auto-detect)</td><td>Only if the exe path cannot be detected</td></tr>
+          <tr><td><code>-ListenAddress</code></td><td>(empty = preserve service)</td><td>Override <code>--web.listen-address</code></td></tr>
+          <tr><td><code>-PreserveWebConfig</code></td><td>off</td><td>Keep remote <code>web-config.yml</code></td></tr>
           <tr><td><code>-ServiceMode</code></td><td><code>Preserve</code></td><td>Preserve and validate the installed <code>ServiceBase</code>/<code>NSSM</code> mode</td></tr>
           <tr><td><code>-Profile</code> / <code>-AutoProfile</code></td><td>preserve current</td><td>Change <code>--config.file</code></td></tr>
           <tr><td><code>-ServiceAccountMode</code></td><td>preserve current</td><td><code>LocalSystem</code>, <code>LocalService</code>, <code>NetworkService</code>, <code>Credential</code>, <code>gMSA</code>, <code>NtService</code></td></tr>
@@ -440,6 +453,13 @@ Test-WSMan -ComputerName SERVER01</code></pre>
 .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
   -Computers SQL01 `
   -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+
+# Preserve web-config; change listen port
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -PreserveWebConfig `
   -RemoteCredential (Get-Credential)</code></pre>
 
       <h2 id="uninstall">Remote uninstall</h2>

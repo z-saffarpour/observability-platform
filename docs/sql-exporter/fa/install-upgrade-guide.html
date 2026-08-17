@@ -371,7 +371,24 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
   -RemoteCredential (Get-Credential)</code></pre>
         <p>پوشه <code>profiles\</code> کپی می‌شود و فهرست <code>collectors:</code> پروفایل داخل <code>sql_exporter.yml</code> نوشته می‌شود.</p>
 
-        <h3>۳) حساب سرویس (اختیاری)</h3>
+        <h3>۳) آدرس Listen و Basic Auth (اختیاری)</h3>
+        <p>اسکریپت‌های نصب ریموت <code>--web.listen-address</code> را تنظیم می‌کنند و <code>web-config.yml</code> را deploy می‌کنند. پیش‌فرض: <code>:9399</code>.</p>
+        <pre><code># نصب با پورت و Basic Auth (hash bcrypt)
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
+# deploy فایل web-config.yml سفارشی
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -WebConfigPath 'C:\Secrets\sql-exporter-web-config.yml' `
+  -RemoteCredential (Get-Credential)</code></pre>
+        <p>راهنمای hash و Prometheus: <a href="install-config-guide.md">راهنمای نصب و کانفیگ — پورت scrape و Basic Auth</a>.</p>
+
+        <h3>۴) حساب سرویس (اختیاری)</h3>
         <p>پیش‌فرض: <code>LocalSystem</code></p>
         <p>با credential دامنه:</p>
         <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
@@ -403,8 +420,11 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
               <tr><td><code>-SourceRoot</code></td><td>ریشه پروژه</td><td>منبع پکیج</td></tr>
               <tr><td><code>-InstallRoot</code></td><td>مسیر Program Files بالا</td><td>مسیر نصب روی مقصد</td></tr>
               <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>نام سرویس ویندوز</td></tr>
-              <tr><td><code>-ListenAddress</code></td><td><code>:9399</code></td><td>آدرس/پورت scrape</td></tr>
-              <tr><td><code>-Profile</code></td><td>(خالی)</td><td>اعمال collectors از <code>profiles/&lt;name&gt;.yml</code> داخل <code>sql_exporter.yml</code></td></tr>
+              <tr><td><code>-ListenAddress</code></td><td><code>:9399</code></td><td>آدرس/پورت scrape (<code>--web.listen-address</code>)</td></tr>
+              <tr><td><code>-WebConfigPath</code></td><td>(خالی)</td><td>deploy <code>web-config.yml</code> سفارشی</td></tr>
+              <tr><td><code>-BasicAuthUsername</code></td><td>(خالی)</td><td>کاربر Basic Auth</td></tr>
+              <tr><td><code>-BasicAuthHash</code></td><td>(خالی)</td><td>hash bcrypt آماده</td></tr>
+              <tr><td><code>-Profile</code></td><td>(خالی)</td><td>اعمال collectors از <code>profiles/&lt;name&gt;.yml</code></td></tr>
               <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td>نوع حساب سرویس</td></tr>
               <tr><td><code>-RemoteCredential</code></td><td>(خالی)</td><td>اعتبار WinRM</td></tr>
               <tr><td><code>-SkipCollectors</code></td><td>خاموش</td><td>عدم کپی پوشه collector</td></tr>
@@ -450,6 +470,20 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
   -Computers sql-host-01 `
   -InstallRoot 'D:\Monitoring\sql_exporter'</code></pre>
 
+        <h3>۴) آدرس Listen و Basic Auth (اختیاری)</h3>
+        <p>بدون <code>-ListenAddress</code> آدرس فعلی سرویس حفظ می‌شود. با <code>-PreserveWebConfig</code> فایل <code>web-config.yml</code> ریموت حفظ می‌شود.</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)</code></pre>
+
         <h3>پارامترهای مهم ارتقا</h3>
         <div class="table-wrap">
           <table>
@@ -462,7 +496,9 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
               <tr><td><code>-ExpectedVersion</code></td><td><code>0.24.4</code></td><td>نسخه مورد انتظار باینری</td></tr>
               <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>نام سرویس</td></tr>
               <tr><td><code>-InstallRoot</code></td><td>(خالی = تشخیص خودکار)</td><td>اجبار مسیر نصب</td></tr>
-              <tr><td><code>-Profile</code></td><td>(خالی)</td><td>اعمال collectors از <code>profiles/&lt;name&gt;.yml</code>؛ بدون آن کانفیگ ریموت حفظ می‌شود</td></tr>
+              <tr><td><code>-ListenAddress</code></td><td>(خالی = حفظ سرویس)</td><td>override <code>--web.listen-address</code></td></tr>
+              <tr><td><code>-PreserveWebConfig</code></td><td>خاموش</td><td>حفظ <code>web-config.yml</code> ریموت</td></tr>
+              <tr><td><code>-Profile</code></td><td>(خالی)</td><td>اعمال collectors از <code>profiles/&lt;name&gt;.yml</code></td></tr>
               <tr><td><code>-RemoteCredential</code></td><td>(خالی)</td><td>اعتبار WinRM</td></tr>
               <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>مهلت stop/start سرویس</td></tr>
               <tr><td><code>-KeepBackups</code></td><td><code>5</code></td><td>تعداد بکاپ‌های نگه داشته‌شده</td></tr>

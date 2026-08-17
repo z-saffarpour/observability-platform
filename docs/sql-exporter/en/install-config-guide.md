@@ -137,6 +137,8 @@ If you only want to test:
 Upstream and install-script default: **`:9399`**
 
 - Remote install: `-ListenAddress` (example: `-ListenAddress ':9399'`)
+- Remote install/upgrade with Basic Auth: `-BasicAuthUsername` + `-BasicAuthHash` (recommended) or `-BasicAuthPassword` (requires Python with `bcrypt` on the client running the script); or `-WebConfigPath` for a custom file
+- Remote upgrade: omit `-ListenAddress` to preserve the existing service address; use `-PreserveWebConfig` to keep the remote `web-config.yml`
 - Manual: `--web.listen-address=:9399` on the service / ImagePath
 
 Open the chosen port on the host firewall for Prometheus scrapes.
@@ -169,7 +171,7 @@ basic_auth_users:
 
 You can add multiple users; each key is a username and each value is that user's hash.
 
-3. Ensure the service points at this file with `--web.config.file` (`Install-SqlExporterRemote.ps1` already does this).
+3. Ensure the service points at this file with `--web.config.file` (`Install-SqlExporterRemote.ps1` and `Upgrade-SqlExporterRemote.ps1` set this; use `-BasicAuthUsername` + `-BasicAuthHash` or `-WebConfigPath` during install/upgrade instead of editing the file by hand when possible).
 
 4. Restart the service:
 

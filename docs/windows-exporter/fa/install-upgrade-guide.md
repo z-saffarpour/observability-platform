@@ -85,6 +85,9 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 | `-Computers` | (الزامی) | نام سرورها یا لیست از فایل |
 | `-SourceRoot` | ریشه پکیج | مسیر پکیج روی کلاینت |
 | `-InstallRoot` | مسیر Program Files بالا | مسیر نصب روی مقصد |
+| `-ListenAddress` | `:9182` | آدرس/پورت scrape (`--web.listen-address`) |
+| `-WebConfigPath` | — | deploy فایل `web-config.yml` سفارشی از کلاینت |
+| `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | فعال‌سازی Basic Auth هنگام نصب (hash پیشنهادی؛ رمز نیاز به Python + `bcrypt` روی کلاینت) |
 | `-Profile` / `-AutoProfile` | — | انتخاب کانفیگ نقش |
 | `-ServiceAccountMode` | `LocalSystem` | `LocalSystem`، `LocalService`، `NetworkService`، `Credential`، `gMSA`، `NtService` |
 | `-ServiceCredential` | — | برای حالت `Credential` |
@@ -140,6 +143,20 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
   -RemoteCredential (Get-Credential)
 # پس از NtService، ACL مسیر نصب را برای حساب مجازی تنظیم کنید:
 # .\scripts\powershell\windows-exporter\Set-WindowsExporterRequiredAccess.ps1 -ComputerName SQL01 -Credential (Get-Credential) -ServiceAccount 'NT SERVICE\windows_exporter'
+
+# آدرس Listen و Basic Auth (hash bcrypt)
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
+# deploy فایل web-config.yml سفارشی
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -WebConfigPath 'C:\Secrets\windows-exporter-web-config.yml' `
+  -RemoteCredential (Get-Credential)
 ```
 
 ## آپگرید ریموت
@@ -162,6 +179,10 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 | `-Computers` | (الزامی) | سرورهای هدف |
 | `-ExpectedVersion` | `0.31.8` | نسخه مورد انتظار باینری پکیج و پس از نصب |
 | `-InstallRoot` | (تشخیص خودکار) | فقط اگر مسیر exe قابل تشخیص نباشد |
+| `-ListenAddress` | (خالی = حفظ سرویس) | override `--web.listen-address` |
+| `-WebConfigPath` | — | deploy `web-config.yml` سفارشی |
+| `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | فعال‌سازی یا جایگزینی Basic Auth |
+| `-PreserveWebConfig` | خاموش | حفظ `web-config.yml` ریموت؛ با web-config/Basic Auth ترکیب نشود |
 | `-Profile` / `-AutoProfile` | حفظ فعلی | تغییر `--config.file` |
 | `-ServiceAccountMode` | حفظ فعلی | `LocalSystem`، `LocalService`، `NetworkService`، `Credential`، `gMSA`، `NtService` |
 | `-ServiceCredential` | — | برای حالت `Credential` |
@@ -206,6 +227,26 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
   -Computers SQL01 `
   -ServiceAccountMode NtService `
+  -RemoteCredential (Get-Credential)
+
+# فقط باینری؛ حفظ listen و web-config.yml فعلی
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# تغییر پورت؛ حفظ Basic Auth موجود
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# فعال‌سازی یا جایگزینی Basic Auth
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
   -RemoteCredential (Get-Credential)
 ```
 

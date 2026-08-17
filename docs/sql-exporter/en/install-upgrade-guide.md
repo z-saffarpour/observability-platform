@@ -133,7 +133,47 @@ Same UX as `windows_exporter -Profile sql-server.yml`. SQL Exporter profiles liv
 
 This copies `profiles\` to the install path and writes the selected profile’s `collectors:` list into `sql_exporter.yml`.
 
-### 3) Service account (optional)
+### 3) Listen address and Basic Auth (optional)
+
+Remote install scripts set `--web.listen-address` and deploy `web-config.yml` into the service arguments.
+
+**Listen address** — default `:9399`. Examples: `:9399`, `127.0.0.1:9399`, `0.0.0.0:9399`.
+
+**Basic Auth** — package default has authentication off. To enable during install, pass one of:
+
+| Option | Parameters |
+|--------|------------|
+| Pre-generated bcrypt hash (recommended) | `-BasicAuthUsername` + `-BasicAuthHash` |
+| Hash from password on the client | `-BasicAuthUsername` + `-BasicAuthPassword` (requires Python with `bcrypt` on the machine running the script) |
+| Custom file | `-WebConfigPath` (full path to your `web-config.yml`; do not combine with Basic Auth parameters) |
+
+```powershell
+# Install with custom port and Basic Auth (bcrypt hash)
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
+# Install with password (client needs Python + bcrypt)
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress '127.0.0.1:9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthPassword (Read-Host -AsSecureString 'Password') `
+  -RemoteCredential (Get-Credential)
+
+# Deploy a custom web-config.yml instead
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -WebConfigPath 'C:\Secrets\sql-exporter-web-config.yml' `
+  -RemoteCredential (Get-Credential)
+```
+
+How to create the hash manually and configure Prometheus: [Install and config guide — port and Basic Auth](install-config-guide.md#6-scrape-port-and-basic-auth-optional).
+
+### 4) Service account (optional)
 
 Default: `LocalSystem`
 
@@ -171,7 +211,11 @@ gMSA:
 | `-SourceRoot` | project root | Package source |
 | `-InstallRoot` | Program Files path above | Install path on target |
 | `-ServiceName` | `prometheus_sql_exporter` | Windows service name |
-| `-ListenAddress` | `:9399` | Scrape address/port |
+| `-ListenAddress` | `:9399` | Scrape address/port (`--web.listen-address`) |
+| `-WebConfigPath` | (empty) | Deploy a custom `web-config.yml` from the client |
+| `-BasicAuthUsername` | (empty) | Basic Auth username (with `-BasicAuthHash` or `-BasicAuthPassword`) |
+| `-BasicAuthHash` | (empty) | Pre-generated bcrypt hash |
+| `-BasicAuthPassword` | (empty) | SecureString password; hashed on the client (needs Python + `bcrypt`) |
 | `-Profile` | (empty) | Apply `profiles/<name>.yml` collectors into `sql_exporter.yml` |
 | `-ServiceAccountMode` | `LocalSystem` | Service account type |
 | `-RemoteCredential` | (empty) | WinRM credential |
@@ -231,6 +275,32 @@ Example backup path:
   -InstallRoot 'D:\Monitoring\sql_exporter'
 ```
 
+### 4) Listen address and Basic Auth (optional)
+
+On upgrade, omit `-ListenAddress` to **preserve** the address from the existing service. Omit web-config parameters to deploy the package default (Basic Auth off). Use `-PreserveWebConfig` to keep the remote `web-config.yml` unchanged (cannot be combined with `-WebConfigPath` or Basic Auth parameters).
+
+```powershell
+# Upgrade binary only; keep current listen address and web-config.yml
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# Upgrade and change listen port; keep existing Basic Auth
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+# Upgrade and enable or replace Basic Auth
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+```
+
 ### Important upgrade parameters
 
 | Parameter | Default | Purpose |
@@ -240,6 +310,10 @@ Example backup path:
 | `-ExpectedVersion` | `0.24.4` | Expected binary version |
 | `-ServiceName` | `prometheus_sql_exporter` | Service name |
 | `-InstallRoot` | (empty = auto-detect) | Force install path |
+| `-ListenAddress` | (empty = preserve service) | Override `--web.listen-address` |
+| `-WebConfigPath` | (empty) | Deploy custom `web-config.yml` |
+| `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | (empty) | Enable or replace Basic Auth |
+| `-PreserveWebConfig` | off | Keep remote `web-config.yml`; mutually exclusive with web-config/Basic Auth params |
 | `-Profile` | (empty) | Apply `profiles/<name>.yml` collectors; omit to preserve remote config |
 | `-RemoteCredential` | (empty) | WinRM credential |
 | `-ServiceTimeoutSec` | `60` | Stop/start timeout |

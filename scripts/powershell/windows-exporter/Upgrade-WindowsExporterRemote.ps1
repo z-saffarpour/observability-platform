@@ -18,6 +18,18 @@
   .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 -Computers SQL01,SQL02 -AutoProfile -RemoteCredential (Get-Credential)
 .EXAMPLE
   .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 -Computers SQL01 -ServiceAccountMode NtService -RemoteCredential (Get-Credential)
+.EXAMPLE
+  .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+    -Computers SERVER01 `
+    -ListenAddress ':9182' `
+    -PreserveWebConfig `
+    -RemoteCredential (Get-Credential)
+.EXAMPLE
+  .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+    -Computers SERVER01 `
+    -BasicAuthUsername 'scrape_user' `
+    -BasicAuthPassword (Read-Host -AsSecureString 'Password') `
+    -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
@@ -26,6 +38,12 @@ param(
     [string]$ExpectedVersion = '0.31.8',
     [string]$ServiceName = 'prometheus_windows_exporter',
     [string]$InstallRoot,
+    [string]$ListenAddress,
+    [string]$WebConfigPath,
+    [string]$BasicAuthUsername,
+    [SecureString]$BasicAuthPassword,
+    [string]$BasicAuthHash,
+    [switch]$PreserveWebConfig,
     [string]$Profile,
     [switch]$AutoProfile,
     [ValidateSet('LocalSystem','LocalService','NetworkService','Credential','gMSA','NtService')]
@@ -39,6 +57,16 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$serviceHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-NssmServiceHelpers.ps1'
+$webConfigHelpersPath = Join-Path $PSScriptRoot '..\common\Observability-WebConfigHelpers.ps1'
+if (-not (Test-Path -LiteralPath $serviceHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $serviceHelpersPath"
+}
+if (-not (Test-Path -LiteralPath $webConfigHelpersPath -PathType Leaf)) {
+    throw "Required helper script was not found: $webConfigHelpersPath"
+}
+. $webConfigHelpersPath
 
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
     $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
@@ -133,7 +161,33 @@ if ($applyAccount) {
     $password = if ($ServiceAccountMode -eq 'Credential') { Get-PlainText $ServiceCredential.Password } else { '' }
 }
 
+if ($PreserveWebConfig -and (
+        -not [string]::IsNullOrWhiteSpace($WebConfigPath) -or
+        -not [string]::IsNullOrWhiteSpace($BasicAuthUsername) -or
+        $null -ne $BasicAuthPassword -or
+        -not [string]::IsNullOrWhiteSpace($BasicAuthHash))) {
+    throw 'Use either -PreserveWebConfig or web-config/Basic Auth parameters, not both.'
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ListenAddress)) {
+    Test-ObservabilityListenAddress -Address $ListenAddress
+}
+
+$deployWebConfig = $null
+$tempWebConfigPath = $null
+if (-not $PreserveWebConfig) {
+    $deployWebConfig = Resolve-ObservabilityWebConfigDeployment `
+        -TemplatePath $itemSources['web-config.yml'] `
+        -WebConfigPath $WebConfigPath `
+        -BasicAuthUsername $BasicAuthUsername `
+        -BasicAuthPassword $BasicAuthPassword `
+        -BasicAuthHash $BasicAuthHash
+    $tempWebConfigPath = if ($deployWebConfig -ne $itemSources['web-config.yml']) { $deployWebConfig } else { $null }
+}
+
 Write-Host "Source: $exporterSource`nTargets: $($Computers -join ', ')`nExpected version: $ExpectedVersion" -ForegroundColor Cyan
+Write-Host ("Listen address: {0}" -f $(if ($ListenAddress) { $ListenAddress } else { '<preserve service>' })) -ForegroundColor Cyan
+Write-Host ("Web config: {0}" -f $(if ($PreserveWebConfig) { '<preserve remote>' } elseif ($WebConfigPath) { $WebConfigPath } elseif ($BasicAuthUsername) { "Basic Auth user=$BasicAuthUsername" } else { '<package default>' })) -ForegroundColor Cyan
 if ($applyAccount) { Write-Host "Service account: $account" -ForegroundColor Cyan }
 else { Write-Host 'Service account: preserve existing' -ForegroundColor Cyan }
 if ($profileFile) { Write-Host "Profile: $profileFile" -ForegroundColor Cyan }
@@ -163,7 +217,11 @@ foreach ($computer in $Computers) {
             $path
         }
         foreach ($item in $items) {
+            if ($item -eq 'web-config.yml') { continue }
             Copy-Item -LiteralPath $itemSources[$item] -Destination (Join-Path $stage $item) -ToSession $session -Force
+        }
+        if (-not $PreserveWebConfig) {
+            Copy-Item -LiteralPath $deployWebConfig -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
         }
         Copy-Item -LiteralPath $profilesSource -Destination $stage -ToSession $session -Recurse -Force
         $stageScripts = Join-Path $stage 'scripts'
@@ -175,9 +233,13 @@ foreach ($computer in $Computers) {
         if (Test-Path -LiteralPath $scriptsSsasSource -PathType Container) {
             Copy-Item -LiteralPath $scriptsSsasSource -Destination (Join-Path $stageScripts 'ssas') -ToSession $session -Recurse -Force
         }
+        Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+        Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
         $result = Invoke-Command -Session $session -ScriptBlock {
-            param($Name,$Stage,$Version,$RootOverride,$Timeout,$Limit,$Items,$ProfileName,$Account,$Password,$ApplyAccount,$ServiceMode)
+            param($Name,$Stage,$Version,$RootOverride,$Timeout,$Limit,$Items,$ProfileName,$Account,$Password,$ApplyAccount,$ServiceMode,$ListenOverride,$PreserveWebConfig)
             Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'
+            . (Join-Path $Stage 'Observability-NssmServiceHelpers.ps1')
+            . (Join-Path $Stage 'Observability-WebConfigHelpers.ps1')
             function Wait-State([string]$State) {
                 $svc = Get-Service -Name $Name -ErrorAction Stop
                 $svc.WaitForStatus($State,[TimeSpan]::FromSeconds($Timeout)); $svc.Refresh()
@@ -194,10 +256,6 @@ foreach ($computer in $Computers) {
                 if ($Line -match '^\s*"([^"]+)"') { return $Matches[1] }
                 if ($Line -match '^\s*(.+?\.exe)(?:\s|$)') { return $Matches[1].Trim() }
                 $null
-            }
-            function Invoke-Sc([string[]]$Arguments) {
-                $text = & sc.exe @Arguments 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "sc.exe failed: $($text -join [Environment]::NewLine)" }
             }
             function Sync-Directory([string]$Source,[string]$Destination,[string]$Backup) {
                 if (-not (Test-Path -LiteralPath $Source -PathType Container)) { return }
@@ -294,7 +352,13 @@ foreach ($computer in $Computers) {
                 $target = Join-Path $binDir 'windows_exporter.exe'
                 Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter.exe') -Destination $target -Force
                 Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter.yml') -Destination (Join-Path $configDir 'windows_exporter.yml') -Force
-                Copy-Item -LiteralPath (Join-Path $Stage 'web-config.yml') -Destination (Join-Path $configDir 'web-config.yml') -Force
+                $web = Join-Path $configDir 'web-config.yml'
+                if (-not $PreserveWebConfig) {
+                    Copy-Item -LiteralPath (Join-Path $Stage 'web-config.yml') -Destination $web -Force
+                }
+                elseif (-not (Test-Path -LiteralPath $web -PathType Leaf)) {
+                    throw "Remote web-config.yml was not found at $web and -PreserveWebConfig was set."
+                }
                 Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter_version.ini') -Destination (Join-Path $versionDir 'windows_exporter_version.ini') -Force
                 $nssmDir = 'C:\Program Files\Observability\Tools\NSSM'
                 New-Item -Path $nssmDir -ItemType Directory -Force | Out-Null
@@ -314,32 +378,40 @@ foreach ($computer in $Computers) {
                 New-Item -Path (Join-Path $root 'collector') -ItemType Directory -Force | Out-Null
                 New-Item -Path (Join-Path $root 'textfile_inputs') -ItemType Directory -Force | Out-Null
                 $cfg = if ($ProfileName) { Join-Path $dstProfiles $ProfileName } else { Join-Path $configDir 'windows_exporter.yml' }
-                $web = Join-Path $configDir 'web-config.yml'
                 if (-not (Test-Path -LiteralPath $cfg -PathType Leaf)) { throw "Config file was not found: $cfg" }
+                $listenSource = if ($originalAppParameters) { $originalAppParameters } else { $originalPathName }
+                $listenAddress = Resolve-ObservabilityListenAddressForUpgrade `
+                    -RequestedAddress $ListenOverride `
+                    -CurrentAppParameters $listenSource `
+                    -CurrentServicePath $originalPathName `
+                    -DefaultAddress ':9182'
+                $appParameters = Get-ObservabilityExporterAppParameters -ConfigFile $cfg -WebConfigFile $web -ListenAddress $listenAddress
                 if ($method -eq 'NSSM') {
                     if (-not (Test-Path $parameters)) { throw "NSSM parameters key was not found: $parameters" }
                     $logDir = Join-Path $root 'log'
                     New-Item -Path $logDir -ItemType Directory -Force | Out-Null
                     Set-ItemProperty -LiteralPath $parameters -Name Application -Value $target
-                    Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value ('--config.file="{0}" --web.config.file="{1}"' -f $cfg,$web)
+                    Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value $appParameters
                     Set-ItemProperty -LiteralPath $parameters -Name AppDirectory -Value $root
-                    Set-ItemProperty -LiteralPath $parameters -Name AppStdout -Value (Join-Path $logDir "$Name.out.log")
-                    Set-ItemProperty -LiteralPath $parameters -Name AppStderr -Value (Join-Path $logDir "$Name.err.log")
-                    Set-ItemProperty -LiteralPath $parameters -Name AppRotateFiles -Value 1 -Type DWord
-                    Set-ItemProperty -LiteralPath $parameters -Name AppRotateBytes -Value 10485760 -Type DWord
-                    Invoke-Sc @('config',$Name,('binPath= ' + ('"{0}"' -f $nssmTarget)))
+                    Set-ObservabilityNssmLogging -ParametersKey $parameters -StdoutLog (Join-Path $logDir "$Name.out.log") -StderrLog (Join-Path $logDir "$Name.err.log")
+                    $nssmExe = Join-Path $nssmDir 'nssm.exe'
+                    & $nssmExe set $Name AppExit Default Restart | Out-Null
+                    Register-ObservabilityNssmEventSource -NssmExe $nssmExe
+                    $logAccount = if ($ApplyAccount -and $Account) { $Account } else { $originalStartName }
+                    if ($logAccount) { Grant-ObservabilityServiceLogAccess -Path $logDir -Account $logAccount }
+                    Invoke-ObservabilitySc -Arguments @('config',$Name,('binPath= ' + ('"{0}"' -f $nssmTarget)))
                 } else {
-                    Invoke-Sc @('config',$Name,('binPath= ' + ('"{0}" --config.file="{1}" --web.config.file="{2}"' -f $target,$cfg,$web)))
+                    Invoke-ObservabilitySc -Arguments @('config',$Name,('binPath= ' + ('"{0}" {1}' -f $target, $appParameters)))
                 }
                 if ($ApplyAccount -and $Account) {
                     $accountArgs = @('config',$Name,('obj= ' + $Account))
                     if ($Password) { $accountArgs += ('password= ' + $Password) }
-                    Invoke-Sc $accountArgs
+                    Invoke-ObservabilitySc -Arguments $accountArgs
                     $accountApplied = $true
                 }
                 $new = Version $target
                 if ($new -ne $Version) { throw "Installed version is $new; expected $Version." }
-                Start-Service $Name; Wait-State 'Running'
+                Start-ObservabilityManagedService -Name $Name -TimeoutSec $Timeout -LogDirectory (Join-Path $root 'log') -ProcessLabel 'windows_exporter.exe' | Out-Null
                 if (-not [Diagnostics.EventLog]::SourceExists($Name)) { New-EventLog -LogName Application -Source $Name }
                 Write-EventLog -LogName Application -Source $Name -EntryType Information -EventId 1002 `
                     -Message "Windows service upgraded. Mode=$method; Version=$new; InstallPath=$root; Profile=$ProfileName"
@@ -366,10 +438,10 @@ foreach ($computer in $Computers) {
                         Set-ItemProperty -LiteralPath $parameters -Name AppParameters -Value $originalAppParameters
                     }
                 } elseif ($method -eq 'ServiceBase' -and $originalPathName) {
-                    Invoke-Sc @('config',$Name,('binPath= ' + $originalPathName))
+                    Invoke-ObservabilitySc -Arguments @('config',$Name,('binPath= ' + $originalPathName))
                 }
                 if ($accountApplied -and $originalStartName) {
-                    try { Invoke-Sc @('config',$Name,('obj= ' + $originalStartName)) } catch { }
+                    try { Invoke-ObservabilitySc -Arguments @('config',$Name,('obj= ' + $originalStartName)) } catch { }
                 }
                 if ($wasRunning) { Start-Service $Name -ErrorAction SilentlyContinue }
                 throw "Upgrade failed and rollback to $old completed. Cause: $cause"
@@ -387,7 +459,7 @@ foreach ($computer in $Computers) {
                 Profile    = $ProfileName
                 Account    = $(if ($ApplyAccount) { $Account } else { $originalStartName })
             }
-        } -ArgumentList $ServiceName,$stage,$ExpectedVersion,$InstallRoot,$ServiceTimeoutSec,$KeepBackups,$items,$chosenProfile,$account,$password,$applyAccount,$ServiceMode
+        } -ArgumentList $ServiceName,$stage,$ExpectedVersion,$InstallRoot,$ServiceTimeoutSec,$KeepBackups,$items,$chosenProfile,$account,$password,$applyAccount,$ServiceMode,$ListenAddress,([bool]$PreserveWebConfig)
         foreach ($name in @('Method','Previous','Current','Status','Backup')) { $row[$name] = $result.$name }
         if ($result.Profile) { $row.Profile = $result.Profile }
         Write-Host "$($result.Previous) -> $($result.Current) [$($result.Method)] Profile=$($row.Profile)" -ForegroundColor Green
@@ -399,6 +471,9 @@ foreach ($computer in $Computers) {
         if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         $results += [pscustomobject]$row
     }
+}
+if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
+    [IO.File]::Delete($tempWebConfigPath)
 }
 $results | Format-Table Computer,Method,Previous,Current,Profile,Status,Error -AutoSize
 if (@($results | Where-Object Status -eq 'Failed').Count) { exit 1 }

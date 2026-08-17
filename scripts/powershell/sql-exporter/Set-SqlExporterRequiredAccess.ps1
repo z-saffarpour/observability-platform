@@ -134,7 +134,11 @@ begin {
         }
 
         function Set-HardenedAcl {
-            param([string]$Path, [string]$ServiceAccount)
+            param(
+                [string]$Path,
+                [string]$ServiceAccount,
+                [bool]$AllowServiceWrite = $false
+            )
             if (-not (Test-Path -LiteralPath $Path)) { return }
             $item = Get-Item -LiteralPath $Path
             $acl = Get-Acl -LiteralPath $Path
@@ -150,7 +154,8 @@ begin {
             [void]$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule('NT AUTHORITY\SYSTEM', 'FullControl', $inheritance, $propagation, 'Allow')))
             $svcNt = Convert-AccountToNtAccount $ServiceAccount
             if ($svcNt -and $svcNt -ne 'NT AUTHORITY\SYSTEM') {
-                [void]$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($svcNt, 'ReadAndExecute', $inheritance, $propagation, 'Allow')))
+                $right = if ($AllowServiceWrite) { 'Modify' } else { 'ReadAndExecute' }
+                [void]$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($svcNt, $right, $inheritance, $propagation, 'Allow')))
             }
             Set-Acl -LiteralPath $Path -AclObject $acl
         }
@@ -213,15 +218,23 @@ begin {
         }
 
         $web = Join-Path $Root 'config\web-config.yml'
+        $logDir = Join-Path $Root 'log'
 
         if (-not $NoAcl) {
             if (-not (Test-Path -LiteralPath $Root)) {
                 New-Item -Path $Root -ItemType Directory -Force | Out-Null
                 Add-Row 'Create InstallRoot' 'OK' $Root
             }
+            if (-not (Test-Path -LiteralPath $logDir)) {
+                New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+                Add-Row 'Create log' 'OK' $logDir
+            }
 
             Set-HardenedAcl -Path $Root -ServiceAccount $account
             Add-Row 'ACL InstallRoot' 'OK' 'Administrators+SYSTEM Full; service ReadAndExecute (unless LocalSystem)'
+
+            Set-HardenedAcl -Path $logDir -ServiceAccount $account -AllowServiceWrite:$true
+            Add-Row 'ACL log' 'OK' 'Administrators+SYSTEM Full; service Modify for NSSM stdout/stderr (unless LocalSystem)'
 
             if (Test-Path -LiteralPath $web) {
                 Set-HardenedAcl -Path $web -ServiceAccount $account

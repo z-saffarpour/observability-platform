@@ -86,6 +86,15 @@ New-NetFirewallRule -DisplayName 'Prometheus windows_exporter 9182' `
 
 > وجود فایل `web-config.yml` کافی نیست. سرویس باید با `--web.config.file=...` اجرا شود (اسکریپت‌های نصب ریموت این آرگومان را می‌گذارند).
 
+در **نصب یا اپگرید ریموت** می‌توانید Basic Auth را بدون ویرایش دستی فایل روی سرور فعال کنید:
+
+- `-BasicAuthUsername` + `-BasicAuthHash` (پیشنهادی)
+- `-BasicAuthUsername` + `-BasicAuthPassword` (hash روی کلاینت؛ نیاز به Python با `bcrypt`)
+- `-WebConfigPath` برای deploy فایل `web-config.yml` سفارشی
+- `-PreserveWebConfig` در اپگرید برای حفظ فایل ریموت فعلی
+
+پورت scrape با `-ListenAddress` (پیش‌فرض `:9182`) تنظیم می‌شود. نمونه‌ها: [راهنمای نصب و آپگرید](install-upgrade-guide.md).
+
 ### ۱) تولید bcrypt hash
 
 رمز واضح را داخل Git یا تیکت نگذارید. فقط hash را در `web-config.yml` قرار دهید.

@@ -86,6 +86,15 @@ The package ships with `basic_auth_users: {}`, so `/metrics` responds without cr
 
 > Having `web-config.yml` on disk is not enough. The service ImagePath must include `--web.config.file=...` (remote install scripts set this).
 
+During **remote install or upgrade**, you can enable Basic Auth without editing files on the server:
+
+- `-BasicAuthUsername` + `-BasicAuthHash` (recommended)
+- `-BasicAuthUsername` + `-BasicAuthPassword` (hashed on the client; requires Python with `bcrypt`)
+- `-WebConfigPath` to deploy a custom `web-config.yml`
+- `-PreserveWebConfig` on upgrade to keep the existing remote file
+
+Set the scrape port with `-ListenAddress` (default `:9182`). Examples: [Install and upgrade](install-upgrade-guide.md).
+
 ### 1) Generate a bcrypt hash
 
 Never commit plaintext passwords. Store only the hash in `web-config.yml`.

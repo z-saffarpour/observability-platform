@@ -364,7 +364,24 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
   -RemoteCredential (Get-Credential)</code></pre>
         <p>This copies <code>profiles\</code> to the install path and writes the selected profile’s <code>collectors:</code> list into <code>sql_exporter.yml</code>.</p>
 
-        <h3>3) Service account (optional)</h3>
+        <h3>3) Listen address and Basic Auth (optional)</h3>
+        <p>Remote install scripts set <code>--web.listen-address</code> and deploy <code>web-config.yml</code> into the service arguments. Default listen: <code>:9399</code>.</p>
+        <pre><code># Install with custom port and Basic Auth (bcrypt hash)
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
+# Deploy a custom web-config.yml
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -WebConfigPath 'C:\Secrets\sql-exporter-web-config.yml' `
+  -RemoteCredential (Get-Credential)</code></pre>
+        <p>Hash details and Prometheus scrape config: <a href="install-config-guide.md#6-scrape-port-and-basic-auth-optional">Install and config guide — port and Basic Auth</a>.</p>
+
+        <h3>4) Service account (optional)</h3>
         <p>Default: <code>LocalSystem</code></p>
         <p>Domain credential:</p>
         <pre><code>.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
@@ -396,7 +413,10 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
               <tr><td><code>-SourceRoot</code></td><td>project root</td><td>Package source</td></tr>
               <tr><td><code>-InstallRoot</code></td><td>Program Files path above</td><td>Install path on target</td></tr>
               <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>Windows service name</td></tr>
-              <tr><td><code>-ListenAddress</code></td><td><code>:9399</code></td><td>Scrape address/port</td></tr>
+              <tr><td><code>-ListenAddress</code></td><td><code>:9399</code></td><td>Scrape address/port (<code>--web.listen-address</code>)</td></tr>
+              <tr><td><code>-WebConfigPath</code></td><td>(empty)</td><td>Deploy custom <code>web-config.yml</code></td></tr>
+              <tr><td><code>-BasicAuthUsername</code></td><td>(empty)</td><td>Basic Auth user (with <code>-BasicAuthHash</code> or <code>-BasicAuthPassword</code>)</td></tr>
+              <tr><td><code>-BasicAuthHash</code></td><td>(empty)</td><td>Pre-generated bcrypt hash</td></tr>
               <tr><td><code>-Profile</code></td><td>(empty)</td><td>Apply <code>profiles/&lt;name&gt;.yml</code> collectors into <code>sql_exporter.yml</code></td></tr>
               <tr><td><code>-ServiceAccountMode</code></td><td><code>LocalSystem</code></td><td>Service account type</td></tr>
               <tr><td><code>-RemoteCredential</code></td><td>(empty)</td><td>WinRM credential</td></tr>
@@ -443,6 +463,20 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
   -Computers sql-host-01 `
   -InstallRoot 'D:\Monitoring\sql_exporter'</code></pre>
 
+        <h3>4) Listen address and Basic Auth (optional)</h3>
+        <p>Omit <code>-ListenAddress</code> to preserve the existing service address. Use <code>-PreserveWebConfig</code> to keep the remote <code>web-config.yml</code> (not combinable with web-config/Basic Auth parameters).</p>
+        <pre><code>.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)</code></pre>
+
         <h3>Important upgrade parameters</h3>
         <div class="table-wrap">
           <table>
@@ -455,6 +489,9 @@ Test-WSMan -ComputerName sql-host-01</code></pre>
               <tr><td><code>-ExpectedVersion</code></td><td><code>0.24.4</code></td><td>Expected binary version</td></tr>
               <tr><td><code>-ServiceName</code></td><td><code>prometheus_sql_exporter</code></td><td>Service name</td></tr>
               <tr><td><code>-InstallRoot</code></td><td>(empty = auto-detect)</td><td>Force install path</td></tr>
+              <tr><td><code>-ListenAddress</code></td><td>(empty = preserve service)</td><td>Override <code>--web.listen-address</code></td></tr>
+              <tr><td><code>-WebConfigPath</code></td><td>(empty)</td><td>Deploy custom <code>web-config.yml</code></td></tr>
+              <tr><td><code>-PreserveWebConfig</code></td><td>off</td><td>Keep remote <code>web-config.yml</code></td></tr>
               <tr><td><code>-Profile</code></td><td>(empty)</td><td>Apply <code>profiles/&lt;name&gt;.yml</code> collectors; omit to preserve remote config</td></tr>
               <tr><td><code>-RemoteCredential</code></td><td>(empty)</td><td>WinRM credential</td></tr>
               <tr><td><code>-ServiceTimeoutSec</code></td><td><code>60</code></td><td>Stop/start timeout</td></tr>

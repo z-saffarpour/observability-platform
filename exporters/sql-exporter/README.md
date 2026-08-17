@@ -86,6 +86,17 @@ collectors: [mssql_*]   # یا لیست صریح پروفایل
   -RemoteCredential (Get-Credential)
 ```
 
+با آدرس Listen و Basic Auth:
+
+```powershell
+.\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+```
+
 ### ارتقای نسخه روی نصب موجود
 
 ```powershell
@@ -105,10 +116,22 @@ collectors: [mssql_*]   # یا لیست صریح پروفایل
   -RemoteCredential (Get-Credential)
 ```
 
+حفظ web-config و تغییر پورت در اپگرید:
+
+```powershell
+.\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+  -Computers sql-host-01 `
+  -ListenAddress ':9399' `
+  -PreserveWebConfig `
+  -RemoteCredential (Get-Credential)
+```
+
 نکات:
 - نیازمند دسترسی PowerShell Remoting (WinRM) به سرورهای مقصد است.
 - سرویس `prometheus_sql_exporter` را با API استاندارد ویندوز ایجاد/به‌روزرسانی می‌کند.
 - فایل‌های `sql_exporter.exe`، `sql_exporter.yml`، `web-config.yml`، `profiles\` و پوشه `collector\` را deploy می‌کند (مگر با `-SkipCollectors` در Install).
+- `-ListenAddress` مقدار `--web.listen-address` را تنظیم می‌کند (پیش‌فرض `:9399`).
+- `-BasicAuthUsername` + `-BasicAuthHash` (یا `-BasicAuthPassword` / `-WebConfigPath`) Basic Auth را در نصب/اپگرید فعال می‌کند؛ `-PreserveWebConfig` در اپگرید فایل ریموت را حفظ می‌کند.
 - با `-Profile <name>.yml` فهرست collectors از `profiles/` داخل `sql_exporter.yml` نوشته می‌شود.
 - اسکریپت Upgrade بدون `-Profile` کانفیگ ریموت را حفظ می‌کند؛ قبل از جایگزینی بکاپ می‌گیرد و در خطا rollback می‌کند.
 

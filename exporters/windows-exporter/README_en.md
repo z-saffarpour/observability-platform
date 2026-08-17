@@ -92,8 +92,21 @@ Full parameters, profile options, and rollout checklist:
   -Computers (Get-Content .\servers.txt) `
   -RemoteCredential (Get-Credential)
 
+.\scripts\powershell\windows-exporter\Install-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -BasicAuthUsername 'scrape_user' `
+  -BasicAuthHash '$2a$12$REPLACE_WITH_BCRYPT_HASH' `
+  -RemoteCredential (Get-Credential)
+
 .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
   -Computers (Get-Content .\servers.txt) `
+  -RemoteCredential (Get-Credential)
+
+.\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+  -Computers SERVER01 `
+  -ListenAddress ':9182' `
+  -PreserveWebConfig `
   -RemoteCredential (Get-Credential)
 
 .\scripts\powershell\windows-exporter\Uninstall-WindowsExporterRemote.ps1 `
