@@ -4,7 +4,8 @@
 #
 # Notes:
 #   - Counters ending in /sec are cumulative PERF_COUNTER_BULK_COUNT — use rate() in PromQL.
-#   - Per-database pages scan sys.dm_os_buffer_descriptors (heavier on large buffer pools).
+#   - Per-database page metrics live in mssql_buffer_pool_database.collector.yml.
+#     They are opt-in because sys.dm_os_buffer_descriptors can exceed the scrape timeout.
 #
 collector_name: mssql_buffer_pool
 
@@ -32,22 +33,6 @@ metrics:
       - counter
     values: [cntr_value]
     query_ref: mssql_buffer_counters
-
-  - metric_name: mssql_buffer_pool_database_pages
-    type: gauge
-    help: 'Cached pages in the buffer pool per database (8 KB pages). Label db=_Free is free buffer pages (database_id 32767).'
-    key_labels:
-      - db
-    values: [page_count]
-    query_ref: mssql_buffer_by_db
-
-  - metric_name: mssql_buffer_pool_database_dirty_pages
-    type: gauge
-    help: 'Dirty (modified) cached pages in the buffer pool per database (8 KB pages).'
-    key_labels:
-      - db
-    values: [dirty_page_count]
-    query_ref: mssql_buffer_by_db
 
 queries:
   - query_name: mssql_buffer_ple
@@ -94,16 +79,3 @@ queries:
           N'Free list stalls/sec'
         )
         AND (instance_name = N'' OR instance_name = N'_Total');
-
-  - query_name: mssql_buffer_by_db
-    query: |
-      SELECT
-          CASE
-              WHEN bd.database_id = 32767 THEN N'_Free'
-              WHEN DB_NAME(bd.database_id) IS NULL THEN N'_dbid_' + CAST(bd.database_id AS nvarchar(11))
-              ELSE DB_NAME(bd.database_id)
-          END AS db,
-          CAST(COUNT_BIG(*) AS float) AS page_count,
-          CAST(SUM(CASE WHEN bd.is_modified = 1 THEN 1 ELSE 0 END) AS float) AS dirty_page_count
-      FROM sys.dm_os_buffer_descriptors AS bd WITH (NOLOCK)
-      GROUP BY bd.database_id;

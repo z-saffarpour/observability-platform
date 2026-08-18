@@ -85,10 +85,11 @@ Prometheus sends its timeout to the exporter on every request. The effective
 exporter timeout is the smaller of the local 55-second limit and the Prometheus
 timeout minus `scrape_timeout_offset`.
 
-Collectors such as `mssql_index_fragmentation`, `mssql_database_integrity`,
-`mssql_query_store`, `mssql_stats`, `mssql_columnstore`, `mssql_security` and
-`mssql_errorlog_signals` keep their own long `min_interval`; the increased
-timeout does not cause them to execute on every Prometheus scrape.
+Collectors such as `mssql_index_fragmentation`, `mssql_buffer_pool_database`,
+`mssql_database_integrity`, `mssql_query_store`, `mssql_stats`,
+`mssql_columnstore`, `mssql_security` and `mssql_errorlog_signals` keep their
+own long `min_interval`; the increased timeout does not cause them to execute
+on every Prometheus scrape.
 
 ## v0.24.4 validation
 

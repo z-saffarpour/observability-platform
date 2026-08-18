@@ -45,7 +45,7 @@ Mirrors Grafana folders under **AI-SQL Exporter**:
 | `sqlx-query-store.json` | mssql_query_store |
 | `sqlx-memory.json` | mssql_memory |
 | `sqlx-resource-governor.json` | mssql_resource_governor |
-| `sqlx-buffer-pool.json` | mssql_buffer_pool |
+| `sqlx-buffer-pool.json` | mssql_buffer_pool + mssql_buffer_pool_database |
 | `sqlx-database-space.json` | mssql_database_space |
 | `sqlx-database-size-growth.json` | mssql_database_size_growth |
 | `sqlx-log-usage.json` | mssql_log_usage |

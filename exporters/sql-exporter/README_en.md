@@ -258,6 +258,7 @@ These files have been moved to `sql_exporter_removed/`; their unique content has
 | `mssql_database_size_growth` | 300s | data/log size growth and file growth |
 | `mssql_cpu` | 30s | SQL process CPU from ring buffer |
 | `mssql_buffer_pool` | 180s | PLE (NUMA) and Buffer Manager |
+| `mssql_buffer_pool_database` | 30m | cached/dirty pages per database — EXPENSIVE, opt-in |
 | `mssql_parallelism` | 60s | parallelism waits, MAXDOP/memory config, DOP + grant |
 | `mssql_job_running` | 30s | Agent service + running jobs (+ step) |
 | `mssql_job_failed` | 60s | job failures (1h/24h) + last fail + current failed |

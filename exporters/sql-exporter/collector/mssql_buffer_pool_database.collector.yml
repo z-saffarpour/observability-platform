@@ -1,0 +1,42 @@
+# Per-database buffer-pool usage — EXPENSIVE.
+# sys.dm_os_buffer_descriptors has one row per cached page and can exceed
+# normal scrape timeouts on large servers.
+# Role profiles do not include this collector. Add it explicitly only after
+# timing the query on the target.
+#
+#   GRANT VIEW SERVER STATE TO
+
+collector_name: mssql_buffer_pool_database
+
+min_interval: 30m
+
+metrics:
+  - metric_name: mssql_buffer_pool_database_pages
+    type: gauge
+    help: 'Cached pages in the buffer pool per database (8 KB pages). Label db=_Free is free buffer pages (database_id 32767).'
+    key_labels:
+      - db
+    values: [page_count]
+    query_ref: mssql_buffer_pool_by_db
+
+  - metric_name: mssql_buffer_pool_database_dirty_pages
+    type: gauge
+    help: 'Dirty (modified) cached pages in the buffer pool per database (8 KB pages).'
+    key_labels:
+      - db
+    values: [dirty_page_count]
+    query_ref: mssql_buffer_pool_by_db
+
+queries:
+  - query_name: mssql_buffer_pool_by_db
+    query: |
+      SELECT
+          CASE
+              WHEN bd.database_id = 32767 THEN N'_Free'
+              WHEN DB_NAME(bd.database_id) IS NULL THEN N'_dbid_' + CAST(bd.database_id AS nvarchar(11))
+              ELSE DB_NAME(bd.database_id)
+          END AS db,
+          CAST(COUNT_BIG(*) AS float) AS page_count,
+          CAST(SUM(CASE WHEN bd.is_modified = 1 THEN 1 ELSE 0 END) AS float) AS dirty_page_count
+      FROM sys.dm_os_buffer_descriptors AS bd WITH (NOLOCK)
+      GROUP BY bd.database_id;

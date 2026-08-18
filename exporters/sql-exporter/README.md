@@ -257,6 +257,7 @@ GRANT VIEW ANY DEFINITION TO [DOMAIN\SqlExporterAccount];
 | `mssql_database_size_growth` | ۳۰۰s | رشد حجم data/log و فایل‌ها |
 | `mssql_cpu` | ۳۰s | CPU پروسس SQL از ring buffer |
 | `mssql_buffer_pool` | ۱۸۰s | PLE (NUMA) و Buffer Manager |
+| `mssql_buffer_pool_database` | ۳۰m | صفحات cache/dirty به‌ازای دیتابیس — سنگین، اختیاری |
 | `mssql_parallelism` | ۶۰s | wait موازی‌سازی، MAXDOP/memory config، DOP + grant |
 | `mssql_job_running` | ۳۰s | Agent service + Jobهای در حال اجرا (+ step) |
 | `mssql_job_failed` | ۶۰s | failهای Job (1h/24h) + last fail + current failed |

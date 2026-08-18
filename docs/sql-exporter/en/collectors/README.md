@@ -9,7 +9,8 @@ This folder contains a dedicated guide for each collector.
 | `mssql_autogrowth.md` | `300s` | `8` | Data/Log autogrowth events from the default trace (last ~hours of trace files). |
 | `mssql_backup.md` | `900s` | `10` | Database backup freshness and size (msdb.dbo.backupset). |
 | `mssql_blocking.md` | `30s` | `6` | Blocking / head-blocker metrics for Microsoft SQL Server. |
-| `mssql_buffer_pool.md` | `180s` | `5` | Buffer pool / buffer manager health. |
+| `mssql_buffer_pool.md` | `180s` | `3` | Buffer pool / buffer manager health. |
+| `mssql_buffer_pool_database.md` | `30m` | `2` | Per-database buffer-pool occupancy — EXPENSIVE, opt-in. |
 | `mssql_cdc_change_tracking.md` | `300s` | `17` | CDC and Change Tracking health and configuration. |
 | `mssql_certificates.md` | `300s` | `2` | Certificate expiry days and TDE encryption_state. |
 | `mssql_columnstore.md` | `300s` | `12` | Columnstore rowgroup health (useful on DWH / BI hosts). |

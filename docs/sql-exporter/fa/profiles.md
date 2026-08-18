@@ -89,10 +89,10 @@ Prometheus در هر درخواست timeout خود را برای exporter ارس
 Prometheus منهای `scrape_timeout_offset` خواهد بود.
 
 Collectorهایی مانند `mssql_index_fragmentation`،
-`mssql_database_integrity`، `mssql_query_store`، `mssql_stats`،
-`mssql_columnstore`، `mssql_security` و `mssql_errorlog_signals` دارای
-`min_interval` طولانی مختص خود هستند؛ بنابراین افزایش timeout باعث اجرای آن‌ها
-در تمام Scrapeهای Prometheus نمی‌شود.
+`mssql_buffer_pool_database`، `mssql_database_integrity`، `mssql_query_store`،
+`mssql_stats`، `mssql_columnstore`، `mssql_security` و
+`mssql_errorlog_signals` دارای `min_interval` طولانی مختص خود هستند؛ بنابراین
+افزایش timeout باعث اجرای آن‌ها در تمام Scrapeهای Prometheus نمی‌شود.
 
 ## اعتبارسنجی در نسخه 0.24.4
 

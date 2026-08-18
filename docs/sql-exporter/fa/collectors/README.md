@@ -9,7 +9,8 @@
 | `mssql_autogrowth.md` | `300s` | `8` | رویدادهای autogrowth داده/لاگ از default trace |
 | `mssql_backup.md` | `900s` | `10` | تازگی و اندازه بکاپ دیتابیس (msdb.dbo.backupset) |
 | `mssql_blocking.md` | `30s` | `6` | متریک‌های blocking / head-blocker برای Microsoft SQL Server |
-| `mssql_buffer_pool.md` | `180s` | `5` | سلامت buffer pool / buffer manager |
+| `mssql_buffer_pool.md` | `180s` | `3` | سلامت buffer pool / buffer manager |
+| `mssql_buffer_pool_database.md` | `30m` | `2` | اشغال buffer pool به‌ازای دیتابیس — سنگین، اختیاری |
 | `mssql_cdc_change_tracking.md` | `300s` | `17` | سلامت و تنظیمات CDC و Change Tracking |
 | `mssql_certificates.md` | `300s` | `2` | انقضای certificate و وضعیت TDE |
 | `mssql_columnstore.md` | `300s` | `12` | سلامت rowgroupهای columnstore (مفید برای DWH / BI) |
