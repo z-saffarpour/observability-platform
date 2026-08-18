@@ -19,6 +19,36 @@ function Test-ObservabilityListenAddress {
     }
 }
 
+function Set-ObservabilityYamlListenAddress {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$ListenAddress
+    )
+
+    Test-ObservabilityListenAddress -Address $ListenAddress
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Config file was not found: $Path"
+    }
+
+    $config = Get-Content -LiteralPath $Path -Raw
+    if ([string]::IsNullOrWhiteSpace($config)) {
+        throw "Config is empty: $Path"
+    }
+
+    $pattern = '(?m)^(\s*listen-address:\s*)[^\r\n]*'
+    $match = [regex]::Match($config, $pattern)
+    if (-not $match.Success) {
+        throw "listen-address was not found in $Path"
+    }
+
+    $yamlValue = '"{0}"' -f $ListenAddress.Trim()
+    $config = $config.Remove($match.Index, $match.Length).Insert($match.Index, $match.Groups[1].Value + $yamlValue)
+
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [IO.File]::WriteAllText($Path, $config, $utf8)
+}
+
 function ConvertTo-ObservabilityPlainText {
     param([Security.SecureString]$SecureString)
     if ($null -eq $SecureString) { return $null }

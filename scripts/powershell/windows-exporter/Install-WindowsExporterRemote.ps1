@@ -290,6 +290,7 @@ foreach ($computer in $Computers) {
             $cfg = if ($ProfileName) { Join-Path $dstProfiles $ProfileName } else { Join-Path $configDir 'windows_exporter.yml' }
             $web = Join-Path $configDir 'web-config.yml'
             if (-not (Test-Path -LiteralPath $cfg -PathType Leaf)) { throw "Config file was not found: $cfg" }
+            Set-ObservabilityYamlListenAddress -Path $cfg -ListenAddress $Listen
             $appParameters = Get-ObservabilityExporterAppParameters `
                 -ConfigFile $cfg `
                 -WebConfigFile $web `

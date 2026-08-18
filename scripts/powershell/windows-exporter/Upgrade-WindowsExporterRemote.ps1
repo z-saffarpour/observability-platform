@@ -386,6 +386,7 @@ foreach ($computer in $Computers) {
                     -CurrentAppParameters $listenSource `
                     -CurrentServicePath $originalPathName `
                     -DefaultAddress ':9182'
+                Set-ObservabilityYamlListenAddress -Path $cfg -ListenAddress $listenAddress
                 $appParameters = Get-ObservabilityExporterAppParameters `
                     -ConfigFile $cfg `
                     -WebConfigFile $web `
