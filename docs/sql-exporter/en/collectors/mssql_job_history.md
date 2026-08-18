@@ -5,8 +5,8 @@
 - File: `collector/mssql_job_history.collector.yml`
 - collector_name: `mssql_job_history`
 - min_interval: `120s`
-- metric count: `8`
-- shared query_ref values: `mssql_job_history_avg_success_24h`, `mssql_job_history_failed_recent`, `mssql_job_history_failed_total`, `mssql_job_history_last`, `mssql_job_history_runs`
+- metric count: `9`
+- shared query_ref values: `mssql_job_history_avg_success_24h`, `mssql_job_history_avg_success_30d`, `mssql_job_history_failed_recent`, `mssql_job_history_failed_total`, `mssql_job_history_last`, `mssql_job_history_runs`
 
 ## Purpose
 
@@ -43,6 +43,7 @@
 | `mssql_job_history_last_run_timestamp` | `gauge` | `job_name`, `category_name`, `run_status_desc`, `run_date`, `run_time` | `run_unix` | query_ref=`mssql_job_history_last` | Unix seconds of the most recent job outcome start; prefer run_date/run_time labels for display. |
 | `mssql_job_history_failed_duration_seconds` | `gauge` | `job_name`, `category_name`, `run_date` (YYYY-MM-DD), `run_time` (HH:MM:SS), `message_snip` | `duration_seconds` | query_ref=`mssql_job_history_failed_recent` | Recent failed job outcomes (last 24h), TOP 40 by finish time. |
 | `mssql_job_history_avg_duration_seconds_24h` | `gauge` | `job_name`, `category_name` | `avg_duration_seconds` | query_ref=`mssql_job_history_avg_success_24h` | Average successful job duration (seconds) in last 24h (step_id=0, run_status=1). |
+| `mssql_job_history_avg_duration_seconds_30d` | `gauge` | `job_name`, `category_name` | `avg_duration_seconds` | query_ref=`mssql_job_history_avg_success_30d` | Average successful job duration (seconds) in last 30d (step_id=0, run_status=1, duration>=60s). Limited by Agent history retention. |
 
 ## Operational notes
 

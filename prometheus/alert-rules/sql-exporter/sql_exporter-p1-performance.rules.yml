@@ -42,6 +42,19 @@ groups:
           description: "Transaction log for {{ $labels.db }} is {{ $value | humanize }}% used."
           runbook: "Check log_reuse_wait, long transactions, AG/replication lag, and log backup schedule."
 
+      - alert: SqlSystemDbTransactionLogUsageHigh
+        expr: mssql_log_used_percent_system{db=~"tempdb|msdb"} > 80
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_log_usage
+        annotations:
+          summary: "System database transaction log usage is high"
+          description: "Transaction log for system database {{ $labels.db }} is {{ $value | humanize }}% used."
+          runbook: "Check tempdb/msdb log reuse wait, long transactions, and log growth. master/model are tracked separately and do not fire this alert."
+
       - alert: SqlBlockingPersistent
         expr: mssql_blocking_count > 0
         for: 5m

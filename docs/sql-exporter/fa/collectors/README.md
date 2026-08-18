@@ -33,7 +33,7 @@
 | `mssql_job_running.md` | `30s` | `5` | jobهای در حال اجرای SQL Agent (+ وضعیت سرویس Agent) |
 | `mssql_locks.md` | `30s` | `7` | فهرست lockها و lockهای در انتظار |
 | `mssql_log_shipping.md` | `60s` | `6` | تأخیر Log Shipping ثانویه / سن restore / copy lag / آستانه‌ها |
-| `mssql_log_usage.md` | `60s` | `3` | مصرف transaction log — مشترک برای DWH و OLTP |
+| `mssql_log_usage.md` | `60s` | `6` | مصرف transaction log — مشترک برای DWH و OLTP |
 | `mssql_memory.md` | `60s` | `16` | متریک‌های حافظه برای Microsoft SQL Server |
 | `mssql_missing_index.md` | `600s` | `11` | نمونه DMV ایندکس‌های گمشده (TOP N با محدودیت cardinality) |
 | `mssql_parallelism.md` | `60s` | `6` | waitها، تنظیمات و درخواست‌های فعال مرتبط با parallelism |

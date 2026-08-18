@@ -53,7 +53,8 @@ Every alert carries these labels:
 |---|---|---|---|
 | `SqlServerCpuHigh` | p1-performance | CPU > 80% | 10m |
 | `SqlFileIoLatencyHigh` | p1-performance | latency > 20ms | 10m |
-| `SqlTransactionLogUsageHigh` | p1-performance | log used > 80% | 10m |
+| `SqlTransactionLogUsageHigh` | p1-performance | user-db log used > 80% | 10m |
+| `SqlSystemDbTransactionLogUsageHigh` | p1-performance | tempdb/msdb log used > 80% | 10m |
 | `SqlBlockingPersistent` | p1-performance | blocking > 0 | 5m |
 | `SqlMemoryGrantPressure` | p1-performance | pending grants > 0 | 5m |
 | `SqlTempdbPressure` | p1-performance | waiters or version store > 10 GiB | 10m |

@@ -85,7 +85,7 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 | `-Computers` | (الزامی) | نام سرورها یا لیست از فایل |
 | `-SourceRoot` | ریشه پکیج | مسیر پکیج روی کلاینت |
 | `-InstallRoot` | مسیر Program Files بالا | مسیر نصب روی مقصد |
-| `-ListenAddress` | `:9182` | آدرس/پورت scrape (`--web.listen-address`) |
+| `-ListenAddress` | `:9182` | آدرس/پورت scrape (`--web.listen-address` و `web.listen-address` در YAML کانفیگ فعال) |
 | `-WebConfigPath` | — | deploy فایل `web-config.yml` سفارشی از کلاینت |
 | `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | فعال‌سازی Basic Auth هنگام نصب (hash پیشنهادی؛ رمز نیاز به Python + `bcrypt` روی کلاینت) |
 | `-Profile` / `-AutoProfile` | — | انتخاب کانفیگ نقش |
@@ -179,7 +179,7 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 | `-Computers` | (الزامی) | سرورهای هدف |
 | `-ExpectedVersion` | `0.31.8` | نسخه مورد انتظار باینری پکیج و پس از نصب |
 | `-InstallRoot` | (تشخیص خودکار) | فقط اگر مسیر exe قابل تشخیص نباشد |
-| `-ListenAddress` | (خالی = حفظ سرویس) | override `--web.listen-address` |
+| `-ListenAddress` | (خالی = حفظ سرویس) | override `--web.listen-address` و `web.listen-address` در YAML |
 | `-WebConfigPath` | — | deploy `web-config.yml` سفارشی |
 | `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | فعال‌سازی یا جایگزینی Basic Auth |
 | `-PreserveWebConfig` | خاموش | حفظ `web-config.yml` ریموت؛ با web-config/Basic Auth ترکیب نشود |

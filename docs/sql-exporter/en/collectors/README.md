@@ -33,7 +33,7 @@ This folder contains a dedicated guide for each collector.
 | `mssql_job_running.md` | `30s` | `5` | Currently running SQL Agent jobs (+ Agent service state). |
 | `mssql_locks.md` | `30s` | `7` | Lock inventory and waiting locks. |
 | `mssql_log_shipping.md` | `60s` | `6` | Log Shipping secondary lag / restore age / copy lag / thresholds. |
-| `mssql_log_usage.md` | `60s` | `3` | Transaction log usage — shared for DWH and OLTP. |
+| `mssql_log_usage.md` | `60s` | `6` | Transaction log usage — shared for DWH and OLTP. |
 | `mssql_memory.md` | `60s` | `16` | Memory metrics for Microsoft SQL Server. |
 | `mssql_missing_index.md` | `600s` | `11` | Missing index DMV sample (TOP N) + cost/compiles + per-DB rollup. |
 | `mssql_parallelism.md` | `60s` | `6` | Parallelism related waits, configs, and active parallel requests. |

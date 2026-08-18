@@ -53,7 +53,8 @@
 |---|---|---|---|
 | `SqlServerCpuHigh` | p1-performance | CPU > ۸۰٪ | 10m |
 | `SqlFileIoLatencyHigh` | p1-performance | latency > ۲۰ms | 10m |
-| `SqlTransactionLogUsageHigh` | p1-performance | log used > ۸۰٪ | 10m |
+| `SqlTransactionLogUsageHigh` | p1-performance | log used دیتابیس کاربری > ۸۰٪ | 10m |
+| `SqlSystemDbTransactionLogUsageHigh` | p1-performance | log used برای tempdb/msdb > ۸۰٪ | 10m |
 | `SqlBlockingPersistent` | p1-performance | blocking > 0 | 5m |
 | `SqlMemoryGrantPressure` | p1-performance | pending grants > 0 | 5m |
 | `SqlTempdbPressure` | p1-performance | waiters یا version store > ۱۰ GiB | 10m |

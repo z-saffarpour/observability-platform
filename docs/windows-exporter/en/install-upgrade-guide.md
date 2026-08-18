@@ -84,7 +84,7 @@ C:\Program Files\Observability\PrometheusExporters\windows-exporter
 | `-Computers` | (required) | Host names or list from a file |
 | `-SourceRoot` | package root | Package path on the client |
 | `-InstallRoot` | Program Files path above | Install path on the target |
-| `-ListenAddress` | `:9182` | Scrape address/port (`--web.listen-address`) |
+| `-ListenAddress` | `:9182` | Scrape address/port (`--web.listen-address` and `web.listen-address` in the active YAML) |
 | `-WebConfigPath` | — | Deploy a custom `web-config.yml` from the client |
 | `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | Enable Basic Auth during install (hash recommended; password needs Python + `bcrypt` on client) |
 | `-Profile` / `-AutoProfile` | — | Role config selection |
@@ -172,7 +172,7 @@ Script: `scripts/powershell/windows-exporter/Upgrade-WindowsExporterRemote.ps1`
 | `-Computers` | (required) | Target hosts |
 | `-ExpectedVersion` | `0.31.8` | Expected package and post-install version |
 | `-InstallRoot` | (auto-detect) | Only if the exe path cannot be detected |
-| `-ListenAddress` | (empty = preserve service) | Override `--web.listen-address` |
+| `-ListenAddress` | (empty = preserve service) | Override `--web.listen-address` and `web.listen-address` in YAML |
 | `-WebConfigPath` | — | Deploy custom `web-config.yml` |
 | `-BasicAuthUsername` / `-BasicAuthHash` / `-BasicAuthPassword` | — | Enable or replace Basic Auth |
 | `-PreserveWebConfig` | off | Keep remote `web-config.yml`; mutually exclusive with web-config/Basic Auth params |

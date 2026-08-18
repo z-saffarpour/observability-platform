@@ -4059,7 +4059,7 @@
             "type": "prometheus",
             "uid": "ce0xqwhy35wqod"
           },
-          "description": "Duration = elapsed run time. Started = start_execution_date (mssql_job_running_start_timestamp; ms for Grafana). Avg 24h = mean success duration (skips under 60s).",
+          "description": "Duration = elapsed run time. Started = start_execution_date (mssql_job_running_start_timestamp; ms for Grafana). Avg 24h / Avg 30d = mean success duration (skips under 60s).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4142,6 +4142,59 @@
                 "matcher": {
                   "id": "byName",
                   "options": "Avg 24h"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dtdhms"
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "left"
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "basic",
+                      "type": "color-background"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "green",
+                          "value": null
+                        },
+                        {
+                          "color": "orange",
+                          "value": 1800
+                        },
+                        {
+                          "color": "red",
+                          "value": 3600
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "thresholds"
+                    }
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Avg 30d"
                 },
                 "properties": [
                   {
@@ -4465,6 +4518,19 @@
               "legendFormat": "",
               "range": false,
               "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+              },
+              "editorMode": "code",
+              "expr": "(mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\", enabled=~\"${enabled:regex}\"} * 0 + on(instance, job_name, category_name) group_left() mssql_job_history_avg_duration_seconds_30d{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "E"
             }
           ],
           "title": "Jobs Currently Running (Duration vs Avg)",
@@ -4494,7 +4560,8 @@
                 "indexByName": {
                   "Value #A": 6,
                   "Value #B": 7,
-                  "Value #C": 8,
+                  "Value #E": 8,
+                  "Value #C": 9,
                   "Value #D": 5,
                   "category_name": 1,
                   "enabled": 4,
@@ -4508,6 +4575,7 @@
                   "Value #B": "Avg 24h",
                   "Value #C": "Ratio",
                   "Value #D": "Started",
+                  "Value #E": "Avg 30d",
                   "category_name": "Category",
                   "enabled": "Enabled",
                   "instance": "Server",
@@ -4523,11 +4591,12 @@
                 "excludeByName": {},
                 "indexByName": {
                   "Avg 24h": 7,
+                  "Avg 30d": 8,
                   "Category": 1,
                   "Duration": 6,
                   "Enabled": 4,
                   "Job": 2,
-                  "Ratio": 8,
+                  "Ratio": 9,
                   "Server": 0,
                   "Started": 5,
                   "Step": 3
@@ -4932,6 +5001,59 @@
               {
                 "matcher": {
                   "id": "byName",
+                  "options": "Avg 30d"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dtdhms"
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "left"
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "basic",
+                      "type": "color-background"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "green",
+                          "value": null
+                        },
+                        {
+                          "color": "orange",
+                          "value": 1800
+                        },
+                        {
+                          "color": "red",
+                          "value": 3600
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "thresholds"
+                    }
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
                   "options": "Ratio"
                 },
                 "properties": [
@@ -5140,6 +5262,19 @@
               "legendFormat": "",
               "range": false,
               "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+              },
+              "editorMode": "code",
+              "expr": "(((mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\", enabled=~\"${enabled:regex}\"} * 0 + on(instance, job_name, category_name) group_left() mssql_job_history_avg_duration_seconds_30d{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\"})) and on(instance, job_name, category_name, step_id, step_name, enabled) (((mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\", enabled=~\"${enabled:regex}\"} > on(instance, job_name, category_name) group_left() (mssql_job_history_avg_duration_seconds_24h{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\"} * $over_avg_factor) and on(instance, job_name, category_name) (mssql_job_history_avg_duration_seconds_24h{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\"} > 60)) or (mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\", enabled=~\"${enabled:regex}\"} >= 1800 unless on(instance, job_name, category_name) (mssql_job_history_avg_duration_seconds_24h{job=\"sql_exporter\", instance=~\"$instance\", category_name=~\"${category:regex}\", job_name=~\"${job_name:regex}\"} > 60)))))",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "E"
             }
           ],
           "title": "Jobs Over Avg (Duration vs Avg)",
@@ -5172,7 +5307,8 @@
                 "indexByName": {
                   "Value #A": 4,
                   "Value #B": 5,
-                  "Value #C": 6,
+                  "Value #E": 6,
+                  "Value #C": 7,
                   "Value #D": 3,
                   "category_name": 1,
                   "instance": 0,
@@ -5184,6 +5320,7 @@
                   "Value #B": "Avg 24h",
                   "Value #C": "Ratio",
                   "Value #D": "Started",
+                  "Value #E": "Avg 30d",
                   "category_name": "Category",
                   "instance": "Server",
                   "job_name": "Job",
@@ -5197,10 +5334,11 @@
                 "excludeByName": {},
                 "indexByName": {
                   "Avg 24h": 5,
+                  "Avg 30d": 6,
                   "Category": 1,
                   "Duration": 4,
                   "Job": 2,
-                  "Ratio": 6,
+                  "Ratio": 7,
                   "Server": 0,
                   "Started": 3
                 },
@@ -8236,6 +8374,59 @@
               {
                 "matcher": {
                   "id": "byName",
+                  "options": "Avg 30d"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "s"
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "left"
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "basic",
+                      "type": "color-background"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "green",
+                          "value": null
+                        },
+                        {
+                          "color": "orange",
+                          "value": 300
+                        },
+                        {
+                          "color": "red",
+                          "value": 1800
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "thresholds"
+                    }
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
                   "options": "Ratio"
                 },
                 "properties": [
@@ -8390,6 +8581,19 @@
               "legendFormat": "",
               "range": false,
               "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance, job_name, category_name) (mssql_job_history_avg_duration_seconds_30d{job=\"sql_exporter\", instance=~\"$instance\", job_name=~\"${job_name:regex}\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "D"
             }
           ],
           "title": "Jobs Over Avg (last duration)",
@@ -8419,6 +8623,7 @@
                   "Value #A": "Last Duration",
                   "Value #B": "Avg 24h",
                   "Value #C": "Ratio",
+                  "Value #D": "Avg 30d",
                   "instance": "Server",
                   "job_name": "Job"
                 }

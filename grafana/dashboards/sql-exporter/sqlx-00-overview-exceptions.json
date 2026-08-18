@@ -9388,7 +9388,7 @@
         "type": "prometheus",
         "uid": "ce0xqwhy35wqod"
       },
-      "description": "All currently running jobs with 24h success average and Runtime/Avg ratio.",
+      "description": "All currently running jobs with 24h and 30d success averages and Runtime/Avg 24h ratio.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -9466,6 +9466,55 @@
             "matcher": {
               "id": "byName",
               "options": "Avg 24h"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "rgba(50, 172, 45, 0.97)",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(237, 129, 40, 0.89)",
+                      "value": 1800
+                    },
+                    {
+                      "color": "rgba(245, 54, 54, 0.9)",
+                      "value": 3600
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg 30d"
             },
             "properties": [
               {
@@ -9868,6 +9917,19 @@
           "legendFormat": "",
           "range": false,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\"} * 0 + on(instance, job_name, category_name) group_left() mssql_job_history_avg_duration_seconds_30d{job=\"sql_exporter\", instance=~\"$instance\"}))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
         }
       ],
       "title": "Jobs Running",
@@ -9892,7 +9954,8 @@
             "indexByName": {
               "Value #A": 4,
               "Value #B": 5,
-              "Value #C": 6,
+              "Value #D": 6,
+              "Value #C": 7,
               "category_name": 1,
               "instance": 0,
               "job_name": 2,
@@ -9902,6 +9965,7 @@
               "Value #A": "Runtime",
               "Value #B": "Avg 24h",
               "Value #C": "Ratio",
+              "Value #D": "Avg 30d",
               "category_name": "Category",
               "instance": "Host",
               "job_name": "Job",
@@ -9915,10 +9979,11 @@
             "excludeByName": {},
             "indexByName": {
               "Avg 24h": 5,
+              "Avg 30d": 6,
               "Category": 1,
               "Host": 0,
               "Job": 2,
-              "Ratio": 6,
+              "Ratio": 7,
               "Runtime": 4,
               "Step": 3
             },
@@ -9945,7 +10010,7 @@
         "type": "prometheus",
         "uid": "ce0xqwhy35wqod"
       },
-      "description": "Jobs that exceeded their own 24h success average x Over Avg factor (or >=30m when no usable avg). Long jobs still within their normal average appear only in Jobs Running.",
+      "description": "Jobs that exceeded their own 24h success average x Over Avg factor (or >=30m when no usable avg). Avg 30d is the 30-day success mean for comparison. Long jobs still within their normal average appear only in Jobs Running.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -10023,6 +10088,55 @@
             "matcher": {
               "id": "byName",
               "options": "Avg 24h"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdhms"
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "rgba(50, 172, 45, 0.97)",
+                      "value": null
+                    },
+                    {
+                      "color": "rgba(237, 129, 40, 0.89)",
+                      "value": 1800
+                    },
+                    {
+                      "color": "rgba(245, 54, 54, 0.9)",
+                      "value": 3600
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg 30d"
             },
             "properties": [
               {
@@ -10425,6 +10539,19 @@
           "legendFormat": "",
           "range": false,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "((mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\"} * 0 + on(instance, job_name, category_name) group_left() mssql_job_history_avg_duration_seconds_30d{job=\"sql_exporter\", instance=~\"$instance\"}) and on(instance, job_name, category_name, step_id, step_name, enabled) (((mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\"} > on(instance, job_name, category_name) group_left() (mssql_job_history_avg_duration_seconds_24h{job=\"sql_exporter\", instance=~\"$instance\"} * $over_avg_factor) and on(instance, job_name, category_name) (mssql_job_history_avg_duration_seconds_24h{job=\"sql_exporter\", instance=~\"$instance\"} > 60)) or (mssql_job_running_seconds{job=\"sql_exporter\", instance=~\"$instance\"} >= 1800 unless on(instance, job_name, category_name) (mssql_job_history_avg_duration_seconds_24h{job=\"sql_exporter\", instance=~\"$instance\"} > 60)))))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
         }
       ],
       "title": "Jobs Over Avg",
@@ -10449,7 +10576,8 @@
             "indexByName": {
               "Value #A": 4,
               "Value #B": 5,
-              "Value #C": 6,
+              "Value #D": 6,
+              "Value #C": 7,
               "category_name": 1,
               "instance": 0,
               "job_name": 2,
@@ -10459,6 +10587,7 @@
               "Value #A": "Runtime",
               "Value #B": "Avg 24h",
               "Value #C": "Ratio",
+              "Value #D": "Avg 30d",
               "category_name": "Category",
               "instance": "Host",
               "job_name": "Job",
@@ -10472,10 +10601,11 @@
             "excludeByName": {},
             "indexByName": {
               "Avg 24h": 5,
+              "Avg 30d": 6,
               "Category": 1,
               "Host": 0,
               "Job": 2,
-              "Ratio": 6,
+              "Ratio": 7,
               "Runtime": 4,
               "Step": 3
             },

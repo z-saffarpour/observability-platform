@@ -261,7 +261,7 @@ These files have been moved to `sql_exporter_removed/`; their unique content has
 | `mssql_parallelism` | 60s | parallelism waits, MAXDOP/memory config, DOP + grant |
 | `mssql_job_running` | 30s | Agent service + running jobs (+ step) |
 | `mssql_job_failed` | 60s | job failures (1h/24h) + last fail + current failed |
-| `mssql_job_history` | 120s | execution history / last duration / avg success |
+| `mssql_job_history` | 120s | execution history / last duration / avg success 24h+30d |
 | `mssql_database_space` | 300s | used/free, max_size, autogrowth, VLF |
 | `mssql_database_integrity` | 3600s | suspect_pages + age of last CHECKDB |
 | `mssql_scheduler` | 30s | runnable / work_queue / CPU topology |
