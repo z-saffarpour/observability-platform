@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "127.0.0.1:9093"
+
+rule_files:
+  - "../alert-rules/sql-exporter/*.rules.yml"
+  - "../alert-rules/windows-exporter/*.rules.yml"
+  - "../recording-rules/sql-exporter/*.rules.yml"
+  - "../recording-rules/windows-exporter/*.rules.yml"
+
+scrape_configs:
+  - job_name: prometheus
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "127.0.0.1:9090"
+
+  - job_name: windows_exporter
+    metrics_path: /metrics
+    basic_auth:
+      username: prometheus_user
+      password_file: "../secrets/windows-exporter-password"
+    file_sd_configs:
+      - files:
+          - "../targets/windows_exporter/*.json"
+
+  - job_name: sql_exporter
+    scrape_interval: 90s
+    scrape_timeout: 60s
+    metrics_path: /metrics
+    basic_auth:
+      username: prometheus_user
+      password_file: "../secrets/sql-exporter-password"
+    file_sd_configs:
+      - files:
+          - "../targets/sql_exporter/*.json"
