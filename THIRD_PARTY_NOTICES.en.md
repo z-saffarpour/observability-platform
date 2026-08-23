@@ -6,6 +6,26 @@ This repository redistributes the following third-party binaries for deployment
 convenience. These components remain subject to their respective upstream
 licenses; the repository's primary license does not replace those licenses.
 
+## Prometheus and Promtool
+
+- Version: `3.14.0`
+- Platforms: `windows/amd64` and `linux/amd64`
+- Windows paths: `prometheus/bin/windows-amd64/prometheus.exe` and `prometheus/bin/windows-amd64/promtool.exe`
+- Linux paths: `prometheus/bin/linux-amd64/prometheus` and `prometheus/bin/linux-amd64/promtool`
+- License: Apache License 2.0
+- Copyright: Copyright 2012-2015 The Prometheus Authors
+- Source code and license: <https://github.com/prometheus/prometheus/tree/v3.14.0>
+- Windows Prometheus SHA-256: `CDAC9D751A8B5DC978F9D1C1B708185F98EA3A4E42ECA6E0B2C8EBF4CB472EEB`
+- Windows Promtool SHA-256: `78B0D964CE421256AE3FAB858194F890541553D59FEBA0E5AE24550A1704197A`
+- Linux Prometheus SHA-256: `30576B9BD5FC4E4FAA8BDA23CB29F48A24CA27CBE9788C392CCF403F945163DC`
+- Linux Promtool SHA-256: `9C752BB87EEC945B2D7797D20815E2DC54B0D3FED2D2F17DF019DBD74560F743`
+
+The complete Apache License 2.0 terms and upstream attribution notices,
+including notices for third-party components embedded in the web UI, are kept
+in the `LICENSE` and `NOTICE` files next to each platform's binaries. The
+`NOTICE` file is part of Prometheus's redistribution requirements and must
+remain with the binaries.
+
 ## windows_exporter
 
 - Version: `0.31.8`

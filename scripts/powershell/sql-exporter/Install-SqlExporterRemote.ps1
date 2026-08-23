@@ -16,7 +16,7 @@
     - exporters\sql-exporter\bin\sql_exporter.exe
     - exporters\sql-exporter\config\sql_exporter.yml
     - exporters\sql-exporter\config\web-config.yml
-    - exporters\sql-exporter\version\sql_exporter_version
+    - exporters\sql-exporter\bin\sql_exporter_version.ini
     - profiles\*.yml
     - collector\*.collector.yml (deployed as collectors\ unless -SkipCollectors)
 
@@ -209,7 +209,7 @@ function Resolve-SourceLayout {
     $exe = Join-Path $resolvedRoot 'bin\sql_exporter.exe'
     $cfg = Join-Path $resolvedRoot 'config\sql_exporter.yml'
     $web = Join-Path $resolvedRoot 'config\web-config.yml'
-    $version = Join-Path $resolvedRoot 'version\sql_exporter_version.ini'
+    $version = Join-Path $resolvedRoot 'bin\sql_exporter_version.ini'
     $collector = Join-Path $resolvedRoot 'collector'
     $profiles = Join-Path $resolvedRoot 'profiles'
     $nssm = Join-Path $projectRoot 'deployment\windows\tools\nssm\nssm.exe'
@@ -629,15 +629,14 @@ foreach ($computer in $Computers) {
 
             $binDir = Join-Path $InstallPath 'bin'
             $configDir = Join-Path $InstallPath 'config'
-            $versionDir = Join-Path $InstallPath 'version'
             $logDir = Join-Path $InstallPath 'log'
-            foreach ($dir in @($binDir, $configDir, $versionDir, $logDir)) {
+            foreach ($dir in @($binDir, $configDir, $logDir)) {
                 New-Item -Path $dir -ItemType Directory -Force | Out-Null
             }
             Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter.exe') -Destination (Join-Path $binDir 'sql_exporter.exe') -Force
             Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter.yml') -Destination (Join-Path $configDir 'sql_exporter.yml') -Force
             Copy-Item -LiteralPath (Join-Path $StageDir 'web-config.yml') -Destination (Join-Path $configDir 'web-config.yml') -Force
-            Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter_version.ini') -Destination (Join-Path $versionDir 'sql_exporter_version.ini') -Force
+            Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter_version.ini') -Destination (Join-Path $binDir 'sql_exporter_version.ini') -Force
 
             $targetProfiles = Join-Path $InstallPath 'profiles'
             if (Test-Path -LiteralPath $targetProfiles) {

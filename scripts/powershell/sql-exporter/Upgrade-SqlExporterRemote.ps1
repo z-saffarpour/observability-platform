@@ -190,7 +190,7 @@ $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
 $exporterSource = Join-Path $SourceRoot 'exporters\sql-exporter'
 $SourceExe = Join-Path $exporterSource 'bin\sql_exporter.exe'
 $sourceWebConfig = Join-Path $exporterSource 'config\web-config.yml'
-$sourceVersionFile = Join-Path $exporterSource 'version\sql_exporter_version.ini'
+$sourceVersionFile = Join-Path $exporterSource 'bin\sql_exporter_version.ini'
 $sourceCollectors = Join-Path $exporterSource 'collector'
 $sourceProfiles = Join-Path $exporterSource 'profiles'
 $sourceNssm = Join-Path $SourceRoot 'deployment\windows\tools\nssm\nssm.exe'
@@ -431,8 +431,7 @@ foreach ($computer in $Computers) {
 
                 $binDir = Join-Path $installPath 'bin'
                 $configDir = Join-Path $installPath 'config'
-                $versionDir = Join-Path $installPath 'version'
-                foreach ($dir in @($binDir, $configDir, $versionDir)) {
+                foreach ($dir in @($binDir, $configDir)) {
                     New-Item -Path $dir -ItemType Directory -Force | Out-Null
                 }
                 $targetExe = Join-Path $binDir 'sql_exporter.exe'
@@ -445,7 +444,7 @@ foreach ($computer in $Computers) {
                 elseif (-not (Test-Path -LiteralPath $webPath -PathType Leaf)) {
                     throw "Remote web-config.yml was not found at $webPath and -PreserveWebConfig was set."
                 }
-                Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter_version.ini') -Destination (Join-Path $versionDir 'sql_exporter_version.ini') -Force
+                Copy-Item -LiteralPath (Join-Path $StageDir 'sql_exporter_version.ini') -Destination (Join-Path $binDir 'sql_exporter_version.ini') -Force
                 if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf)) {
                     $legacyConfig = Join-Path $installPath 'sql_exporter.yml'
                     if (-not (Test-Path -LiteralPath $legacyConfig -PathType Leaf)) {

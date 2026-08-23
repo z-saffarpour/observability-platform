@@ -6,6 +6,25 @@
 مؤلفه‌ها تحت مجوز پروژهٔ اصلی خود باقی می‌مانند و مجوز اصلی این مخزن جایگزین
 مجوز آن‌ها نمی‌شود.
 
+## Prometheus و Promtool
+
+- نسخه: `3.14.0`
+- پلتفرم‌ها: `windows/amd64` و `linux/amd64`
+- مسیرهای Windows: `prometheus/bin/windows-amd64/prometheus.exe` و `prometheus/bin/windows-amd64/promtool.exe`
+- مسیرهای Linux: `prometheus/bin/linux-amd64/prometheus` و `prometheus/bin/linux-amd64/promtool`
+- مجوز: Apache License 2.0
+- صاحبان حق نشر: Copyright 2012-2015 The Prometheus Authors
+- کد منبع و مجوز: <https://github.com/prometheus/prometheus/tree/v3.14.0>
+- SHA-256 فایل Prometheus در Windows: `CDAC9D751A8B5DC978F9D1C1B708185F98EA3A4E42ECA6E0B2C8EBF4CB472EEB`
+- SHA-256 فایل Promtool در Windows: `78B0D964CE421256AE3FAB858194F890541553D59FEBA0E5AE24550A1704197A`
+- SHA-256 فایل Prometheus در Linux: `30576B9BD5FC4E4FAA8BDA23CB29F48A24CA27CBE9788C392CCF403F945163DC`
+- SHA-256 فایل Promtool در Linux: `9C752BB87EEC945B2D7797D20815E2DC54B0D3FED2D2F17DF019DBD74560F743`
+
+نسخهٔ کامل Apache License 2.0 و اعلان‌های انتساب بالادستی، شامل مؤلفه‌های
+شخص ثالث تعبیه‌شده در رابط وب، به‌ترتیب در فایل‌های `LICENSE` و `NOTICE` کنار
+باینری‌های هر پلتفرم نگهداری می‌شوند. فایل `NOTICE` بخشی از الزامات بازتوزیع
+Prometheus است و باید همراه باینری‌ها باقی بماند.
+
 ## windows_exporter
 
 - نسخه: `0.31.8`

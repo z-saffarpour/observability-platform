@@ -107,7 +107,7 @@ $itemSources = @{
     'windows_exporter.exe' = Join-Path $exporterSource 'bin\windows_exporter.exe'
     'windows_exporter.yml' = Join-Path $exporterSource 'config\windows_exporter.yml'
     'web-config.yml'       = Join-Path $exporterSource 'config\web-config.yml'
-    'windows_exporter_version.ini' = Join-Path $exporterSource 'version\windows_exporter_version.ini'
+    'windows_exporter_version.ini' = Join-Path $exporterSource 'bin\windows_exporter_version.ini'
     'nssm.exe' = Join-Path $SourceRoot 'deployment\windows\tools\nssm\nssm.exe'
 }
 foreach ($item in $items) { if (-not (Test-Path -LiteralPath $itemSources[$item] -PathType Leaf)) { throw "Missing package file: $($itemSources[$item])" } }
@@ -349,7 +349,7 @@ foreach ($computer in $Computers) {
             $accountApplied = $false
             try {
                 if ($service.State -ne 'Stopped') { Stop-Service $Name -Force; Wait-State 'Stopped' }
-                foreach ($dir in @($binDir,$configDir,$versionDir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+                foreach ($dir in @($binDir,$configDir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
                 $target = Join-Path $binDir 'windows_exporter.exe'
                 Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter.exe') -Destination $target -Force
                 Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter.yml') -Destination (Join-Path $configDir 'windows_exporter.yml') -Force
@@ -360,7 +360,7 @@ foreach ($computer in $Computers) {
                 elseif (-not (Test-Path -LiteralPath $web -PathType Leaf)) {
                     throw "Remote web-config.yml was not found at $web and -PreserveWebConfig was set."
                 }
-                Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter_version.ini') -Destination (Join-Path $versionDir 'windows_exporter_version.ini') -Force
+                Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter_version.ini') -Destination (Join-Path $binDir 'windows_exporter_version.ini') -Force
                 $nssmDir = 'C:\Program Files\Observability\Tools\NSSM'
                 New-Item -Path $nssmDir -ItemType Directory -Force | Out-Null
                 $nssmTarget = Join-Path $nssmDir 'nssm.exe'

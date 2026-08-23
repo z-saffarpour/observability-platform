@@ -101,7 +101,7 @@ $packageSources = @{
     'windows_exporter.exe' = Join-Path $exporterSource 'bin\windows_exporter.exe'
     'windows_exporter.yml' = Join-Path $exporterSource 'config\windows_exporter.yml'
     'web-config.yml'       = Join-Path $exporterSource 'config\web-config.yml'
-    'windows_exporter_version.ini' = Join-Path $exporterSource 'version\windows_exporter_version.ini'
+    'windows_exporter_version.ini' = Join-Path $exporterSource 'bin\windows_exporter_version.ini'
     'nssm.exe' = Join-Path $SourceRoot 'deployment\windows\tools\nssm\nssm.exe'
 }
 foreach ($item in $package) {
@@ -256,12 +256,11 @@ foreach ($computer in $Computers) {
             }
             $binDir = Join-Path $Root 'bin'
             $configDir = Join-Path $Root 'config'
-            $versionDir = Join-Path $Root 'version'
-            foreach ($dir in @($binDir,$configDir,$versionDir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+            foreach ($dir in @($binDir,$configDir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
             Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter.exe') -Destination (Join-Path $binDir 'windows_exporter.exe') -Force
             Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter.yml') -Destination (Join-Path $configDir 'windows_exporter.yml') -Force
             Copy-Item -LiteralPath (Join-Path $Stage 'web-config.yml') -Destination (Join-Path $configDir 'web-config.yml') -Force
-            Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter_version.ini') -Destination (Join-Path $versionDir 'windows_exporter_version.ini') -Force
+            Copy-Item -LiteralPath (Join-Path $Stage 'windows_exporter_version.ini') -Destination (Join-Path $binDir 'windows_exporter_version.ini') -Force
             $nssmDir = 'C:\Program Files\Observability\Tools\NSSM'
             New-Item -Path $nssmDir -ItemType Directory -Force | Out-Null
             $nssmTarget = Join-Path $nssmDir 'nssm.exe'
