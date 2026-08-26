@@ -25,6 +25,19 @@
 باینری‌های هر پلتفرم نگهداری می‌شوند. فایل `NOTICE` بخشی از الزامات بازتوزیع
 Prometheus است و باید همراه باینری‌ها باقی بماند.
 
+## Alertmanager و Amtool
+
+- نسخه: `0.33.1`
+- پلتفرم‌ها: `windows/amd64` و `linux/amd64`
+- مسیر Windows: `alertmanager/bin/windows-amd64/`
+- مسیر Linux: `alertmanager/bin/linux-amd64/`
+- مجوز: Apache License 2.0
+- کد منبع و مجوز: <https://github.com/prometheus/alertmanager/tree/v0.33.1>
+- SHA-256 فایل Alertmanager در Windows: `65FD4D6B882ABCD5BB7059D55A359419D99DDA19BC7BBE946E41D674540D6C07`
+- SHA-256 فایل Alertmanager در Linux: `1205A5C7A816F0FA8EE1C0EA4C26B4BDCBC64902996C1CF7C721B6DCE93A1218`
+
+فایل‌های `LICENSE` و `NOTICE` بالادستی کنار باینری‌های هر پلتفرم نگهداری می‌شوند.
+
 ## windows_exporter
 
 - نسخه: `0.31.8`

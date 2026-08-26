@@ -26,6 +26,19 @@ in the `LICENSE` and `NOTICE` files next to each platform's binaries. The
 `NOTICE` file is part of Prometheus's redistribution requirements and must
 remain with the binaries.
 
+## Alertmanager and Amtool
+
+- Version: `0.33.1`
+- Platforms: `windows/amd64` and `linux/amd64`
+- Windows path: `alertmanager/bin/windows-amd64/`
+- Linux path: `alertmanager/bin/linux-amd64/`
+- License: Apache License 2.0
+- Source and license: <https://github.com/prometheus/alertmanager/tree/v0.33.1>
+- Windows Alertmanager SHA-256: `65FD4D6B882ABCD5BB7059D55A359419D99DDA19BC7BBE946E41D674540D6C07`
+- Linux Alertmanager SHA-256: `1205A5C7A816F0FA8EE1C0EA4C26B4BDCBC64902996C1CF7C721B6DCE93A1218`
+
+Upstream `LICENSE` and `NOTICE` files are retained beside each platform's binaries.
+
 ## windows_exporter
 
 - Version: `0.31.8`
