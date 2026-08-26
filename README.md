@@ -11,7 +11,7 @@
 | [`exporters/sql-exporter/`](exporters/sql-exporter/) | باینری، تنظیمات، پروفایل‌ها و collectorهای SQL Exporter |
 | [`exporters/windows-exporter/`](exporters/windows-exporter/) | باینری، تنظیمات و پروفایل‌های Windows Exporter |
 | [`prometheus/`](prometheus/) | scrape configها، recording ruleها و alert ruleها، تفکیک‌شده بر اساس exporter |
-| [`grafana/dashboards/`](grafana/dashboards/) | داشبوردهای Grafana برای SQL و Windows Exporter |
+| [`grafana/`](grafana/) | باینری‌های تفکیک‌شدهٔ Windows/Linux، runtime مشترک، تنظیمات provisioning و داشبوردهای Grafana |
 | [`alertmanager/`](alertmanager/) | تنظیمات و templateهای Alertmanager برای هر exporter |
 | [`scripts/`](scripts/) | اسکریپت‌های PowerShell، SQL و SSAS برای نصب، ارتقا و عملیات |
 | [`deployment/`](deployment/) | ابزارها و دارایی‌های استقرار ویندوز |
@@ -25,6 +25,7 @@
 
 - SQL Server: [مستندات فارسی SQL Exporter](docs/sql-exporter/fa/README.md)
 - Windows و سرویس‌های مبتنی بر ویندوز: [مستندات فارسی Windows Exporter](docs/windows-exporter/fa/README.md)
+- نصب Grafana به‌صورت Windows Service: [راهنمای فارسی Grafana](docs/grafana/fa/installation.md)
 - اتصال ابزارهای هوشمند به Grafana و SQL Server: [راهنمای فارسی MCP](mcp/README.fa.md)
 
 فایل‌های اجرایی و تنظیمات هر exporter در `exporters/<exporter>/` قرار دارند، اما اسکریپت‌های عملیاتی در `scripts/` و تنظیمات سامانه‌های مرکزی در `prometheus/`، `grafana/` و `alertmanager/` نگه‌داری می‌شوند. فرمان‌ها را از ریشهٔ مخزن اجرا کنید، مگر اینکه در راهنمای مربوط خلاف آن ذکر شده باشد.
