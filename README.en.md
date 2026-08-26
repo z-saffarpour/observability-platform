@@ -23,6 +23,8 @@ This repository provides a unified home for monitoring Windows infrastructure an
 
 Choose the documentation set that matches your target:
 
+- Complete Windows or Linux setup: [installation and startup guide](docs/installation/en/README.md)
+- Alertmanager installation: [Windows](docs/installation/en/README.md#install-alertmanager-on-windows) · [Linux](docs/installation/en/README.md#install-alertmanager-on-linux)
 - SQL Server: [SQL Exporter documentation](docs/sql-exporter/en/README.md)
 - Windows and Windows-hosted services: [Windows Exporter documentation](docs/windows-exporter/en/README.md)
 - Grafana as a Windows service: [Grafana installation guide](docs/grafana/en/installation.md)

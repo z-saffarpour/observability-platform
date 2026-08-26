@@ -23,6 +23,8 @@
 
 بسته به هدف، از یکی از مسیرهای زیر شروع کنید:
 
+- نصب کامل بر اساس Windows یا Linux: [راهنمای نصب و راه‌اندازی](docs/installation/fa/README.md)
+- نصب Alertmanager: [بخش Alertmanager در راهنمای نصب](docs/installation/fa/README.md#۳-نصب-alertmanager)
 - SQL Server: [مستندات فارسی SQL Exporter](docs/sql-exporter/fa/README.md)
 - Windows و سرویس‌های مبتنی بر ویندوز: [مستندات فارسی Windows Exporter](docs/windows-exporter/fa/README.md)
 - نصب Grafana به‌صورت Windows Service: [راهنمای فارسی Grafana](docs/grafana/fa/installation.md)
