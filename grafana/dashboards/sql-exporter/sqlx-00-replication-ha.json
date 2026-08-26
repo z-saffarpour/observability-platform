@@ -1,0 +1,1307 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Fleet Replication & HA wallboard for large estates: aggregated AlwaysOn / transactional replication / WSFC KPIs, fleet counts (not per-server series), and top-50 exception tables. Deep dive: Collector alwayson, replication, hadr-cluster. Source: mssql_alwayson (30s), mssql_replication (60s), mssql_hadr_cluster.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "AlwaysOn",
+      "type": "link",
+      "url": "/d/sqlx-alwayson?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Replication",
+      "type": "link",
+      "url": "/d/sqlx-replication?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "HADR Cluster",
+      "type": "link",
+      "url": "/d/sqlx-hadr-cluster?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "CDC",
+      "type": "link",
+      "url": "/d/sqlx-cdc?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Live Ops",
+      "type": "link",
+      "url": "/d/sqlx-00-overview-ops?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "panels": [],
+      "title": "Health / KPI",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Availability groups with synchronization_health < HEALTHY, counted from PRIMARY replicas only.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Unhealthy AGs",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 0, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_group_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\"} < 2) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Unhealthy AGs",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Unhealthy AGs",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Replicas with connected_state = DISCONNECTED, PRIMARY view.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Disconnected",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 3, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_replica_connected_state{job=\"sql_exporter\", instance=~\"$instance\"} == 0) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Disconnected",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Disconnected",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Suspended AG databases, PRIMARY view.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Suspended",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 6, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "sum(((mssql_alwayson_is_suspended{job=\"sql_exporter\", instance=~\"$instance\"} == 1) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Suspended",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Suspended",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Replicas not failover-ready, PRIMARY view.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Not Failover Ready",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 9, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(((mssql_alwayson_is_failover_ready{job=\"sql_exporter\", instance=~\"$instance\"} == 0) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Not Failover Ready",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Not Failover Ready",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Distribution agents in fail or retry.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Dist Fail/Retry",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 12, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(mssql_replication_distribution_agent_status{job=\"sql_exporter\", instance=~\"$instance\", status_desc=~\"fail|retry\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Dist Fail/Retry",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Dist Fail/Retry",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Log Reader agents in fail or retry.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "LR Fail/Retry",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 15, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(mssql_replication_logreader_agent_status{job=\"sql_exporter\", instance=~\"$instance\", status_desc=~\"fail|retry\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "LR Fail/Retry",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "LR Fail/Retry",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "REPL-* Agent jobs whose last run outcome is fail.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Repl Jobs Failed",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 18, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(mssql_replication_agent_job_last_run_status{job=\"sql_exporter\", instance=~\"$instance\", last_run_outcome_desc=\"fail\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Repl Jobs Failed",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Repl Jobs Failed",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "WSFC clusters whose quorum_state is not normal (1).",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Quorum Not Normal",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 21, "y": 1 },
+      "hideTimeOverride": true,
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(count by (instance, cluster_name) (mssql_hadr_cluster_quorum_state{job=\"sql_exporter\", instance=~\"$instance\"} != 1)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Quorum Not Normal",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Quorum Not Normal",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Selected sql_exporter targets (mssql_up).",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "SQL Servers",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 0, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(mssql_up{job=\"sql_exporter\", instance=~\"$instance\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "SQL Servers",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "SQL Servers",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Instances scraping AlwaysOn replica role (HADR enabled in collector).",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "AG Servers",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 3, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(count by (instance) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\"})) or vector(0)",
+          "instant": true,
+          "legendFormat": "AG Servers",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "AG Servers",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Max secondary_lag_seconds across PRIMARY views.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Max AG Lag",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 30 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 6, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_secondary_lag_seconds{job=\"sql_exporter\", instance=~\"$instance\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max AG Lag",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Max AG Lag",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Max estimated data-loss seconds, PRIMARY view.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Max Data Loss",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 30 },
+              { "color": "red", "value": 120 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 9, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 13,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "max(((mssql_alwayson_estimated_data_loss_seconds{job=\"sql_exporter\", instance=~\"$instance\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Data Loss",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Data Loss",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Max Distribution Agent delivery_latency.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Max Dist Latency",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 12, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 14,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "max(mssql_replication_distributor_latency_seconds{job=\"sql_exporter\", instance=~\"$instance\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Dist Latency",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Dist Latency",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Max undelivered commands at Distributor.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Max Pending Cmds",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1000 },
+              { "color": "red", "value": 10000 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 15, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 15,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "max(mssql_replication_pending_commands{job=\"sql_exporter\", instance=~\"$instance\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Max Pending Cmds",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Max Pending Cmds",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "WSFC members with member_state = down (2).",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Members Down",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 18, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 16,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "count(mssql_hadr_cluster_member_state{job=\"sql_exporter\", instance=~\"$instance\"} == 2) or vector(0)",
+          "instant": true,
+          "legendFormat": "Members Down",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Members Down",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "AlwaysOn_health replica state-change events in 24h (PRIMARY). -1 series are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "Sync Flaps 24h",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 3, "x": 21, "y": 4 },
+      "hideTimeOverride": true,
+      "id": 17,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "expr": "sum((((mssql_alwayson_sync_state_flaps_24h{job=\"sql_exporter\", instance=~\"$instance\"}) and on(instance, availability_group_name) (mssql_alwayson_replica_role{job=\"sql_exporter\", instance=~\"$instance\", role_desc=\"PRIMARY\"} == 1)) >= 0)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Sync Flaps 24h",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Sync Flaps 24h",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+      "id": 20,
+      "panels": [],
+      "title": "AlwaysOn",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "All AG pairs by secondary lag. Column Server is sql_exporter instance. Click Server for Collector alwayson.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "filterable": true, "inspect": false, "minWidth": 96 },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Server" },
+            "properties": [
+              { "id": "custom.minWidth", "value": 180 },
+              { "id": "links", "value": [{ "title": "AlwaysOn", "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}" }] }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "AG" },
+            "properties": [{ "id": "custom.minWidth", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Database" },
+            "properties": [{ "id": "custom.minWidth", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Primary" },
+            "properties": [{ "id": "custom.minWidth", "value": 180 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Secondary" },
+            "properties": [{ "id": "custom.minWidth", "value": 180 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Lag" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.cellOptions", "value": { "mode": "basic", "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 30 }, { "color": "red", "value": 120 }] } },
+              { "id": "color", "value": { "mode": "thresholds" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Data loss" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.cellOptions", "value": { "mode": "basic", "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 30 }, { "color": "red", "value": 120 }] } },
+              { "id": "color", "value": { "mode": "thresholds" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 8 },
+      "id": 21,
+      "options": { "cellHeight": "md", "footer": { "show": false }, "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, availability_group_name, db, server_primary, server_secondary) (last_over_time(mssql_alwayson_secondary_lag_seconds{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, availability_group_name, db, server_primary, server_secondary) (last_over_time(mssql_alwayson_estimated_data_loss_seconds{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "AlwaysOn lag",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true },
+            "indexByName": { "Value #A": 6, "Value #B": 7, "availability_group_name": 2, "db": 3, "server": 0, "server_primary": 4, "server_secondary": 5 },
+            "renameByName": { "Value #A": "Lag", "Value #B": "Data loss", "availability_group_name": "AG", "db": "Database", "server": "Server", "server_primary": "Primary", "server_secondary": "Secondary" }
+          }
+        },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": true, "field": "Lag" }] } }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 25,
+      "panels": [],
+      "title": "Replication",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "All subscriptions by Distribution Agent latency and pending commands. Column Server is sql_exporter instance.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "filterable": true, "inspect": false, "minWidth": 96 },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Server" },
+            "properties": [
+              { "id": "custom.minWidth", "value": 180 },
+              { "id": "links", "value": [{ "title": "Replication", "url": "/d/sqlx-replication?${__url_time_range}&var-instance=${__value.raw}" }] }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Publisher" },
+            "properties": [{ "id": "custom.minWidth", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Publication" },
+            "properties": [{ "id": "custom.minWidth", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Subscriber" },
+            "properties": [{ "id": "custom.minWidth", "value": 140 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Dist latency" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.cellOptions", "value": { "mode": "basic", "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 60 }, { "color": "red", "value": 300 }] } },
+              { "id": "color", "value": { "mode": "thresholds" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Pending" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "mode": "basic", "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1000 }, { "color": "red", "value": 10000 }] } },
+              { "id": "color", "value": { "mode": "thresholds" } },
+              { "id": "decimals", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 35 },
+      "id": 22,
+      "options": { "cellHeight": "md", "footer": { "show": false }, "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, publisher, publication, subscriber, subscriber_db, subscription_type) (last_over_time(mssql_replication_distributor_latency_seconds{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, publisher, publication, subscriber, subscriber_db, subscription_type) (last_over_time(mssql_replication_pending_commands{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "Replication latency",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true },
+            "indexByName": { "Value #A": 7, "Value #B": 8, "publication": 3, "publisher": 2, "server": 0, "subscriber": 4, "subscriber_db": 5, "subscription_type": 6 },
+            "renameByName": { "Value #A": "Dist latency", "Value #B": "Pending", "publication": "Publication", "publisher": "Publisher", "server": "Server", "subscriber": "Subscriber", "subscriber_db": "Subscriber DB", "subscription_type": "Type" }
+          }
+        },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": true, "field": "Dist latency" }] } }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "All AlwaysOn replicas. Column Server is sql_exporter instance. Health 0/1/2 = NOT_HEALTHY / PARTIALLY / HEALTHY.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "filterable": true, "inspect": false, "minWidth": 96 },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Server" },
+            "properties": [{ "id": "links", "value": [{ "title": "AlwaysOn", "url": "/d/sqlx-alwayson?${__url_time_range}&var-instance=${__value.raw}" }] }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Health" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "mode": "basic", "type": "color-background" } },
+              { "id": "mappings", "value": [{ "options": { "0": { "color": "red", "index": 0, "text": "NOT_HEALTHY" }, "1": { "color": "orange", "index": 1, "text": "PARTIALLY" }, "2": { "color": "green", "index": 2, "text": "HEALTHY" } }, "type": "value" }] },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 1 }, { "color": "green", "value": 2 }] } },
+              { "id": "color", "value": { "mode": "thresholds" } },
+              { "id": "decimals", "value": 0 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Connected" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "mode": "basic", "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } },
+              { "id": "color", "value": { "mode": "thresholds" } },
+              { "id": "decimals", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 22 },
+      "id": 23,
+      "options": { "cellHeight": "md", "footer": { "show": false }, "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, availability_group_name, replica_server, role_desc) (last_over_time(mssql_alwayson_replica_synchronization_health{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, availability_group_name, replica_server, role_desc) (last_over_time(mssql_alwayson_replica_connected_state{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "AlwaysOn replica health",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true },
+            "indexByName": { "Value #A": 5, "Value #B": 6, "availability_group_name": 2, "replica_server": 3, "role_desc": 4, "server": 0 },
+            "renameByName": { "Value #A": "Health", "Value #B": "Connected", "availability_group_name": "AG", "replica_server": "Replica", "role_desc": "Role", "server": "Server" }
+          }
+        },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": false, "field": "Health" }] } }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "All Distribution and Log Reader agents. Column Server is sql_exporter instance.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "left", "cellOptions": { "type": "auto", "wrapText": true }, "filterable": true, "inspect": false, "minWidth": 96 },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Server" },
+            "properties": [{ "id": "links", "value": [{ "title": "Replication", "url": "/d/sqlx-replication?${__url_time_range}&var-instance=${__value.raw}" }] }]
+          }
+        ]
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 49 },
+      "id": 24,
+      "options": { "cellHeight": "md", "footer": { "show": false }, "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, publisher, publication, subscriber, subscriber_db, subscription_type, status_desc) (last_over_time(mssql_replication_distribution_agent_status{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "label_replace(max by (instance, publisher_db, agent_name, status_desc) (last_over_time(mssql_replication_logreader_agent_status{job=\"sql_exporter\", instance=~\"$instance\"}[5m])), \"server\", \"$1\", \"instance\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "Replication agents",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Value": true, "Value #A": true, "Value #B": true, "__name__": true, "instance": true, "job": true },
+            "indexByName": { "agent_name": 8, "publication": 3, "publisher": 2, "publisher_db": 7, "server": 0, "status_desc": 6, "subscriber": 4, "subscriber_db": 5, "subscription_type": 1 },
+            "renameByName": { "agent_name": "Agent", "publication": "Publication", "publisher": "Publisher", "publisher_db": "Publisher DB", "server": "Server", "status_desc": "Status", "subscriber": "Subscriber", "subscriber_db": "Subscriber DB", "subscription_type": "Type" }
+          }
+        },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "desc": false, "field": "Status" }] } }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
+      "id": 50,
+      "panels": [],
+      "title": "Cluster / HADR exceptions",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Quorum_state != normal (1).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Server" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  { "title": "HADR Cluster", "url": "/d/sqlx-hadr-cluster?${__url_time_range}&var-instance=${__value.raw}" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 62 },
+      "id": 51,
+      "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "max by (instance, cluster_name, quorum_type_desc, quorum_state_desc) (last_over_time(mssql_hadr_cluster_quorum_state{job=\"sql_exporter\", instance=~\"$instance\"}[5m]) != 1)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Quorum not normal",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "Value": true },
+            "indexByName": {
+              "instance": 0,
+              "cluster_name": 1,
+              "quorum_type_desc": 2,
+              "quorum_state_desc": 3
+            },
+            "renameByName": {
+              "cluster_name": "Cluster",
+              "instance": "Server",
+              "quorum_state_desc": "Quorum State",
+              "quorum_type_desc": "Quorum Type"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+      "description": "Cluster members down (state 2) or FCI nodes not up (status != 0).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Server" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  { "title": "HADR Cluster", "url": "/d/sqlx-hadr-cluster?${__url_time_range}&var-instance=${__value.raw}" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 62 },
+      "id": 52,
+      "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "max by (instance, cluster_name, member_name, member_type_desc, member_state_desc) (last_over_time(mssql_hadr_cluster_member_state{job=\"sql_exporter\", instance=~\"$instance\"}[5m]) == 2)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Cluster members down",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "Value": true },
+            "indexByName": {
+              "instance": 0,
+              "cluster_name": 1,
+              "member_name": 2,
+              "member_type_desc": 3,
+              "member_state_desc": 4
+            },
+            "renameByName": {
+              "cluster_name": "Cluster",
+              "instance": "Server",
+              "member_name": "Member",
+              "member_state_desc": "State",
+              "member_type_desc": "Type"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "overview",
+    "replication",
+    "alwayson",
+    "hadr"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": { "type": "prometheus", "uid": "ce0xqwhy35wqod" },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Replication & HA",
+  "uid": "sqlx-00-replication-ha"
+}
