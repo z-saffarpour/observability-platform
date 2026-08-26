@@ -56,6 +56,17 @@ remain with the binaries.
 The upstream project declares NSSM to be in the public domain and permits its
 binary and source code to be used unconditionally for any purpose.
 
+## Nginx for Windows
+
+- Version: `1.31.4` (mainline)
+- Path: `nginx/bin/windows-amd64/nginx.exe`
+- Platform: `windows/amd64`
+- Official package: <https://nginx.org/download/nginx-1.31.4.zip>
+- Binary SHA-256: `C0BD45DB13F40AC95B34346821B7BFCC608F3C9F17F2CE8C8F3D694C363735DF`
+- Archive SHA-256: `9217D06A62A357784BC7FEE6740CCEC985661E8CAA511444911350F04668E16A`
+
+The Nginx license and the bundled OpenSSL, PCRE, and zlib licenses are retained next to the binary.
+
 ## MIT License Text
 
 The following terms apply to the MIT-licensed components listed above. Each
