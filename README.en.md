@@ -12,6 +12,7 @@ This repository provides a unified home for monitoring Windows infrastructure an
 | [`exporters/windows-exporter/`](exporters/windows-exporter/) | Windows Exporter binary, configuration, and profiles |
 | [`prometheus/`](prometheus/) | Exporter-specific scrape configs, recording rules, and alert rules |
 | [`grafana/`](grafana/) | Platform-specific Windows/Linux binaries, shared runtime, provisioning, and Grafana dashboards |
+| [`nginx/`](nginx/) | Windows runtime and Windows/Linux reverse proxy for Grafana and Prometheus |
 | [`alertmanager/`](alertmanager/) | Exporter-specific Alertmanager configuration and templates |
 | [`scripts/`](scripts/) | PowerShell, SQL, and SSAS scripts for deployment, upgrades, and operations |
 | [`deployment/`](deployment/) | Windows deployment tools and assets |
@@ -28,7 +29,9 @@ Choose the documentation set that matches your target:
 - SQL Server: [SQL Exporter documentation](docs/sql-exporter/en/README.md)
 - Windows and Windows-hosted services: [Windows Exporter documentation](docs/windows-exporter/en/README.md)
 - Grafana as a Windows service: [Grafana installation guide](docs/grafana/en/installation.md)
+- Alertmanager as a Windows service: `scripts/powershell/alertmanager/Install-Alertmanager.ps1`
 - AI-tool connectivity for Grafana and SQL Server: [MCP guide](mcp/README.md)
+- Windows reverse proxy: [Nginx guide](docs/nginx/en/installation.md)
 
 Exporter runtime files live under `exporters/<exporter>/`. Operational scripts live under `scripts/`, while central monitoring configuration is organized under `prometheus/`, `grafana/`, and `alertmanager/`. Run commands from the repository root unless a guide explicitly says otherwise.
 
