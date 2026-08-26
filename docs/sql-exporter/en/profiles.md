@@ -12,6 +12,7 @@ repeat their core collectors intentionally.
 |---|---|
 | `core.yml` | Baseline monitoring for every SQL Server instance (includes instance configuration drift) |
 | `oltp.yml` | Transactional workloads, live-query diagnostics, Always On/HADR, Query Store |
+| `oltp-store-lite.yml` | Resource-constrained store OLTP — low overhead plus heavy-query/plan-cache tuning, stats, integrity, errorlog and security |
 | `dwh.yml` | Data warehouse / BI, columnstore and parallel workloads |
 | `ssis.yml` | Dedicated SSIS catalog hosts |
 | `polybase.yml` | Instances with PolyBase installed / external data queries |

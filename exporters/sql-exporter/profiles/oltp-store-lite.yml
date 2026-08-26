@@ -1,0 +1,47 @@
+# Lean OLTP profile for resource-constrained store SQL Server instances.
+# Tuned for minimal lock/contention while keeping DBA tuning and integrity signals.
+#
+# Included: baseline health, backup/jobs, space/log, blocking, long transactions,
+# waits, memory/CPU/scheduler/tempdb, autogrowth, active heavy queries + plan-cache
+# hotspots (query tuning), stats staleness, DBCC integrity age, errorlog + security.
+#
+# Excluded (optional add-ons): plan-cache size, query-store, index usage/fragmentation,
+# columnstore, parallelism detail, database/instance configuration drift,
+# size-growth history, Always On/HADR, full lock inventory (mssql_locks).
+# Add mssql_alwayson / mssql_alwayson_events / mssql_hadr_cluster if the store
+# instance participates in AG; add mssql_locks for lock drill-down.
+#
+# Recommended Prometheus scrape_interval: 90s–120s (scrape_timeout: 60s).
+# Optional sql_exporter.yml tuning on very weak hosts:
+#   global.min_interval: 90s
+#   global.max_connections: 3
+#
+# Deploy:
+#   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 -Computers STORE-SQL01 -Profile oltp-store-lite.yml
+#   .\scripts\powershell\sql-exporter\Deploy-SqlExporterConfig.ps1 -Computers STORE-SQL01 -Profile oltp-store-lite.yml
+collectors:
+  - mssql_standard
+  - mssql_backup
+  - mssql_job_inventory
+  - mssql_job_running
+  - mssql_job_failed
+  - mssql_job_history
+  - mssql_database_space
+  - mssql_database_integrity
+  - mssql_file_io
+  - mssql_waits
+  - mssql_memory
+  - mssql_tempdb
+  - mssql_cpu
+  - mssql_scheduler
+  - mssql_autogrowth
+  - mssql_heavy_queries
+  - mssql_plan_cache_hotspots
+  - mssql_blocking
+  - mssql_log_usage
+  - mssql_connections_detail
+  - mssql_transactions_long
+  - mssql_buffer_pool
+  - mssql_stats
+  - mssql_errorlog_signals
+  - mssql_security
