@@ -24,7 +24,7 @@
   .\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Layout Collector
 
 .EXAMPLE
-  .\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Computers (Get-Content .\scripts\powershell\sql-exporter\servers.txt)
+  .\scripts\powershell\sql-exporter\Deploy-Collectors.ps1 -Layout Collector -Computers (Get-Content .\scripts\powershell\sql-exporter\servers.txt)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
