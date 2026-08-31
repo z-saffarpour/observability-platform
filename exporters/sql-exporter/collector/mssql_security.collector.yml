@@ -64,11 +64,19 @@ metrics:
 
   - metric_name: mssql_login_disabled
     type: gauge
-    help: '1 if SQL login is disabled.'
+    help: '1 if SQL login is disabled (excludes internal ##MS_*## service logins).'
     key_labels:
       - login_name
     values: [is_disabled]
     query_ref: mssql_security_sql_logins_state
+
+  - metric_name: mssql_sql_service_login_disabled
+    type: gauge
+    help: '1 if SQL Server internal service login (##MS_*##) is disabled; expected default state.'
+    key_labels:
+      - login_name
+    values: [is_disabled]
+    query_ref: mssql_security_sql_service_logins_state
 
   - metric_name: mssql_login_password_expired
     type: gauge
@@ -377,7 +385,17 @@ queries:
           CAST(CASE WHEN is_disabled = 1 THEN 1 ELSE 0 END AS float) AS is_disabled,
           CAST(CASE WHEN is_expiration_checked = 1 AND LOGINPROPERTY(name, 'IsExpired') = 1 THEN 1 ELSE 0 END AS float) AS is_password_expired
       FROM sys.sql_logins
-      WHERE principal_id > 1;
+      WHERE principal_id > 1
+        AND name NOT LIKE N'##MS_%##';
+
+  - query_name: mssql_security_sql_service_logins_state
+    query: |
+      -- Internal SQL Server service logins (##MS_*##); disabled by default; count varies by version/features.
+      SELECT
+          name AS login_name,
+          CAST(CASE WHEN is_disabled = 1 THEN 1 ELSE 0 END AS float) AS is_disabled
+      FROM sys.sql_logins
+      WHERE name LIKE N'##MS_%##';
 
   - query_name: mssql_security_server_audit_state
     query: |
@@ -545,7 +563,7 @@ queries:
               ON sp.sid = dp.sid
           WHERE dp.principal_id > 4
             AND dp.type IN (N''S'', N''U'', N''G'')
-            AND dp.authentication_type_desc = N''INSTANCE''
+            AND dp.authentication_type_desc IN ( N''INSTANCE'',N''WINDOWS'')
             AND dp.name NOT IN (N''dbo'', N''guest'', N''INFORMATION_SCHEMA'', N''sys'')
             AND sp.sid IS NULL;';
 
