@@ -2,7 +2,7 @@
 
 ## Summary
 
-- File: `collector/mssql_security.collector.yml`
+- File: `collector/mssql_security.collector.yml.example` (copy to `mssql_security.collector.yml` for site allow-list)
 - collector_name: `mssql_security`
 - min_interval: `300s`
 - metric count: `25`
@@ -61,7 +61,7 @@ CTE inline in the collector YAML.
 
 | Item | Value |
 |---|---|
-| File | `collector/mssql_security.collector.yml` |
+| File | `collector/mssql_security.collector.yml.example` → copy to `mssql_security.collector.yml` (gitignored) |
 | Query | `mssql_security_unexpected_logins` |
 | Metric | `mssql_unexpected_login_count` |
 

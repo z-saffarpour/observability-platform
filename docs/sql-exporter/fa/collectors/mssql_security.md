@@ -2,7 +2,7 @@
 
 خلاصه
 
-- فایل: `collector/mssql_security.collector.yml`
+- فایل: `collector/mssql_security.collector.yml.example` (کپی به `mssql_security.collector.yml` برای allow-list سایت)
 - collector_name: `mssql_security`
 - min_interval: `300s`
 - تعداد metric: `25`
@@ -59,7 +59,7 @@ collector ویرایش می‌شود.
 
 | مورد | مقدار |
 |---|---|
-| فایل | `collector/mssql_security.collector.yml` |
+| فایل | `collector/mssql_security.collector.yml.example` → کپی به `mssql_security.collector.yml` (gitignored) |
 | Query | `mssql_security_unexpected_logins` |
 | متریک | `mssql_unexpected_login_count` |
 

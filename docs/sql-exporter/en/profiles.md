@@ -60,7 +60,7 @@ for example `mssql_replication`, `mssql_ssis`, `mssql_polybase` or `mssql_servic
 The `security-audit` profile may require elevated permissions for SQL Audit,
 ERRORLOG and server security metadata. **Before using alerts on
 `mssql_unexpected_login_count`, edit the inline allow-list in
-`collector/mssql_security.collector.yml` (query `mssql_security_unexpected_logins`);
+`collector/mssql_security.collector.yml.example` (copy to `mssql_security.collector.yml`; query `mssql_security_unexpected_logins`);
 see [mssql_security.md](collectors/mssql_security.md#allow-list-for-mssql_unexpected_login_count).
 The `database_integrity` collector runs
 `DBCC DBINFO` against accessible online databases.

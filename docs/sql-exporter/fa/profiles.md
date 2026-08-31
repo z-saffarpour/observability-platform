@@ -60,7 +60,7 @@ collector_files:
 پروفایل `security-audit` ممکن است برای خواندن SQL Audit، فایل ERRORLOG و
 Metadata امنیتی سرور به دسترسی بالاتری نیاز داشته باشد. **قبل از آلرت روی
 `mssql_unexpected_login_count`، allow-list داخل
-`collector/mssql_security.collector.yml` (query `mssql_security_unexpected_logins`)
+`collector/mssql_security.collector.yml.example` (کپی به `mssql_security.collector.yml`; query `mssql_security_unexpected_logins`)
 را تنظیم کن**؛ جزئیات در
 [mssql_security.md](collectors/mssql_security.md#allow-list-برای-mssql_unexpected_login_count).
 Collector
