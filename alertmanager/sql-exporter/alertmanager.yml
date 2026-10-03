@@ -29,6 +29,25 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   routes:
+    # One notification per filegroup so summary (free TiB of size TiB) is commonAnnotations.
+    - matchers:
+        - alertname = "SqlFilegroupFreeSpaceCritical"
+      receiver: sms-email-p0
+      group_by: [priority, alertname, instance, db, filegroup]
+      group_wait: 0s
+      group_interval: 2m
+      repeat_interval: 15m
+      continue: false
+
+    - matchers:
+        - alertname = "SqlFilegroupFreeSpaceLow"
+      receiver: email-sms-p1
+      group_by: [priority, alertname, instance, db, filegroup]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: false
+
     # P0 — page immediately: SMS + Email
     - matchers:
         - priority = "P0"

@@ -1,0 +1,1355 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Filegroup free space and 7-day growth from mssql_database_space_free_mb and mssql_database_space_used_mb. Warning threshold is 14 days of each filegroup's own growth; critical is 3 days. Queries aggregate the collector series directly. Availability Group databases on a local SECONDARY replica are hidden.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "Database Space",
+      "type": "link",
+      "url": "/d/sqlx-database-space?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Autogrowth",
+      "type": "link",
+      "url": "/d/sqlx-autogrowth?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Size Growth",
+      "type": "link",
+      "url": "/d/sqlx-database-size-growth?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Log Usage",
+      "type": "link",
+      "url": "/d/sqlx-log-usage?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Health / KPI",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Filegroups",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Filegroups",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 0, 1e-9))) < 3 and ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Critical < 3d",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Critical < 3d",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 0, 1e-9))) < 14 and ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Warning < 14d",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Warning < 14d",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 14
+              }
+            ]
+          },
+          "unit": "d",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "min(((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 0, 1e-9))) and ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Lowest runway",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Lowest runway",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) or vector(0)",
+          "instant": true,
+          "legendFormat": "Fastest 7d growth",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Fastest 7d growth",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "min(((100 * sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) + sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))), 1))) and ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Lowest free %",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Lowest free %",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 1024) or vector(0)",
+          "instant": true,
+          "legendFormat": "Growing > 1 GB/day",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Growing > 1 GB/day",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "7d growth MB/day",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "7d growth MB/day",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "panels": [],
+      "title": "Fill and 7-day growth",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) and on(instance, db, filegroup) topk(15, (deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400))",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Used MB - 15 fastest-growing filegroups",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, (deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400))",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "7-day growth MB/day",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "d"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "bottomk(15, ((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 0, 1e-9))) and ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64)",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Free-space runway (days)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(100 * sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) + sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))), 1)) and on(instance, db, filegroup) bottomk(15, ((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 0, 1e-9))) and ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64)",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Free % - shortest runway",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 20,
+      "panels": [],
+      "title": "Filegroup inventory",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "Size and free space are bytes scaled by Grafana (MiB, GiB, or TiB), plus free percent and 7-day growth. Days left and the MB thresholds are 14 and 3 times that filegroup's own daily growth. Sort is fullest filegroup first.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Days left"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "d"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "green",
+                      "value": 14
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 2
+                    },
+                    {
+                      "color": "green",
+                      "value": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Free %"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(max by (instance, db, filegroup) ((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) + sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))))) * 1024 * 1024",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(max by (instance, db, filegroup) (sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))))) * 1024 * 1024",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "B",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, filegroup) ((100 * sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) + sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))), 1)))",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "C",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, filegroup) ((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400))",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "D",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, filegroup) ((sum without (file_id, logical_name, type_desc) (mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"}))) / clamp_min(((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 0, 1e-9)))",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "E",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, filegroup) ((14 * (((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64)))",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "F",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, db, filegroup) ((3 * (((deriv(sum without (file_id, logical_name, type_desc) (mssql_database_space_used_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", filegroup=~\"${filegroup:regex}\", type_desc=\"ROWS\", filegroup!=\"\", is_read_only=\"0\"} unless on(instance, db) (max by (instance, db) (mssql_alwayson_synchronization_state{job=\"sql_exporter\", instance=~\"$instance\", is_local=\"1\", role_desc=\"SECONDARY\"})))[7d:5m]) * 86400)) > 64)))",
+          "instant": true,
+          "legendFormat": "{{instance}} / {{db}} / {{filegroup}}",
+          "range": false,
+          "refId": "G",
+          "format": "table"
+        }
+      ],
+      "title": "Filegroup free space and 7-day growth",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "is_read_only": true
+            },
+            "indexByName": {
+              "Server": 0,
+              "Database": 1,
+              "Filegroup": 2,
+              "Free %": 5,
+              "Growth MB/day": 6,
+              "Days left": 7,
+              "Warn below MB": 8,
+              "Critical below MB": 9,
+              "Size": 3,
+              "Free": 4
+            },
+            "renameByName": {
+              "instance": "Server",
+              "db": "Database",
+              "filegroup": "Filegroup",
+              "Value #A": "Size",
+              "Value #B": "Free",
+              "Value #C": "Free %",
+              "Value #D": "Growth MB/day",
+              "Value #E": "Days left",
+              "Value #F": "Warn below MB",
+              "Value #G": "Critical below MB"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "Free %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 22,
+      "options": {
+        "content": "Each filegroup has its own free-space threshold: **warning** when free space is under **14 days** of that filegroup's 7-day growth, **critical** under **3 days**. Growth below **64 MB/day** is ignored. A 60GB database and a 72TB database do not share one fixed free-MB value.\n\nPanels read `mssql_database_space_free_mb` and `mssql_database_space_used_mb` and aggregate by `filegroup`. Only servers that have the updated collector emit the `filegroup` label. The 7-day slope uses the samples Prometheus already has for that label.",
+        "mode": "markdown"
+      },
+      "title": "Threshold",
+      "type": "text"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "collector",
+    "filegroup"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", type_desc=\"ROWS\"}, db)",
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "db",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", type_desc=\"ROWS\"}, db)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", type_desc=\"ROWS\", filegroup!=\"\"}, filegroup)",
+        "includeAll": true,
+        "label": "Filegroup",
+        "multi": true,
+        "name": "filegroup",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_database_space_free_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", type_desc=\"ROWS\", filegroup!=\"\"}, filegroup)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Collector filegroup",
+  "uid": "sqlx-filegroup"
+}
