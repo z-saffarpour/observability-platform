@@ -5,6 +5,8 @@
 # growth (MB/day). A 60GB database and a 72TB database therefore get different
 # free-MB thresholds from their own growth, not from one fixed number.
 # deriv needs 7 days of mssql:filegroup_used_mb after the filegroup label is scraped.
+# Local AG secondaries are removed. is_local=1 keeps the primary's view of
+# remote secondaries from hiding the primary database.
 groups:
   - name: sql_exporter.recording.filegroup_space
     interval: 1m
@@ -13,12 +15,22 @@ groups:
         expr: |
           sum without (file_id, logical_name, type_desc) (
             mssql_database_space_free_mb{type_desc="ROWS",filegroup!=""}
+            unless on(instance, db) (
+              max by (instance, db) (
+                mssql_alwayson_synchronization_state{is_local="1",role_desc="SECONDARY"}
+              )
+            )
           )
 
       - record: mssql:filegroup_used_mb
         expr: |
           sum without (file_id, logical_name, type_desc) (
             mssql_database_space_used_mb{type_desc="ROWS",filegroup!=""}
+            unless on(instance, db) (
+              max by (instance, db) (
+                mssql_alwayson_synchronization_state{is_local="1",role_desc="SECONDARY"}
+              )
+            )
           )
 
       - record: mssql:filegroup_size_mb

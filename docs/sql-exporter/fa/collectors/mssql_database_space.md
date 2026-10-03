@@ -13,7 +13,7 @@
 - Database file capacity, free space, autogrowth, and VLF count.
 - GRANT VIEW SERVER STATE TO
 - GRANT VIEW ANY DEFINITION TO
-- Databases must be ONLINE with HAS_DBACCESS for used/free (FILEPROPERTY).
+- Databases must be ONLINE with HAS_DBACCESS for used/free (FILEPROPERTY). دیتابیس‌های Secondary محلی در Always On حذف می‌شوند (`sys.fn_hadr_is_primary_replica` = 0). دیتابیسی که عضو AG نیست باقی می‌ماند.
 
 نکات عملیاتی
 
