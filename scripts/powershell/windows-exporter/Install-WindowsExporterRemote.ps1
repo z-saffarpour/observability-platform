@@ -94,6 +94,42 @@ function Resolve-ProfileFile([string]$Name) {
     $leaf
 }
 
+function Get-RequiredWindowsExporterScriptFiles {
+    param(
+        [string]$ProfileName,
+        [switch]$IncludeAutoProfileDiscovery,
+        [bool]$HasSsasRole = $false
+    )
+
+    $required = New-Object System.Collections.Generic.List[string]
+    if ($IncludeAutoProfileDiscovery) {
+        $required.Add('Discover-WindowsExporterRole.ps1')
+    }
+
+    $profileKey = if ($ProfileName) { $ProfileName.Trim() } else { '' }
+    $normalized = if ($profileKey) { $profileKey.ToLowerInvariant() } else { '' }
+    $needsSsasScripts = $HasSsasRole -or @('ssas.yml','data-platform.yml','data-platform-cluster.yml') -contains $normalized
+    if ($needsSsasScripts) {
+        [string[]]$ssasScripts = @(
+            'Install-SsasMetricsTask.ps1',
+            'Ssas-CollectorPaths.ps1',
+            'Ssas-CollectorConfig.ps1',
+            'Update-SsasCollectorConfig.ps1',
+            'Collect-SsasMetrics.ps1',
+            'Collect-SsasPerformanceCounters.ps1',
+            'Collect-SsasXEventMetrics.ps1',
+            'Invoke-SsasCollectors.ps1',
+            'Run-SsasMetricsService.ps1',
+            'Run-SsasMetricsLoop.ps1'
+        )
+        $required.AddRange($ssasScripts)
+    }
+
+    # Output the List as one object. An empty @() unwraps to $null, and StrictMode
+    # then fails on .Count with "The property 'Count' cannot be found on this object."
+    return , $required
+}
+
 $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
 $exporterSource = Join-Path $SourceRoot 'exporters\windows-exporter'
 $package = @('windows_exporter.exe','windows_exporter.yml','web-config.yml','windows_exporter_version.ini','nssm.exe')
@@ -190,26 +226,64 @@ foreach ($computer in $Computers) {
             New-Item -Path $path -ItemType Directory -Force | Out-Null
             $path
         }
+        $requiredPowerShellFiles = Get-RequiredWindowsExporterScriptFiles -ProfileName $chosenProfile -IncludeAutoProfileDiscovery:$AutoProfile -HasSsasRole:($chosenProfile -and ($chosenProfile -match '^(ssas|data-platform|data-platform-cluster)\.yml$'))
+        $requiredSsasFiles = @()
+        if ($requiredPowerShellFiles -contains 'Install-SsasMetricsTask.ps1') {
+            $requiredSsasFiles = @(
+                'ssas-monitoring-xevents.xmla',
+                'Install-SsasMetricsTask.ps1',
+                'Collect-SsasMetrics.ps1',
+                'Collect-SsasPerformanceCounters.ps1',
+                'Ssas-CollectorPaths.ps1',
+                'Ssas-CollectorConfig.ps1',
+                'Collect-SsasXEventMetrics.ps1',
+                'Invoke-SsasCollectors.ps1',
+                'Run-SsasMetricsService.ps1',
+                'Run-SsasMetricsLoop.ps1'
+            )
+        }
         foreach ($item in $package) {
             if ($item -eq 'web-config.yml') { continue }
             Copy-Item -LiteralPath $packageSources[$item] -Destination (Join-Path $stage $item) -ToSession $session -Force
         }
         Copy-Item -LiteralPath $webConfigToDeploy -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
         Copy-Item -LiteralPath $profilesSource -Destination $stage -ToSession $session -Recurse -Force
-        $stageScripts = Join-Path $stage 'scripts'
+        $needPowerShell = $requiredPowerShellFiles.Count -gt 0
+        $needSsas = $requiredSsasFiles.Count -gt 0 -and (Test-Path -LiteralPath $scriptsSsasSource -PathType Container)
         Invoke-Command -Session $session -ScriptBlock {
-            param($Stage)
+            param($Stage, $NeedPowerShell, $NeedSsas)
             New-Item -Path (Join-Path $Stage 'scripts') -ItemType Directory -Force | Out-Null
-        } -ArgumentList $stage
-        Copy-Item -LiteralPath $scriptsPowerShellSource -Destination (Join-Path $stageScripts 'powershell') -ToSession $session -Recurse -Force
-        if (Test-Path -LiteralPath $scriptsSsasSource -PathType Container) {
-            Copy-Item -LiteralPath $scriptsSsasSource -Destination (Join-Path $stageScripts 'ssas') -ToSession $session -Recurse -Force
+            if ($NeedPowerShell) {
+                New-Item -Path (Join-Path $Stage 'scripts\powershell') -ItemType Directory -Force | Out-Null
+            }
+            if ($NeedSsas) {
+                New-Item -Path (Join-Path $Stage 'scripts\ssas') -ItemType Directory -Force | Out-Null
+            }
+        } -ArgumentList $stage, $needPowerShell, $needSsas
+        if ($needPowerShell) {
+            $stagePowerShell = Join-Path $stage 'scripts\powershell'
+            foreach ($scriptName in $requiredPowerShellFiles) {
+                $sourceScript = Join-Path $scriptsPowerShellSource $scriptName
+                if (-not (Test-Path -LiteralPath $sourceScript -PathType Leaf)) {
+                    throw "Required script was not found: $sourceScript"
+                }
+                Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $stagePowerShell $scriptName) -ToSession $session -Force
+            }
+        }
+        if ($needSsas) {
+            $stageSsas = Join-Path $stage 'scripts\ssas'
+            foreach ($fileName in $requiredSsasFiles) {
+                $sourceFile = Join-Path $scriptsSsasSource $fileName
+                if (Test-Path -LiteralPath $sourceFile -PathType Leaf) {
+                    Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $stageSsas $fileName) -ToSession $session -Force
+                }
+            }
         }
         Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
         Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
 
         $deployed = Invoke-Command -Session $session -ScriptBlock {
-            param($Root,$Name,$Display,$Description,$Stage,$Account,$Password,$Timeout,$Items,$ProfileName,$ServiceMode,$Listen)
+            param($Root,$Name,$Display,$Description,$Stage,$Account,$Password,$Timeout,$Items,$ProfileName,$ServiceMode,$Listen,$RequiredPowerShellFiles,$RequiredSsasFiles)
             Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'
             . (Join-Path $Stage 'Observability-NssmServiceHelpers.ps1')
             . (Join-Path $Stage 'Observability-WebConfigHelpers.ps1')
@@ -281,8 +355,37 @@ foreach ($computer in $Computers) {
                     Copy-Item -LiteralPath $_.FullName -Destination $old -Force
                 }
             }
-            Sync-Directory (Join-Path $Stage 'scripts\powershell') (Join-Path $Root 'scripts\powershell') (Join-Path $backup 'scripts\powershell')
-            Sync-Directory (Join-Path $Stage 'scripts\ssas') (Join-Path $Root 'scripts\ssas') (Join-Path $backup 'scripts\ssas')
+            $requiredPowerShellRoot = Join-Path $Root 'scripts\powershell'
+            $requiredSsasRoot = Join-Path $Root 'scripts\ssas'
+            $requiredPowerShellFiles = @($RequiredPowerShellFiles | Where-Object { $_ })
+            $requiredSsasFiles = @($RequiredSsasFiles | Where-Object { $_ })
+            if ($requiredPowerShellFiles.Count -gt 0) {
+                New-Item -Path $requiredPowerShellRoot -ItemType Directory -Force | Out-Null
+                foreach ($scriptName in $requiredPowerShellFiles) {
+                    $sourcePath = Join-Path (Join-Path $Stage 'scripts\powershell') $scriptName
+                    if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
+                        Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $requiredPowerShellRoot $scriptName) -Force
+                    }
+                }
+                Get-ChildItem -LiteralPath $requiredPowerShellRoot -File -ErrorAction SilentlyContinue | Where-Object { $requiredPowerShellFiles -notcontains $_.Name } | Remove-Item -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath (Join-Path $backup 'scripts\powershell')) {
+                    Get-ChildItem -LiteralPath (Join-Path $backup 'scripts\powershell') -File -ErrorAction SilentlyContinue | ForEach-Object { if ($requiredPowerShellFiles -notcontains $_.Name) { $_ | Remove-Item -Force -ErrorAction SilentlyContinue } }
+                }
+            } else {
+                if (Test-Path -LiteralPath $requiredPowerShellRoot) { Remove-Item -LiteralPath $requiredPowerShellRoot -Recurse -Force -ErrorAction SilentlyContinue }
+            }
+            if ($requiredSsasFiles.Count -gt 0) {
+                New-Item -Path $requiredSsasRoot -ItemType Directory -Force | Out-Null
+                foreach ($fileName in $requiredSsasFiles) {
+                    $sourcePath = Join-Path (Join-Path $Stage 'scripts\ssas') $fileName
+                    if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
+                        Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $requiredSsasRoot $fileName) -Force
+                    }
+                }
+                Get-ChildItem -LiteralPath $requiredSsasRoot -File -ErrorAction SilentlyContinue | Where-Object { $requiredSsasFiles -notcontains $_.Name } | Remove-Item -Force -ErrorAction SilentlyContinue
+            } else {
+                if (Test-Path -LiteralPath $requiredSsasRoot) { Remove-Item -LiteralPath $requiredSsasRoot -Recurse -Force -ErrorAction SilentlyContinue }
+            }
             New-Item -Path (Join-Path $Root 'collector') -ItemType Directory -Force | Out-Null
             New-Item -Path (Join-Path $Root 'textfile_inputs') -ItemType Directory -Force | Out-Null
             $exe = Join-Path $binDir 'windows_exporter.exe'
@@ -336,7 +439,7 @@ foreach ($computer in $Computers) {
             Write-EventLog -LogName Application -Source $Name -EntryType Information -EventId 1001 `
                 -Message "Windows service installed or refreshed. Mode=$ServiceMode; InstallPath=$Root; Profile=$ProfileName"
             [pscustomobject]@{ Status=$runningSvc.Status.ToString(); Backup=$backup; ImagePath=$imagePath; Profile=$ProfileName; Method=$ServiceMode }
-        } -ArgumentList $InstallRoot,$ServiceName,$ServiceDisplayName,$ServiceDescription,$stage,$account,$password,$ServiceTimeoutSec,$package,$chosenProfile,$ServiceMode,$ListenAddress
+        } -ArgumentList $InstallRoot,$ServiceName,$ServiceDisplayName,$ServiceDescription,$stage,$account,$password,$ServiceTimeoutSec,$package,$chosenProfile,$ServiceMode,$ListenAddress,@($requiredPowerShellFiles),@($requiredSsasFiles)
         $row.Deploy='OK'; $row.Service=$deployed.Status; $row.Backup=$deployed.Backup
         if ($deployed.Profile) { $row.Profile = $deployed.Profile }
         Write-Host "Service: $($deployed.Status)`nProfile: $($row.Profile)`nBackup: $($deployed.Backup)" -ForegroundColor Green

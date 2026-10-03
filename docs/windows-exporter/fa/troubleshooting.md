@@ -45,7 +45,7 @@ windows_exporter_collector_success == 0
 2. سرویس `prometheus_windows_ssas` با `Install-SsasMetricsTask.ps1` نصب شده و در وضعیت Running باشد.
 3. فایل‌های `textfile_inputs\ssas*.prom` تازه باشند (`ssas_collector_last_run_timestamp_seconds`).
 4. کتابخانه‌های ADOMD/AMO و دسترسی حساب Task به Instance بررسی شوند.
-5. برای XEvent: ماژول `SqlServer`، مسیر `*.xel` و session مربوط به `scripts/ssas/windows-exporter/ssas-monitoring-xevents.xmla`.
+5. برای XEvent: ماژول `SqlServer`، فایل‌های `C:\ProgramData\Observability\SSAS\xevents\*.xel` و session مربوط به `scripts/ssas/windows-exporter/ssas-monitoring-xevents.xmla`.
 
 جزئیات بیشتر: [مانیتورینگ SSAS](ssas-monitoring.md).
 

@@ -1,0 +1,3183 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": {
+                    "type": "grafana",
+                    "uid": "-- Grafana --"
+                },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "schemaVersion": 39,
+    "timezone": "browser",
+    "time": {
+        "from": "now-6h",
+        "to": "now"
+    },
+    "uid": "winexp-00-ssas-fleet",
+    "title": "SSAS Fleet Overview",
+    "description": "Fleet triage for SSAS using windows_exporter textfile collectors and host metrics. Dashboard refresh 1m; actual scrape cadence is managed in Prometheus. Collector freshness defaults to 300 seconds. Inventory is discovered over 24h from SSAS metrics/services; it is not an authoritative CMDB. Unknown is never healthy.",
+    "refresh": "1m",
+    "tags": [
+        "windows_exporter",
+        "ssas",
+        "fleet",
+        "overview"
+    ],
+    "panels": [
+        {
+            "collapsed": false,
+            "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 24,
+                "h": 1
+            },
+            "id": 1,
+            "panels": [],
+            "title": "Fleet / Coverage",
+            "type": "row",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            }
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 1,
+                "w": 4,
+                "h": 3
+            },
+            "hideTimeOverride": true,
+            "id": 2,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "count(group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Discovered Servers",
+            "type": "stat",
+            "description": "Distinct job/server pairs seen in SSAS metrics or SSAS service inventory during the last 24h, plus explicitly selected additional hosts. No authoritative expected server count is available."
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 4,
+                "y": 1,
+                "w": 4,
+                "h": 3
+            },
+            "hideTimeOverride": true,
+            "id": 3,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sum((((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) == bool 1))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Fresh Probe OK",
+            "type": "stat",
+            "description": "Connection probe only; does not assert processing correctness, resource health or recoverability."
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 1
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 8,
+                "y": 1,
+                "w": 4,
+                "h": 3
+            },
+            "hideTimeOverride": true,
+            "id": 4,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sum((((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) == bool 0))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Probe Failures",
+            "type": "stat",
+            "description": "Fresh connection failures. Missing/stale probes excluded and counted separately."
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 1
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 1,
+                "w": 4,
+                "h": 3
+            },
+            "hideTimeOverride": true,
+            "id": 5,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sum((((((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) == 1) * 0) or ((((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) == 0) * 0 + 2) or ((group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])) unless on(job,instance) ((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))) * 0 + 3) == bool 3))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Unknown Probe",
+            "type": "stat",
+            "description": "Inventory hosts without a fresh SSAS probe; includes scrape failure, missing collector and stale textfiles."
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 16,
+                "y": 1,
+                "w": 4,
+                "h": 3
+            },
+            "hideTimeOverride": true,
+            "id": 6,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "count((max by (job,instance) (ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Fresh Perf Hosts",
+            "type": "stat",
+            "description": "Hosts with a fresh performance collector and memory usage alias. Does not prove all counter families exist."
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 1
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 20,
+                "y": 1,
+                "w": 4,
+                "h": 3
+            },
+            "hideTimeOverride": true,
+            "id": 7,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sum((group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])) unless on(job,instance) ((max by (job,instance) (ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))) or on(job,instance) (0 * group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h]))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Perf Coverage Gaps",
+            "type": "stat",
+            "description": "Discovered hosts without fresh performance memory metrics."
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Server"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 160
+                            },
+                            {
+                                "id": "links",
+                                "value": [
+                                    {
+                                        "title": "Focus this server",
+                                        "url": "/d/winexp-00-ssas-fleet?${__url_time_range}&${job:queryparam}&var-instance=${__value.raw}"
+                                    },
+                                    {
+                                        "title": "SSAS Details",
+                                        "targetBlank": true,
+                                        "url": "/d/winexp-00-ssas?${__url_time_range}&var-instance=${__value.raw}"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Probe State"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "red",
+                                            "value": 2
+                                        },
+                                        {
+                                            "color": "gray",
+                                            "value": 3
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            },
+                            {
+                                "id": "mappings",
+                                "value": [
+                                    {
+                                        "type": "value",
+                                        "options": {
+                                            "0": {
+                                                "text": "Probe OK",
+                                                "color": "green"
+                                            },
+                                            "2": {
+                                                "text": "Probe failed",
+                                                "color": "red"
+                                            },
+                                            "3": {
+                                                "text": "Unknown / stale",
+                                                "color": "gray"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Scrape"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "mappings",
+                                "value": [
+                                    {
+                                        "type": "value",
+                                        "options": {
+                                            "0": {
+                                                "text": "Down",
+                                                "color": "red"
+                                            },
+                                            "1": {
+                                                "text": "Up",
+                                                "color": "green"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "CPU %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 80
+                                        },
+                                        {
+                                            "color": "red",
+                                            "value": 90
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "RAM %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 80
+                                        },
+                                        {
+                                            "color": "red",
+                                            "value": 90
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "SSAS / High Limit %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 85
+                                        },
+                                        {
+                                            "color": "red",
+                                            "value": 100
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Min Disk Free %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "red",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 10
+                                        },
+                                        {
+                                            "color": "green",
+                                            "value": 20
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Queued Jobs"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 1
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Lock Waits"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 1
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Long Sessions"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 1
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Stale Databases"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 1
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Collector Errors"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 1
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Perf Errors"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "short"
+                            },
+                            {
+                                "id": "thresholds",
+                                "value": {
+                                    "mode": "absolute",
+                                    "steps": [
+                                        {
+                                            "color": "green",
+                                            "value": null
+                                        },
+                                        {
+                                            "color": "orange",
+                                            "value": 1
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "id": "custom.cellOptions",
+                                "value": {
+                                    "type": "color-background",
+                                    "mode": "basic"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 4,
+                "w": 24,
+                "h": 14
+            },
+            "id": 8,
+            "options": {
+                "showHeader": true,
+                "cellHeight": "sm",
+                "footer": {
+                    "show": false
+                },
+                "sortBy": [
+                    {
+                        "displayName": "Probe State",
+                        "desc": true
+                    }
+                ]
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "((((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) == 1) * 0) or ((((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) == 0) * 0 + 2) or ((group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])) unless on(job,instance) ((min by (job,instance) (ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))) * 0 + 3)",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "B",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "D",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (ssas_collector_errors{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "E",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "F",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (ssas_performance_collector_errors{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "G",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "((100 * (1 - avg by(job,instance) (rate(windows_cpu_time_total{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",mode=\"idle\"}[$__rate_interval])))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "H",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "((100 * (1 - max by (job,instance) (windows_memory_available_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) / (max by (job,instance) (windows_memory_physical_total_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) > 0))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "I",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "((min by (job,instance) (100 * windows_logical_disk_free_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",volume=~\"[A-Za-z]:\"} / (windows_logical_disk_size_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",volume=~\"[A-Za-z]:\"} > 0))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "J",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (100 * ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"} / (ssas_memory_limit_high_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"} > 0))) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "K",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(sum by (job,instance) (ssas_thread_pool_queue_length{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "L",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(sum by (job,instance) (ssas_current_lock_waits{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "M",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(sum by (job,instance) (ssas_long_running_sessions{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "N",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(sum by (job,instance) (ssas_database_processing_stale{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                }
+            ],
+            "title": "Fleet Triage — All Discovered Servers",
+            "type": "table",
+            "description": "One row per job/server. Unknown cells are missing or stale telemetry. Probe State assesses connectivity only. CPU/RAM are host totals; queues and locks are totals across counter sets; memory ratio is the worst SSAS counter set. Thresholds are triage hints, not alert rules.",
+            "transformations": [
+                {
+                    "id": "merge",
+                    "options": {}
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true,
+                            "__name__": true,
+                            "job": true
+                        },
+                        "renameByName": {
+                            "instance": "Server",
+                            "Value #A": "Probe State",
+                            "Value #B": "Scrape",
+                            "Value #D": "Collector Errors",
+                            "Value #E": "Perf Age (s)",
+                            "Value #F": "Perf Errors",
+                            "Value #G": "CPU %",
+                            "Value #H": "RAM %",
+                            "Value #I": "Min Disk Free %",
+                            "Value #J": "SSAS / High Limit %",
+                            "Value #K": "Queued Jobs",
+                            "Value #L": "Lock Waits",
+                            "Value #M": "Long Sessions",
+                            "Value #N": "Stale Databases"
+                        }
+                    }
+                },
+                {
+                    "id": "sortBy",
+                    "options": {
+                        "sort": [
+                            {
+                                "field": "Probe State",
+                                "desc": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "x": 0,
+                "y": 18,
+                "w": 24,
+                "h": 1
+            },
+            "id": 9,
+            "panels": [],
+            "title": "Resource Pressure / Worst Servers",
+            "type": "row",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            }
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Server"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 160
+                            },
+                            {
+                                "id": "links",
+                                "value": [
+                                    {
+                                        "title": "Focus this server",
+                                        "url": "/d/winexp-00-ssas-fleet?${__url_time_range}&${job:queryparam}&var-instance=${__value.raw}"
+                                    },
+                                    {
+                                        "title": "SSAS Details",
+                                        "targetBlank": true,
+                                        "url": "/d/winexp-00-ssas?${__url_time_range}&var-instance=${__value.raw}"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "CPU %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "RAM %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 19,
+                "w": 12,
+                "h": 8
+            },
+            "id": 10,
+            "options": {
+                "showHeader": true,
+                "cellHeight": "sm",
+                "footer": {
+                    "show": false
+                },
+                "sortBy": [
+                    {
+                        "displayName": "CPU %",
+                        "desc": true
+                    }
+                ]
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "topk(10,((100 * (1 - avg by(job,instance) (rate(windows_cpu_time_total{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",mode=\"idle\"}[$__rate_interval])))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h]))))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "B",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "topk(10,((100 * (1 - max by (job,instance) (windows_memory_available_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) / (max by (job,instance) (windows_memory_physical_total_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) > 0))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h]))))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                }
+            ],
+            "title": "Highest Host Resource Pressure",
+            "type": "table",
+            "description": "Union of top 10 hosts for each resource; may contain up to 20 hosts. Missing cells mean the host is not in that metric's top 10.",
+            "transformations": [
+                {
+                    "id": "merge",
+                    "options": {}
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true,
+                            "__name__": true,
+                            "job": true
+                        },
+                        "renameByName": {
+                            "instance": "Server",
+                            "Value #A": "CPU %",
+                            "Value #B": "RAM %"
+                        }
+                    }
+                },
+                {
+                    "id": "sortBy",
+                    "options": {
+                        "sort": [
+                            {
+                                "field": "CPU %",
+                                "desc": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Server"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 160
+                            },
+                            {
+                                "id": "links",
+                                "value": [
+                                    {
+                                        "title": "Focus this server",
+                                        "url": "/d/winexp-00-ssas-fleet?${__url_time_range}&${job:queryparam}&var-instance=${__value.raw}"
+                                    },
+                                    {
+                                        "title": "SSAS Details",
+                                        "targetBlank": true,
+                                        "url": "/d/winexp-00-ssas?${__url_time_range}&var-instance=${__value.raw}"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "SSAS Memory Bytes"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "bytes"
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "High Limit %"
+                        },
+                        "properties": [
+                            {
+                                "id": "unit",
+                                "value": "percent"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 19,
+                "w": 12,
+                "h": 8
+            },
+            "id": 11,
+            "options": {
+                "showHeader": true,
+                "cellHeight": "sm",
+                "footer": {
+                    "show": false
+                },
+                "sortBy": [
+                    {
+                        "displayName": "High Limit %",
+                        "desc": true
+                    }
+                ]
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "topk(10,(max by (job,instance) (100 * ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"} / (ssas_memory_limit_high_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"} > 0))) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "B",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "((sum by (job,instance) (ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) * 1024",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                }
+            ],
+            "title": "SSAS Memory / High Limit",
+            "type": "table",
+            "description": "Worst per-counter-set memory/high-limit ratio. Zero limits excluded. Memory bytes sums usage across counter sets; raw KB converted using 1024.",
+            "transformations": [
+                {
+                    "id": "merge",
+                    "options": {}
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true,
+                            "__name__": true,
+                            "job": true
+                        },
+                        "renameByName": {
+                            "instance": "Server",
+                            "Value #A": "High Limit %",
+                            "Value #B": "SSAS Memory Bytes"
+                        }
+                    }
+                },
+                {
+                    "id": "sortBy",
+                    "options": {
+                        "sort": [
+                            {
+                                "field": "High Limit %",
+                                "desc": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Per-host non-idle CPU rate. All selected discovered servers; no topk churn. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 27,
+                "w": 12,
+                "h": 7
+            },
+            "id": 12,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, (((100 * (1 - avg by(job,instance) (rate(windows_cpu_time_total{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",mode=\"idle\"}[$__rate_interval])))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h]))))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Host CPU Usage — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Physical memory in use, calculated from available and total physical bytes. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 27,
+                "w": 12,
+                "h": 7
+            },
+            "id": 13,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, (((100 * (1 - max by (job,instance) (windows_memory_available_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) / (max by (job,instance) (windows_memory_physical_total_bytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) > 0))) and on(job,instance) (min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1)) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h]))))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Host RAM Usage — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Worst counter-set ratio on each host. Values over 100% can occur; no clamping. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 34,
+                "w": 12,
+                "h": 7
+            },
+            "id": 14,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((max by (job,instance) (100 * ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"} / (ssas_memory_limit_high_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"} > 0))) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "SSAS Memory / High Limit — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Sum of memory usage across SSAS counter sets per host; fresh samples only. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "bytes",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 34,
+                "w": 12,
+                "h": 7
+            },
+            "id": 15,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, (((sum by (job,instance) (ssas_memory_usage_kilobytes{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) * 1024)))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "SSAS Memory Usage — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "x": 0,
+                "y": 41,
+                "w": 24,
+                "h": 1
+            },
+            "id": 16,
+            "panels": [],
+            "title": "Workload / Contention",
+            "type": "row",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            }
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Observed concurrent SSAS sessions summed across instances. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 42,
+                "w": 12,
+                "h": 7
+            },
+            "id": 17,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_sessions{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Sessions — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Uses collector-defined long-running threshold. Missing values are unknown. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 42,
+                "w": 12,
+                "h": 7
+            },
+            "id": 18,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_long_running_sessions{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Long Running Sessions — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Queued jobs summed across all observed thread pools and counter sets. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 49,
+                "w": 12,
+                "h": 7
+            },
+            "id": 19,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_thread_pool_queue_length{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Thread Pool Queued Jobs — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Current waiting locks summed across counter sets. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 49,
+                "w": 12,
+                "h": 7
+            },
+            "id": 20,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_current_lock_waits{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Current Lock Waits — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Cooked performance rate; use directly, without rate(). Storage-engine queries are not necessarily end-user queries. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "ops",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 56,
+                "w": 12,
+                "h": 7
+            },
+            "id": 21,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_query_rate{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Storage Engine Queries / Second — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Cooked performance rate; gaps remain gaps. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "ops",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 56,
+                "w": 12,
+                "h": 7
+            },
+            "id": 22,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_connection_failures_per_second{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Connection Failures / Second — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "x": 0,
+                "y": 63,
+                "w": 24,
+                "h": 1
+            },
+            "id": 23,
+            "panels": [],
+            "title": "Processing / Collector Diagnostics",
+            "type": "row",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            }
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Server"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 160
+                            },
+                            {
+                                "id": "links",
+                                "value": [
+                                    {
+                                        "title": "Focus this server",
+                                        "url": "/d/winexp-00-ssas-fleet?${__url_time_range}&${job:queryparam}&var-instance=${__value.raw}"
+                                    },
+                                    {
+                                        "title": "SSAS Details",
+                                        "targetBlank": true,
+                                        "url": "/d/winexp-00-ssas?${__url_time_range}&var-instance=${__value.raw}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 64,
+                "w": 12,
+                "h": 10
+            },
+            "id": 24,
+            "options": {
+                "showHeader": true,
+                "cellHeight": "sm",
+                "footer": {
+                    "show": false
+                },
+                "sortBy": [
+                    {
+                        "displayName": "Stale",
+                        "desc": true
+                    }
+                ]
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "((max by (job,instance,ssas_instance,database) (ssas_database_processing_stale{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))) > 0",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                }
+            ],
+            "title": "Databases Requiring Processing Review",
+            "type": "table",
+            "description": "Only stale database flags from fresh collectors. Collector threshold defaults to 24h; validate against each model's processing schedule. Empty table can mean no exceptions or missing telemetry: check coverage above.",
+            "transformations": [
+                {
+                    "id": "merge",
+                    "options": {}
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true,
+                            "__name__": true,
+                            "job": true
+                        },
+                        "renameByName": {
+                            "instance": "Server",
+                            "Value": "Stale"
+                        }
+                    }
+                },
+                {
+                    "id": "sortBy",
+                    "options": {
+                        "sort": [
+                            {
+                                "field": "Stale",
+                                "desc": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Server"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 160
+                            },
+                            {
+                                "id": "links",
+                                "value": [
+                                    {
+                                        "title": "Focus this server",
+                                        "url": "/d/winexp-00-ssas-fleet?${__url_time_range}&${job:queryparam}&var-instance=${__value.raw}"
+                                    },
+                                    {
+                                        "title": "SSAS Details",
+                                        "targetBlank": true,
+                                        "url": "/d/winexp-00-ssas?${__url_time_range}&var-instance=${__value.raw}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 64,
+                "w": 12,
+                "h": 10
+            },
+            "id": 25,
+            "options": {
+                "showHeader": true,
+                "cellHeight": "sm",
+                "footer": {
+                    "show": false
+                },
+                "sortBy": [
+                    {
+                        "displayName": "Core Age (s)",
+                        "desc": true
+                    }
+                ]
+            },
+            "pluginVersion": "11.1.5",
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h]))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "B",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "C",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (ssas_collector_errors{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "D",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) (group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                },
+                {
+                    "refId": "E",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "(max by (job,instance) (ssas_performance_collector_errors{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_performance_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw}))",
+                    "instant": true,
+                    "range": false,
+                    "format": "table"
+                }
+            ],
+            "title": "Collector Coverage / Errors",
+            "type": "table",
+            "description": "Freshly scraped textfiles can still contain stale measurements. Age uses embedded collector timestamps, not Prometheus sample timestamps. Error counters are per-run gauges; do not apply rate().",
+            "transformations": [
+                {
+                    "id": "merge",
+                    "options": {}
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true,
+                            "__name__": true,
+                            "job": true
+                        },
+                        "renameByName": {
+                            "instance": "Server",
+                            "Value #A": "Inventory",
+                            "Value #B": "Core Age (s)",
+                            "Value #C": "Core Errors",
+                            "Value #D": "Performance Age (s)",
+                            "Value #E": "Performance Errors"
+                        }
+                    }
+                },
+                {
+                    "id": "sortBy",
+                    "options": {
+                        "sort": [
+                            {
+                                "field": "Core Age (s)",
+                                "desc": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Stale flags summed across databases and SSAS instances. Missing is unknown. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 0,
+                "y": 74,
+                "w": 12,
+                "h": 7
+            },
+            "id": 26,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_database_processing_stale{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Stale Database Count — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "ce0xqwhy35wqod"
+            },
+            "description": "Observed active commands across SSAS instances. Shows the 10 highest current values, sorted descending. Each bar is one server; no overlapping series. The fleet table retains all discovered servers. Empty results mean unknown/no data, not zero.",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "noValue": "Unknown",
+                    "mappings": [
+                        {
+                            "type": "special",
+                            "options": {
+                                "match": "null",
+                                "result": {
+                                    "text": "Unknown",
+                                    "color": "gray"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "displayName": "${__field.labels.instance}",
+                    "min": 0,
+                    "color": {
+                        "mode": "continuous-BlPu"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "x": 12,
+                "y": 74,
+                "w": 12,
+                "h": 7
+            },
+            "id": 27,
+            "maxDataPoints": 250,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "valueMode": "color",
+                "namePlacement": "left",
+                "showUnfilled": true,
+                "sizing": "auto",
+                "minVizHeight": 22,
+                "maxVizHeight": 42,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "text": {
+                    "titleSize": 12,
+                    "valueSize": 12
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "ce0xqwhy35wqod"
+                    },
+                    "editorMode": "code",
+                    "expr": "sort_desc(topk(10, ((sum by (job,instance) (ssas_commands_active{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"})) and on(job,instance) ((min by (job,instance) (up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) == 1) and on(job,instance) (max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) >= 0 and max by (job,instance) (time() - ssas_collector_last_run_timestamp_seconds{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${instance:regex}\"}) <= ${freshness:raw})))))",
+                    "instant": true,
+                    "range": false,
+                    "legendFormat": "{{instance}}",
+                    "format": "time_series"
+                }
+            ],
+            "title": "Active Commands — Top 10 Now",
+            "type": "bargauge"
+        },
+        {
+            "id": 28,
+            "type": "text",
+            "title": "How to Read / Coverage Limits",
+            "gridPos": {
+                "x": 0,
+                "y": 81,
+                "w": 24,
+                "h": 5
+            },
+            "options": {
+                "mode": "markdown",
+                "content": "**Start with Fleet Triage:** Probe State is connectivity only. Check collector errors, CPU/RAM, disk, memory limits, queues, locks and stale databases separately. Click a Server for drill-down.\n\n**Inventory:** last 24h of SSAS metrics or Windows SSAS service inventory. Hosts never observed are not automatically discoverable. Use **Additional SSAS hosts (regex)** to include known Windows scrape targets (for example `SSAS01|SSAS02`). Hosts absent from Prometheus still require an external inventory comparison. This dashboard does not claim full fleet coverage.\n\n**Freshness:** data older than the selected threshold (default 300 seconds), from future collector timestamps, or from a failed scrape is excluded from SSAS workload panels. Missing is **Unknown**, never zero. Collector errors can indicate partial data even when the probe succeeds.\n\n**Triage hints:** host CPU/RAM 80/90%; disk free 20/10%; SSAS high-memory-limit ratio 85/100%. Tune to workload. No alert rules are created. Processing stale flags use collector configuration. Backups and recovery readiness are not assessed here.\n\n**Fleet charts:** horizontal Top 10 rankings show current values, not historical trends. Select fewer servers to compare that subset. All discovered servers remain in Fleet Triage. Job is retained internally for query identity but is hidden from tables."
+            }
+        }
+    ],
+    "links": [
+        {
+            "title": "SSAS Details",
+            "type": "link",
+            "targetBlank": true,
+            "url": "/d/winexp-00-ssas?${__url_time_range}&${job:queryparam}&${instance:queryparam}"
+        },
+        {
+            "title": "Host Resources",
+            "type": "link",
+            "targetBlank": true,
+            "url": "/d/winexp-00-host-resources?${__url_time_range}&${job:queryparam}&${instance:queryparam}"
+        },
+        {
+            "title": "CPU",
+            "type": "link",
+            "targetBlank": true,
+            "url": "/d/winexp-col-cpu?${__url_time_range}&${job:queryparam}&${instance:queryparam}"
+        },
+        {
+            "title": "Memory",
+            "type": "link",
+            "targetBlank": true,
+            "url": "/d/winexp-col-memory?${__url_time_range}&${job:queryparam}&${instance:queryparam}"
+        },
+        {
+            "title": "Logical Disk",
+            "type": "link",
+            "targetBlank": true,
+            "url": "/d/winexp-col-logical-disk?${__url_time_range}&${job:queryparam}&${instance:queryparam}"
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "name": "job",
+                "label": "Job",
+                "type": "query",
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "ce0xqwhy35wqod"
+                },
+                "definition": "label_values(windows_exporter_build_info, job)",
+                "query": {
+                    "query": "label_values(windows_exporter_build_info, job)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "multi": true,
+                "includeAll": true,
+                "allValue": ".*",
+                "current": {
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "refresh": 2,
+                "sort": 1,
+                "regex": "",
+                "hide": 0,
+                "options": []
+            },
+            {
+                "name": "owner",
+                "label": "Owner",
+                "type": "query",
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "ce0xqwhy35wqod"
+                },
+                "definition": "label_values(up{job=~\"${job:regex}\"}, owner)",
+                "query": {
+                    "query": "label_values(up{job=~\"${job:regex}\"}, owner)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "multi": true,
+                "includeAll": true,
+                "allValue": ".*",
+                "current": {
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "refresh": 2,
+                "sort": 1,
+                "regex": "",
+                "hide": 0,
+                "options": []
+            },
+            {
+                "name": "extra_hosts",
+                "label": "Additional SSAS hosts (regex)",
+                "type": "textbox",
+                "query": "^$",
+                "current": {
+                    "text": "^$",
+                    "value": "^$"
+                },
+                "options": [],
+                "hide": 0
+            },
+            {
+                "name": "instance",
+                "label": "Server",
+                "type": "query",
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "ce0xqwhy35wqod"
+                },
+                "definition": "query_result(group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                "query": {
+                    "query": "query_result(group by (job,instance) (max_over_time(ssas_up{job=~\"${job:regex}\",owner=~\"${owner:regex}\"}[24h]) or max_over_time(windows_service_state{job=~\"${job:regex}\",owner=~\"${owner:regex}\",name=~\"(?i)MSSQLServerOLAPService|MSOLAP.+\"}[24h]) or max_over_time(up{job=~\"${job:regex}\",owner=~\"${owner:regex}\",instance=~\"${extra_hosts:raw}\"}[24h])))",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "multi": true,
+                "includeAll": true,
+                "allValue": ".*",
+                "current": {
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "refresh": 2,
+                "sort": 1,
+                "regex": "/instance=\"([^\"]+)\"/",
+                "hide": 0,
+                "options": []
+            },
+            {
+                "name": "freshness",
+                "label": "Collector freshness (seconds)",
+                "type": "custom",
+                "query": "120,300,600,900",
+                "current": {
+                    "text": "300",
+                    "value": "300"
+                },
+                "options": [
+                    {
+                        "text": "120",
+                        "value": "120",
+                        "selected": false
+                    },
+                    {
+                        "text": "300",
+                        "value": "300",
+                        "selected": true
+                    },
+                    {
+                        "text": "600",
+                        "value": "600",
+                        "selected": false
+                    },
+                    {
+                        "text": "900",
+                        "value": "900",
+                        "selected": false
+                    }
+                ],
+                "multi": false,
+                "includeAll": false
+            }
+        ]
+    }
+}

@@ -11,12 +11,31 @@ param(
   [Parameter(Mandatory)][string[]]$XelPath,
   [string]$OutputPath=(Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'textfile_inputs\ssas-xevents.prom'),
   [string]$StatePath=(Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'state\ssas-xevents-state.json'),
-  [string]$SiemOutputPath=(Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Log\ssas-security-audit.jsonl')
+  [string]$SiemOutputPath = '',
+  [string]$XEventsDirectory = '',
+  [long]$AuditLogMaxBytes = 0,
+  [long]$XelFileMaxBytes = 0,
+  [long]$XelDirectoryMaxBytes = 0,
+  [int]$KeepRotatedFiles = 0
 )
+. (Join-Path $PSScriptRoot 'Ssas-CollectorConfig.ps1')
+if (-not $SiemOutputPath) { $SiemOutputPath = Get-SsasDefaultAuditLogPath }
+if (-not $XEventsDirectory) { $XEventsDirectory = Get-SsasXEventsDirectory }
+Ensure-SsasProgramDataDirectories | Out-Null
+$rotationDefaults = Get-SsasDefaultRotationSettings
+if ($AuditLogMaxBytes -le 0) { $AuditLogMaxBytes = $rotationDefaults.AuditLogMaxBytes }
+if ($XelFileMaxBytes -le 0) { $XelFileMaxBytes = $rotationDefaults.XelFileMaxBytes }
+if ($XelDirectoryMaxBytes -le 0) { $XelDirectoryMaxBytes = $rotationDefaults.XelDirectoryMaxBytes }
+if ($KeepRotatedFiles -le 0) { $KeepRotatedFiles = $rotationDefaults.KeepRotatedFiles }
+Invoke-SsasRotateFileIfNeeded -Path $SiemOutputPath -MaxBytes $AuditLogMaxBytes -KeepRotatedFiles $KeepRotatedFiles | Out-Null
 $ErrorActionPreference='Stop';$inv=[Globalization.CultureInfo]::InvariantCulture
 function Esc([object]$v){if($null-eq$v){return ''};([string]$v).Replace('\','\\').Replace("`n",'\n').Replace('"','\"')}
 function Labels([hashtable]$h){if(-not$h.Count){return ''};'{'+(($h.Keys|Sort-Object|ForEach-Object{"$_=`"$(Esc $h[$_])`""})-join',')+'}'}
-function Metric($lines,[string]$name,[double]$value,[hashtable]$labels=@{}){$lines.Add("$name$(Labels $labels) $($value.ToString('R',$inv))")}
+function Metric($lines,[string]$name,[double]$value,[hashtable]$labels=@{}){
+  $seriesKey="$name$(Labels $labels)"
+  if(-not $seriesKeys.Add($seriesKey)){$script:duplicateSeries++;return}
+  $lines.Add("$seriesKey $($value.ToString('R',$inv))")
+}
 function Get-EventValue($event,[string[]]$names){
   foreach($name in $names){
     $p=$event.PSObject.Properties[$name];if($p -and $null-ne$p.Value){return $p.Value}
@@ -32,6 +51,7 @@ if(Test-Path $StatePath){try{$old=Get-Content -Raw $StatePath|ConvertFrom-Json;f
 $errors=0;$newEvents=0
 try{Import-Module SqlServer -ErrorAction Stop}catch{$errors++}
 if(Get-Command Read-SqlXEvent -ErrorAction SilentlyContinue){
+  Invoke-SsasXelFileRotation -XEventsDirectory $XEventsDirectory -StateFiles $state.files -XelFileMaxBytes $XelFileMaxBytes -XelDirectoryMaxBytes $XelDirectoryMaxBytes -KeepRotatedFiles $KeepRotatedFiles
   foreach($pattern in $XelPath){foreach($file in @(Get-ChildItem $pattern -File -ErrorAction SilentlyContinue)){
     $cursor=if($state.files.ContainsKey($file.FullName)){[int64]$state.files[$file.FullName]}else{0L};$max=$cursor
     try{foreach($event in @(Read-SqlXEvent -FileName $file.FullName -ErrorAction Stop)){
@@ -48,10 +68,14 @@ if(Get-Command Read-SqlXEvent -ErrorAction SilentlyContinue){
         'QueryEnd'{$state.counters.queries++;$state.counters.query_duration_ms+=$duration;if($text -match '(?i)cancel'){$state.counters.query_cancellations++};if($text -match '(?i)error|fail'){$state.counters.query_errors++}}
       }
       $detail=[ordered]@{timestamp=(Get-EventValue $event @('Timestamp','timestamp'));event=$name;user=(Get-EventValue $event @('CurrentUser','NTUserName','username'));client_ip=(Get-EventValue $event @('ClientHostName','client_hostname','client_ip'));application=(Get-EventValue $event @('ApplicationName','client_app_name'));database=(Get-EventValue $event @('DatabaseName','database_name'));duration_ms=$duration;text=$text;source_file=$file.FullName}
-      $siemDir=Split-Path $SiemOutputPath -Parent;New-Item $siemDir -ItemType Directory -Force|Out-Null;Add-Content -LiteralPath $SiemOutputPath -Value ($detail|ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      $siemDir=Split-Path $SiemOutputPath -Parent;New-Item $siemDir -ItemType Directory -Force|Out-Null
+      Invoke-SsasRotateFileIfNeeded -Path $SiemOutputPath -MaxBytes $AuditLogMaxBytes -KeepRotatedFiles $KeepRotatedFiles | Out-Null
+      Add-Content -LiteralPath $SiemOutputPath -Value ($detail|ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
     };$state.files[$file.FullName]=$max}catch{$errors++}
   }}
 }
+$seriesKeys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$duplicateSeries=0
 $lines=[Collections.Generic.List[string]]::new();$c=$state.counters
 Metric $lines 'ssas_logins_total' $c.logins;Metric $lines 'ssas_logouts_total' $c.logouts;Metric $lines 'ssas_login_failures_total' $c.login_failures
 Metric $lines 'ssas_permission_changes_total' $c.permission_changes;Metric $lines 'ssas_admin_operations_total' $c.admin_operations;Metric $lines 'ssas_privileged_access_changes_total' $c.privileged_access_changes
@@ -59,8 +83,9 @@ Metric $lines 'ssas_xevent_server_restarts_total' $c.server_restarts;Metric $lin
 Metric $lines 'ssas_last_successful_processing_timestamp_seconds' $c.last_processing_timestamp;Metric $lines 'ssas_last_processing_duration_seconds' ([double]$c.last_processing_duration_ms/1000);Metric $lines 'ssas_last_backup_timestamp_seconds' $c.last_backup_timestamp
 Metric $lines 'ssas_queries_total' $c.queries;Metric $lines 'ssas_query_errors_total' $c.query_errors;Metric $lines 'ssas_query_cancellations_total' $c.query_cancellations;Metric $lines 'ssas_query_duration_seconds_total' ([double]$c.query_duration_ms/1000)
 Metric $lines 'ssas_directquery_failures_total' $c.directquery_failures
-Metric $lines 'ssas_xevent_events_processed' $newEvents;Metric $lines 'ssas_xevent_collector_errors' $errors;Metric $lines 'ssas_xevent_last_event_timestamp_seconds' $c.last_event_timestamp
+Metric $lines 'ssas_xevent_events_processed' $newEvents;Metric $lines 'ssas_xevent_collector_duplicate_series' $duplicateSeries;Metric $lines 'ssas_xevent_collector_errors' $errors;Metric $lines 'ssas_xevent_last_event_timestamp_seconds' $c.last_event_timestamp
 $outDir=Split-Path $OutputPath -Parent;$stateDir=Split-Path $StatePath -Parent;New-Item $outDir,$stateDir -ItemType Directory -Force|Out-Null
 $tmp=Join-Path $outDir ('.ssas-xevent.'+[guid]::NewGuid().ToString('N')+'.tmp');[IO.File]::WriteAllLines($tmp,$lines,[Text.UTF8Encoding]::new($false));Move-Item $tmp $OutputPath -Force
 $state|ConvertTo-Json -Depth 8|Set-Content $StatePath -Encoding UTF8
+if($duplicateSeries){Write-Warning "Skipped $duplicateSeries duplicate Prometheus series in ssas-xevents.prom."}
 if($errors){Write-Warning "SSAS xEvent collector completed with $errors error(s)."}

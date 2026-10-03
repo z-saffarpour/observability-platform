@@ -58,6 +58,8 @@ if ($PSCmdlet.ShouldProcess($ServiceName, 'Uninstall SSAS metrics Windows servic
     $ssasScripts = @(
         'Collect-SsasMetrics.ps1',
         'Collect-SsasPerformanceCounters.ps1',
+        'Ssas-CollectorPaths.ps1',
+        'Ssas-CollectorConfig.ps1',
         'Collect-SsasXEventMetrics.ps1',
         'Invoke-SsasCollectors.ps1',
         'Run-SsasMetricsService.ps1',

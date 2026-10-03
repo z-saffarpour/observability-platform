@@ -16,9 +16,15 @@ param(
 $ErrorActionPreference='Stop';$inv=[Globalization.CultureInfo]::InvariantCulture
 function Esc([object]$v){if($null-eq$v){return ''};([string]$v).Replace('\','\\').Replace("`n",'\n').Replace('"','\"')}
 function Labels([hashtable]$h){if(-not$h.Count){return ''};'{'+(($h.Keys|Sort-Object|ForEach-Object{"$_=`"$(Esc $h[$_])`""})-join',')+'}'}
-function Metric($lines,[string]$name,[double]$value,[hashtable]$labels=@{}){$lines.Add("$name$(Labels $labels) $($value.ToString('R',$inv))")}
+function Metric($lines,[string]$name,[double]$value,[hashtable]$labels=@{}){
+  $seriesKey="$name$(Labels $labels)"
+  if(-not $seriesKeys.Add($seriesKey)){$script:duplicateSeries++;return}
+  $lines.Add("$seriesKey $($value.ToString('R',$inv))")
+}
 function Key([string]$v){($v.ToLowerInvariant()-replace'[^a-z0-9]+','_').Trim('_')}
 
+$seriesKeys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$duplicateSeries=0
 $lines=[Collections.Generic.List[string]]::new();$started=Get-Date;$errors=0
 $sets=@(Get-Counter -ListSet * -ErrorAction SilentlyContinue|Where-Object{$_.CounterSetName -match '^(MSOLAP|MSAS\d*)' -and ($CounterGroup -contains (($_.CounterSetName -split ':')[-1]))})
 $paths=@($sets|ForEach-Object{$_.PathsWithInstances+$_.Paths}|Sort-Object -Unique)
@@ -41,14 +47,18 @@ try{
         'reliability|current_panic_mode'='ssas_panic_mode';'reliability|total_memory_allocation_errors'='ssas_memory_allocation_errors_total';'reliability|total_user_errors'='ssas_user_errors_total';'reliability|total_system_errors'='ssas_system_errors_total';'reliability|number_of_threads_waiting_for_memory_due_to_high_memory_state'='ssas_memory_waiting_threads'
       }
       $lookup="$(Key $group)|$(Key $counter)";if($map.ContainsKey($lookup)){Metric $lines $map[$lookup] $sample.CookedValue @{counter_set=$set;perf_instance=$perfInstance}}
-      if((Key $group)-eq'threads' -and (Key $counter)-match'^(.*)_(idle|busy)_.*threads$'){Metric $lines 'ssas_thread_pool_threads' $sample.CookedValue @{counter_set=$set;pool=$matches[1];state=$matches[2];perf_instance=$perfInstance}}
-      if((Key $group)-eq'threads' -and (Key $counter)-match'^(.*)_job_queue_length$'){Metric $lines 'ssas_thread_pool_queue_length' $sample.CookedValue @{counter_set=$set;pool=$matches[1];perf_instance=$perfInstance}}
+      $counterKey=Key $counter
+      if((Key $group)-eq'threads' -and $counterKey -match'^(?<pool>.+)_(?<state>idle|busy)_(?<variant>.+)_threads$'){Metric $lines 'ssas_thread_pool_threads' $sample.CookedValue @{counter_set=$set;pool=(Key ($Matches.pool+'_'+$Matches.variant));state=$Matches.state;perf_instance=$perfInstance}}
+      elseif((Key $group)-eq'threads' -and $counterKey -match'^(?<pool>.+)_(?<state>idle|busy)_threads$'){Metric $lines 'ssas_thread_pool_threads' $sample.CookedValue @{counter_set=$set;pool=(Key $Matches.pool);state=$Matches.state;perf_instance=$perfInstance}}
+      if((Key $group)-eq'threads' -and $counterKey -match'^(.*)_job_queue_length$'){Metric $lines 'ssas_thread_pool_queue_length' $sample.CookedValue @{counter_set=$set;pool=$matches[1];perf_instance=$perfInstance}}
     }
   }else{$errors++}
 }catch{$errors++}
+Metric $lines 'ssas_performance_collector_duplicate_series' $duplicateSeries
 Metric $lines 'ssas_performance_collector_errors' $errors
 Metric $lines 'ssas_performance_collector_duration_seconds' ((Get-Date)-$started).TotalSeconds
 Metric $lines 'ssas_performance_collector_last_run_timestamp_seconds' ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
 $dir=Split-Path $OutputPath -Parent;New-Item $dir -ItemType Directory -Force|Out-Null;$tmp=Join-Path $dir ('.ssas-perf.'+[guid]::NewGuid().ToString('N')+'.tmp')
 [IO.File]::WriteAllLines($tmp,$lines,[Text.UTF8Encoding]::new($false));Move-Item $tmp $OutputPath -Force
+if($duplicateSeries){Write-Warning "Skipped $duplicateSeries duplicate Prometheus series in ssas-performance.prom."}
 if($errors){Write-Warning 'No supported SSAS performance counter sets were sampled.'}

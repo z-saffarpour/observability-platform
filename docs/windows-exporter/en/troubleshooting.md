@@ -32,7 +32,7 @@ Query `windows_exporter_collector_success == 0`.
 2. Confirm `Install-SsasMetricsTask.ps1` installed the `prometheus_windows_ssas` service and that it is running.
 3. Confirm `textfile_inputs\ssas*.prom` files are fresh (`ssas_collector_last_run_timestamp_seconds`).
 4. Verify ADOMD/AMO libraries and that the task identity can reach the instance.
-5. For XEvents: PowerShell `SqlServer` module, `*.xel` path, and the session from `scripts/ssas/windows-exporter/ssas-monitoring-xevents.xmla`.
+5. For XEvents: PowerShell `SqlServer` module, `C:\ProgramData\Observability\SSAS\xevents\*.xel`, and the session from `scripts/ssas/windows-exporter/ssas-monitoring-xevents.xmla`.
 
 More detail: [SSAS monitoring](ssas-monitoring.md).
 
