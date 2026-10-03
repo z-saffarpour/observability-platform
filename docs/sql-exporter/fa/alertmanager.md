@@ -46,4 +46,5 @@ amtool check-config .\prometheus\alertmanager\alertmanager.yml
 - Alertmanager کانال SMS بومی ندارد؛ SMS از طریق `webhook_configs` ارسال می‌شود.
 - برای غیرفعال‌کردن SMS در P1، بلوک `webhook_configs` زیر `email-sms-p1` را حذف کنید.
 - Inhibit ruleها وقتی P0 یا `severity=critical` برای همان `alertname` + `instance` فعال است، اعلان‌های اولویت پایین‌تر را سرکوب می‌کنند.
+- مسیریابی گیرنده بر اساس label `owner` است. `FMR-DBA`، `OK-DBA`، `FMR-BI-Develop` و `OK-BI-Develop` هر کدام mailbox و webhook جدا دارند. P0 و P1 همچنان SMS دارند و P2 فقط Email است. owner ناشناخته به receiver مشترک می‌رود.
 - قالب `sms.sql_exporter.text` برای notifierهایی است که از template سمت Alertmanager استفاده می‌کنند؛ بسیاری از gatewayها فقط JSON webhook را parse می‌کنند.

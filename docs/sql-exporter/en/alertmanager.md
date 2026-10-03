@@ -46,4 +46,5 @@ amtool check-config .\prometheus\alertmanager\alertmanager.yml
 - Alertmanager has no built-in SMS transport; SMS goes through `webhook_configs`.
 - To disable SMS on P1, remove the `webhook_configs` block under `email-sms-p1`.
 - Inhibit rules drop lower-priority duplicates when a matching P0/critical alert is already firing for the same `alertname` + `instance`.
+- Receivers are selected by the `owner` label. `FMR-DBA`, `OK-DBA`, `FMR-BI-Develop`, and `OK-BI-Develop` each have their own mailbox and SMS webhook. P0 and P1 still send SMS; P2 stays email only. An unknown owner uses the shared receivers.
 - The `sms.sql_exporter.text` template helps notifiers that render Alertmanager templates; many gateways only parse the webhook JSON.

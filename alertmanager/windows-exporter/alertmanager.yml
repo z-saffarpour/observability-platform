@@ -22,14 +22,114 @@ global:
 templates:
   - "templates/*.tmpl"
 
+# Owner routes send that team's servers to that team's mailbox and SMS gateway.
+# Replace CHANGE_ME_<OWNER>_EMAIL. SMS goes to the local gateway installed by
+# Install-AlertmanagerSms.ps1. The ?owner= value selects the phone number.
+# Unknown owners stay on the shared receivers.
 route:
   receiver: email-p2
-  group_by: [priority, alertname, instance, job]
+  group_by: [owner, priority, alertname, instance, job]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
   routes:
-    # P0 — page immediately: SMS + Email
+    - matchers:
+        - owner = "FMR-DBA"
+      receiver: email-p2-fmr-dba
+      continue: false
+      routes:
+        - matchers:
+            - priority = "P0"
+          receiver: sms-email-p0-fmr-dba
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 15m
+        - matchers:
+            - priority = "P1"
+          receiver: email-sms-p1-fmr-dba
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 1h
+        - matchers:
+            - priority = "P2"
+          receiver: email-p2-fmr-dba
+          group_wait: 1m
+          group_interval: 15m
+          repeat_interval: 12h
+
+    - matchers:
+        - owner = "OK-DBA"
+      receiver: email-p2-ok-dba
+      continue: false
+      routes:
+        - matchers:
+            - priority = "P0"
+          receiver: sms-email-p0-ok-dba
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 15m
+        - matchers:
+            - priority = "P1"
+          receiver: email-sms-p1-ok-dba
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 1h
+        - matchers:
+            - priority = "P2"
+          receiver: email-p2-ok-dba
+          group_wait: 1m
+          group_interval: 15m
+          repeat_interval: 12h
+
+    - matchers:
+        - owner = "FMR-BI-Develop"
+      receiver: email-p2-fmr-bi-develop
+      continue: false
+      routes:
+        - matchers:
+            - priority = "P0"
+          receiver: sms-email-p0-fmr-bi-develop
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 15m
+        - matchers:
+            - priority = "P1"
+          receiver: email-sms-p1-fmr-bi-develop
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 1h
+        - matchers:
+            - priority = "P2"
+          receiver: email-p2-fmr-bi-develop
+          group_wait: 1m
+          group_interval: 15m
+          repeat_interval: 12h
+
+    - matchers:
+        - owner = "OK-BI-Develop"
+      receiver: email-p2-ok-bi-develop
+      continue: false
+      routes:
+        - matchers:
+            - priority = "P0"
+          receiver: sms-email-p0-ok-bi-develop
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 15m
+        - matchers:
+            - priority = "P1"
+          receiver: email-sms-p1-ok-bi-develop
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 1h
+        - matchers:
+            - priority = "P2"
+          receiver: email-p2-ok-bi-develop
+          group_wait: 1m
+          group_interval: 15m
+          repeat_interval: 12h
+
+    # Unknown owner keeps the shared mailbox. Do not drop the alert.
     - matchers:
         - priority = "P0"
       receiver: sms-email-p0
@@ -72,6 +172,142 @@ inhibit_rules:
     equal: [alertname, instance]
 
 receivers:
+  - name: sms-email-p0-fmr-dba
+    email_configs:
+      - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P0][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: email-sms-p1-fmr-dba
+    email_configs:
+      - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P1][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
+        send_resolved: false
+        max_alerts: 10
+
+  - name: email-p2-fmr-dba
+    email_configs:
+      - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P2][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+
+  - name: sms-email-p0-ok-dba
+    email_configs:
+      - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P0][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: email-sms-p1-ok-dba
+    email_configs:
+      - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P1][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
+        send_resolved: false
+        max_alerts: 10
+
+  - name: email-p2-ok-dba
+    email_configs:
+      - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P2][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+
+  - name: sms-email-p0-fmr-bi-develop
+    email_configs:
+      - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P0][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: email-sms-p1-fmr-bi-develop
+    email_configs:
+      - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P1][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
+        send_resolved: false
+        max_alerts: 10
+
+  - name: email-p2-fmr-bi-develop
+    email_configs:
+      - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P2][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+
+  - name: sms-email-p0-ok-bi-develop
+    email_configs:
+      - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P0][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: email-sms-p1-ok-bi-develop
+    email_configs:
+      - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P1][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
+        send_resolved: false
+        max_alerts: 10
+
+  - name: email-p2-ok-bi-develop
+    email_configs:
+      - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: "[P2][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+        html: '{{ template "email.windows_exporter.html" . }}'
+
   - name: sms-email-p0
     email_configs:
       - to: "CHANGE_ME_P0_EMAIL@example.com"
@@ -82,7 +318,7 @@ receivers:
     webhook_configs:
       # SMS gateway / custom notifier. Expected to accept Alertmanager webhook JSON.
       # Example body fields: commonLabels.priority, commonLabels.alertname, commonLabels.instance
-      - url: "http://CHANGE_ME_SMS_GATEWAY/alertmanager"
+      - url: "http://127.0.0.1:49177/sendsms"
         send_resolved: true
         http_config:
           follow_redirects: true
@@ -97,7 +333,7 @@ receivers:
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       # Keep SMS for P1 if your gateway supports priority filtering; otherwise remove this block.
-      - url: "http://CHANGE_ME_SMS_GATEWAY/alertmanager"
+      - url: "http://127.0.0.1:49177/sendsms"
         send_resolved: false
         max_alerts: 10
 
