@@ -72,18 +72,18 @@ needed to evaluate P0/P1/P2 alerts. Ready `rule_files` packs live under
 ## Timeout for expensive collectors
 
 SQL Exporter v0.24.4 supports `scrape_timeout` globally, not per collector. The
-repository configuration therefore allows up to 55 seconds for a collection.
+repository configuration therefore allows up to 119 seconds for a collection.
 Configure the matching Prometheus scrape job with a slightly larger timeout:
 
 ```yaml
 scrape_configs:
   - job_name: sql_exporter
-    scrape_interval: 90s
-    scrape_timeout: 60s
+    scrape_interval: 180s
+    scrape_timeout: 120s
 ```
 
 Prometheus sends its timeout to the exporter on every request. The effective
-exporter timeout is the smaller of the local 55-second limit and the Prometheus
+exporter timeout is the smaller of the local 119-second limit and the Prometheus
 timeout minus `scrape_timeout_offset`.
 
 Collectors such as `mssql_index_fragmentation`, `mssql_buffer_pool_database`,

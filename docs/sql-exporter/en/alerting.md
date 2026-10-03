@@ -46,6 +46,8 @@ Every alert carries these labels:
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
 | `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` | 2m |
+| `SqlFilegroupFreeSpaceCritical` | p1-space | filegroup free runway < 3 days of its own 7-day growth | 30m |
+| `SqlDatabaseLogGrowthCritical` | p1-performance | 24h log growth > 25% of that database log, and > 64 MB | 15m |
 
 ## P1 — High
 
@@ -55,6 +57,7 @@ Every alert carries these labels:
 | `SqlFileIoLatencyHigh` | p1-performance | latency > 20ms | 10m |
 | `SqlTransactionLogUsageHigh` | p1-performance | user-db log used > 80% | 10m |
 | `SqlSystemDbTransactionLogUsageHigh` | p1-performance | tempdb/msdb log used > 80% | 10m |
+| `SqlDatabaseLogGrowthHigh` | p1-performance | 24h log growth > 10% of that database log, and > 64 MB | 30m |
 | `SqlBlockingPersistent` | p1-performance | blocking > 0 | 5m |
 | `SqlMemoryGrantPressure` | p1-performance | pending grants > 0 | 5m |
 | `SqlTempdbPressure` | p1-performance | waiters or version store > 10 GiB | 10m |
@@ -63,6 +66,7 @@ Every alert carries these labels:
 | `SqlLockWaitPersistent` | p1-performance | locks waiting > 0 | 5m |
 | `SqlLongRunningRequest` | p1-performance | request > 5m | 5m |
 | `SqlDatabaseFileSpaceHigh` | p1-space | file used > 85% | 15m |
+| `SqlFilegroupFreeSpaceLow` | p1-space | filegroup free runway < 14 days of its own 7-day growth | 1h |
 | `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
 | `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
 | `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |

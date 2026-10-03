@@ -46,6 +46,8 @@
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
 | `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` | 2m |
+| `SqlFilegroupFreeSpaceCritical` | p1-space | فضای خالی filegroup کمتر از ۳ روز رشد خودش | 30m |
+| `SqlDatabaseLogGrowthCritical` | p1-performance | رشد ۲۴ساعته لاگ بیش از ۲۵٪ لاگ همان دیتابیس و بیش از ۶۴ مگابایت | 15m |
 
 ## P1 — High
 
@@ -55,6 +57,7 @@
 | `SqlFileIoLatencyHigh` | p1-performance | latency > ۲۰ms | 10m |
 | `SqlTransactionLogUsageHigh` | p1-performance | log used دیتابیس کاربری > ۸۰٪ | 10m |
 | `SqlSystemDbTransactionLogUsageHigh` | p1-performance | log used برای tempdb/msdb > ۸۰٪ | 10m |
+| `SqlDatabaseLogGrowthHigh` | p1-performance | رشد ۲۴ساعته لاگ بیش از ۱۰٪ لاگ همان دیتابیس و بیش از ۶۴ مگابایت | 30m |
 | `SqlBlockingPersistent` | p1-performance | blocking > 0 | 5m |
 | `SqlMemoryGrantPressure` | p1-performance | pending grants > 0 | 5m |
 | `SqlTempdbPressure` | p1-performance | waiters یا version store > ۱۰ GiB | 10m |
@@ -63,6 +66,7 @@
 | `SqlLockWaitPersistent` | p1-performance | locks waiting > 0 | 5m |
 | `SqlLongRunningRequest` | p1-performance | request > ۵m | 5m |
 | `SqlDatabaseFileSpaceHigh` | p1-space | file used > ۸۵٪ | 15m |
+| `SqlFilegroupFreeSpaceLow` | p1-space | فضای خالی filegroup کمتر از ۱۴ روز رشد خودش | 1h |
 | `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
 | `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
 | `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |

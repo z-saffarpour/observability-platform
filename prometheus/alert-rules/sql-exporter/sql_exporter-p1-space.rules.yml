@@ -1,4 +1,7 @@
-# P1 — High space / capacity warnings
+# Space / capacity alerts.
+# Filegroup runway uses each filegroup's own 7-day growth, so the free-MB
+# threshold scales from a 60GB database to a 72TB database.
+# P0/P1 route to SMS through alertmanager/sql-exporter/alertmanager.yml.
 groups:
   - name: sql_exporter.p1.space
     interval: 60s
@@ -15,3 +18,35 @@ groups:
           summary: "Database file usage is high"
           description: "File {{ $labels.logical_name }} in {{ $labels.db }} is {{ $value | humanize }}% used."
           runbook: "Plan growth, purge/archive, or expand max size / disk. Tune threshold per database."
+
+      - alert: SqlFilegroupFreeSpaceLow
+        expr: |
+          mssql:filegroup_free_days{is_read_only="0",db!~"master|model|msdb|tempdb"} < 14
+          and
+          mssql:filegroup_growth_mb_per_day{is_read_only="0",db!~"master|model|msdb|tempdb"} > 64
+        for: 1h
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: space
+          collector: mssql_database_space
+        annotations:
+          summary: "Filegroup free space is under 14 days of its own growth"
+          description: "Filegroup {{ $labels.filegroup }} in {{ $labels.db }} on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. The free-MB threshold is 14 times that filegroup's own daily growth, not a fixed size."
+          runbook: "Compare mssql:filegroup_free_mb with mssql:filegroup_free_mb:threshold_warning. Extend the filegroup, add a file, or free space before autogrowth or error 1105. Confirm volume free space and max_size. SMS follows priority P1."
+
+      - alert: SqlFilegroupFreeSpaceCritical
+        expr: |
+          mssql:filegroup_free_days{is_read_only="0",db!~"master|model|msdb|tempdb"} < 3
+          and
+          mssql:filegroup_growth_mb_per_day{is_read_only="0",db!~"master|model|msdb|tempdb"} > 64
+        for: 30m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: space
+          collector: mssql_database_space
+        annotations:
+          summary: "Filegroup free space is under 3 days of its own growth"
+          description: "Filegroup {{ $labels.filegroup }} in {{ $labels.db }} on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. Writes can fail with error 1105 when this filegroup cannot grow."
+          runbook: "Treat as capacity emergency for this database and filegroup. Expand the filegroup or free data before the volume or max_size blocks growth. SMS follows priority P0."

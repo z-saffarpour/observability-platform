@@ -16,7 +16,9 @@ Collector سفارشی `Collect-SsasMetrics.ps1` اطلاعات DMV و AMO را 
 .\scripts\powershell\windows-exporter\Install-SsasMetricsTask.ps1 -ServiceMode NSSM
 ```
 
-نصب‌کننده Event Source با نام `prometheus_windows_ssas` را در لاگ Application ثبت می‌کند و رویدادهای چرخه اجرا و خطاهای Collector با همین نام سرویس نوشته می‌شوند. پیام‌های داخلی Wrapper خود NSSM به‌علت نام کامپایل‌شده آن همچنان Source برابر `nssm` دارند. اگر تمام رویدادهای مرتبط باید حتماً نام سرویس را نشان دهند، از `ServiceBase` استفاده کنید.
+هر دو نصب‌کنندهٔ محلی و ریموت حساب **Log On** سرویس را تنظیم می‌کنند. `-ServiceAccountMode` از `LocalSystem` (پیش‌فرض)، `LocalService`، `NetworkService`، `Credential`، `gMSA` و `NtService` پشتیبانی می‌کند. برای حساب سرویس دامنه از `-ServiceAccountMode Credential -ServiceCredential (Get-Credential 'DOMAIN\svc-ssas-monitoring')` و برای gMSA از `-ServiceAccountMode gMSA -ServiceAccount 'DOMAIN\gmsa-ssas-monitoring$'` استفاده کنید.
+
+نصب‌کننده وضعیت مرحله‌به‌مرحله و خطاها را هم در console و هم در فایل `Log\prometheus_windows_ssas.install.log` زیر مسیر نصب ثبت می‌کند. همچنین Event Source با نام `prometheus_windows_ssas` را در لاگ Application ثبت می‌کند: Event ID `1001` نصب موفق و Event ID `1002` خطای نصب را ثبت می‌کند. رویدادهای چرخه اجرا و خطاهای Collector نیز با همین نام سرویس نوشته می‌شوند. پیام‌های داخلی Wrapper خود NSSM به‌علت نام کامپایل‌شده آن همچنان Source برابر `nssm` دارند. اگر تمام رویدادهای مرتبط باید حتماً نام سرویس را نشان دهند، از `ServiceBase` استفاده کنید.
 
 برای نصب و حذف گروهی از طریق WinRM، اسکریپت‌های ریموت را روی سرور مدیریت اجرا کنید:
 
@@ -59,7 +61,7 @@ Collector سفارشی `Collect-SsasMetrics.ps1` اطلاعات DMV و AMO را 
 
 ## نصب
 
-پیش‌نیاز، نصب SSAS Client Libraries شامل `Microsoft.AnalysisServices.AdomdClient` و AMO است. حساب اجرای Task باید اجازه اتصال و مشاهده DMVها را داشته باشد؛ برای شمارش کامل role/memberها به دسترسی مدیریتی SSAS نیاز است.
+پیش‌نیاز، نصب SSAS Client Libraries شامل `Microsoft.AnalysisServices.AdomdClient` و AMO است. حساب Log On سرویس باید اجازه اتصال و مشاهده DMVها را داشته باشد؛ برای شمارش کامل role/memberها به دسترسی مدیریتی SSAS نیاز است.
 
 ```powershell
 Set-Location 'C:\Program Files\Observability\PrometheusExporters\windows-exporter'
@@ -82,16 +84,25 @@ Invoke-WebRequest http://localhost:9182/metrics | Select-String 'ssas_'
 |---|---|
 | `ssas_up`, `ssas_server_info` | اتصال، mode، version و edition |
 | `ssas_databases`, `ssas_database_info` | inventory دیتابیس و compatibility level |
-| `ssas_database_last_processed_timestamp_seconds` | آخرین پردازش مدل/cube |
-| `ssas_database_processing_stale` | قدیمی‌بودن پردازش بر اساس `-StaleAfterHours` |
+| `ssas_database_last_processed_timestamp_seconds` | جدیدترین زمان پردازش پارتیشن/دایمنشن در دیتابیس |
+| `ssas_database_processing_stale` | `1` وقتی حداقل یک پارتیشن یا دایمنشن در دیتابیس stale باشد |
+| `ssas_database_stale_partitions` | تعداد پارتیشن‌های stale در دیتابیس |
+| `ssas_database_stale_dimensions` | تعداد دایمنشن‌های stale در دیتابیس |
+| `ssas_object_last_processed_timestamp_seconds` | آخرین زمان پردازش/refresh برای هر پارتیشن یا دایمنشن |
+| `ssas_object_processing_stale` | پرچم stale برای هر پارتیشن یا دایمنشن (`object_type` = `partition` یا `dimension`) |
 | `ssas_sessions`, `ssas_connections`, `ssas_commands_active` | بار هم‌زمان |
+| `ssas_sessions_by_login` | نشست‌های فعال بر اساس `login`، `application`، `database` و `client_host` (IP یا hostname کلاینت از DMV) |
 | `ssas_unique_logins` | تعداد login یکتای sessionهای جاری |
 | `ssas_session_cpu_time_seconds_total` | CPU تجمیعی sessionهای مشاهده‌شده |
 | `ssas_server_administrators` | تعداد اعضای role مدیریتی سرور |
-| `ssas_roles`, `ssas_role_members` | تعداد role و اعضا، به تفکیک database و permission |
+| `ssas_roles`, `ssas_role_members` | تعداد role و اعضا، به تفکیک database و permission (Tabular: `TMSCHEMA_ROLES` از ADOMD؛ Multidimensional: `Database.Roles` از AMO) |
 | `ssas_high_privilege_logins` | کاربران یکتای Administrator/Refresh و مدیران سرور |
 | `ssas_privileged_active_sessions` | sessionهای جاری کاربران پرسطح |
 | `ssas_collector_errors`, `ssas_collector_duration_seconds` | سلامت خود collector |
+| `ssas_database_size_bytes` | جمع بایت‌های VertiPaq به ازای هر database در Tabular؛ در Multidimensional از AMO `EstimateSize` |
+| `ssas_database_memory_bytes` | جمع حافظه زنده هر database از ردیف‌های `OBJECT_PARENT_PATH` / `ObjectParentPath` (با fallback به `DISCOVER_MEMORYUSAGE` وقتی `DISCOVER_OBJECT_MEMORY_USAGE` overflow می‌دهد) |
+| `ssas_memory_object_usage_bytes` | تفکیک حافظه به ازای database و `object_group` از همان DMV |
+| `ssas_tabular_object_size_bytes` | بایت segment به ازای database/table_id/column_id |
 
 `high privilege` در این پیاده‌سازی شامل Server Administrator و roleهای دارای `Administrator`، `Refresh` یا `ReadRefresh` است. در Multidimensionalهای قدیمی که property استاندارد permission در AMO قابل خواندن نیست، role با نام شامل `admin` به‌عنوان fallback طبقه‌بندی می‌شود؛ این مورد باید روی canary با ساختار واقعی roleها بازبینی شود.
 
@@ -115,6 +126,97 @@ UID پیش‌فرض Prometheus datasource مطابق سایر داشبوردها
 
 علاوه بر aliasهای ثابت، تمام counterهای گروه‌های انتخاب‌شده با متریک `ssas_performance_counter_value` و labelهای محدود `counter_set`، `group`، `counter` و `perf_instance` منتشر می‌شوند. نام objectهای Performance Counter بین نسخه و Named Instance متفاوت است و به همین دلیل در زمان اجرا کشف می‌شود.
 
+## مسیرهای استاندارد فایل‌ها
+
+| نوع | مسیر پیشنهادی |
+|---|---|
+| نصب collector و config | `C:\Program Files\Observability\PrometheusExporters\windows-exporter\` |
+| خروجی Prometheus (`.prom`) | `...\textfile_inputs\` |
+| state کوچک collector | `...\state\` |
+| فایل‌های XEL/XEM (SSAS می‌نویسد) | `C:\ProgramData\Observability\SSAS\xevents\` |
+| connection string probe | `C:\ProgramData\Observability\SSAS\secrets\` |
+| audit JSONL برای SIEM | `C:\ProgramData\Observability\SSAS\audit\ssas-security-audit.jsonl` |
+| backup SSAS (خارج از Observability) | مسیر واقعی backup سرور (مثلاً `D:\SSAS\Backup`) |
+
+`Install-SsasMetricsTask.ps1` پوشه‌های `ProgramData\Observability\SSAS\` را هنگام نصب می‌سازد. با `-EnableXEvents` اگر `-XelPath` داده نشود، مقدار پیش‌فرض `C:\ProgramData\Observability\SSAS\xevents\*.xel` در `collector\ssas-collector.json` ثبت می‌شود.
+
+## مقداردهی مسیرها هنگام نصب و آپگرید
+
+مسیرهای `ProgramData` و تنظیمات چرخش فایل در `collector\ssas-collector.json` نوشته می‌شوند. هنگام نصب مجدد یا آپگرید، `Instance`، `Endpoint` و timeoutهای موجود حفظ می‌شوند؛ مسیرهای استاندارد و بخش `Rotation` با مقادیر جدید به‌روز می‌شوند.
+
+| پارامتر نصب | مقدار پیش‌فرض |
+|---|---|
+| `ProgramDataRoot` | `C:\ProgramData\Observability\SSAS` |
+| `XEventsDirectory` | `...\SSAS\xevents` |
+| `SecretsDirectory` | `...\SSAS\secrets` |
+| `AuditDirectory` | `...\SSAS\audit` |
+| `SiemOutputPath` | `...\audit\ssas-security-audit.jsonl` |
+
+نمونه override در نصب:
+
+```powershell
+.\scripts\powershell\windows-exporter\Install-SsasMetricsTask.ps1 `
+  -Instance 'NODE' `
+  -Endpoint 'NODE=localhost:49160' `
+  -EnableXEvents `
+  -ProgramDataRoot 'D:\Observability\SSAS' `
+  -AuditLogMaxBytes 104857600
+```
+
+برای به‌روزرسانی فقط config بدون نصب مجدد سرویس:
+
+```powershell
+.\scripts\powershell\windows-exporter\Update-SsasCollectorConfig.ps1
+```
+
+`Upgrade-WindowsExporterRemote.ps1` در سرورهایی که `prometheus_windows_ssas` نصب است، اسکریپت‌های SSAS را کپی و `ssas-collector.json` را merge می‌کند.
+
+نمونه ساختار `ssas-collector.json`:
+
+```json
+{
+  "Instance": ["NODE"],
+  "Endpoint": ["NODE=localhost:49160"],
+  "Paths": {
+    "ProgramDataRoot": "C:\\ProgramData\\Observability\\SSAS",
+    "XEventsDirectory": "C:\\ProgramData\\Observability\\SSAS\\xevents",
+    "SecretsDirectory": "C:\\ProgramData\\Observability\\SSAS\\secrets",
+    "AuditDirectory": "C:\\ProgramData\\Observability\\SSAS\\audit"
+  },
+  "XelPath": ["C:\\ProgramData\\Observability\\SSAS\\xevents\\*.xel"],
+  "SiemOutputPath": "C:\\ProgramData\\Observability\\SSAS\\audit\\ssas-security-audit.jsonl",
+  "CommandTimeoutSec": 120,
+  "Rotation": {
+    "AuditLogMaxBytes": 52428800,
+    "XelFileMaxBytes": 1073741824,
+    "XelDirectoryMaxBytes": 5368709120,
+    "KeepRotatedFiles": 10
+  }
+}
+```
+
+## چرخش فایل (Rotation)
+
+وقتی اندازه فایل‌ها از حد تعیین‌شده بیشتر شود، collector به‌صورت خودکار فایل را می‌چرخاند:
+
+| تنظیم | پیش‌فرض | رفتار |
+|---|---|---|
+| `AuditLogMaxBytes` | 50 MB | فایل audit JSONL به `audit\archive\` منتقل می‌شود |
+| `XelFileMaxBytes` | 1 GB | فایل‌های `.xel` قدیمی (غیرفعال) به `xevents\archive\` منتقل می‌شوند |
+| `XelDirectoryMaxBytes` | 5 GB | کل حجم پوشه xevents (شامل archive) محدود می‌شود |
+| `KeepRotatedFiles` | 10 | حداکثر تعداد فایل‌های archive نگه‌داری‌شده |
+
+Session Extended Events در XMLA نیز `max_file_size=256` MB و `max_rollover_files=10` دارد (چرخش سمت SSAS). چرخش collector مکمل آن است و فایل‌های پردازش‌شده یا بزرگ را archive یا حذف می‌کند.
+
+محدودیت‌ها را در نصب override کنید:
+
+```powershell
+.\Install-SsasMetricsRemote.ps1 -Computers SSAS01 `
+  -Instance 'NODE' -Endpoint 'NODE=localhost:49160' -EnableXEvents `
+  -AuditLogMaxBytes 104857600 -XelDirectoryMaxBytes 10737418240
+```
+
+
 ## نصب کامل
 
 برای Default Instance:
@@ -124,7 +226,7 @@ UID پیش‌فرض Prometheus datasource مطابق سایر داشبوردها
   -Instance localhost `
   -Endpoint 'localhost=localhost:2383' `
   -BackupPath 'D:\SSAS\Backup' `
-  -XelPath 'C:\ProgramData\DBA Monitoring\SSAS XEvents\*.xel'
+  -EnableXEvents
 ```
 
 برای Named Instance باید پورت واقعی مشخص شود:
@@ -134,13 +236,22 @@ UID پیش‌فرض Prometheus datasource مطابق سایر داشبوردها
   -Instance 'SERVER01\TABULAR','SERVER01\MD' `
   -Endpoint 'SERVER01\TABULAR=SERVER01:51342','SERVER01\MD=SERVER01:51343' `
   -BackupPath 'E:\SSAS-Backup' `
-  -XelPath 'C:\ProgramData\DBA Monitoring\SSAS XEvents\*.xel'
+  -EnableXEvents
+```
+
+یا با مسیر صریح در همان دستور نصب:
+
+```powershell
+.\scripts\powershell\windows-exporter\Install-SsasMetricsTask.ps1 `
+  -Instance 'SERVER01\TABULAR' `
+  -Endpoint 'SERVER01\TABULAR=SERVER01:51342' `
+  -XelPath 'C:\ProgramData\Observability\SSAS\xevents\*.xel'
 ```
 
 Task به‌صورت پیش‌فرض با `SYSTEM` اجرا می‌شود. برای خواندن کامل `DISCOVER_SESSIONS` و role/memberها، هویت Collector باید دسترسی مدیریتی مناسب SSAS داشته باشد. Probe جداگانه Read-only اختیاری است؛ connection string را در فایلی قرار دهید که ACL آن فقط برای `SYSTEM` و Administrators قابل خواندن باشد و سپس نگاشت بدهید:
 
 ```powershell
-$probeFile='C:\ProgramData\DBA Monitoring\SSAS\readonly-probe.connectionstring'
+$probeFile='C:\ProgramData\Observability\SSAS\secrets\readonly-probe.connectionstring'
 # نمونه محتوا: Data Source=SERVER01\TABULAR;User ID=DOMAIN\ssas_probe;Password=...;Application Name=Prometheus ReadOnly Probe
 icacls $probeFile /inheritance:r /grant:r 'SYSTEM:R' 'Administrators:F'
 
@@ -157,7 +268,7 @@ icacls $probeFile /inheritance:r /grant:r 'SYSTEM:R' 'Administrators:F'
 
 `Collect-SsasXEventMetrics.ps1` به ماژول PowerShell `SqlServer` و cmdlet `Read-SqlXEvent` نیاز دارد. موقعیت خواندن هر فایل و counterهای تجمعی در `state/ssas-xevents-state.json` نگه‌داری می‌شوند. حذف این فایل باعث reset شدن counterها و احتمال بازخوانی XEL می‌شود.
 
-جزئیات username، client، application، database و متن event فقط در `Log/ssas-security-audit.jsonl` نوشته می‌شوند تا به WEC/SIEM منتقل شوند؛ هیچ username یا IP به label پرومتئوس تبدیل نمی‌شود.
+جزئیات username، client، application، database و متن event فقط در `C:\ProgramData\Observability\SSAS\audit\ssas-security-audit.jsonl` نوشته می‌شوند تا به WEC/SIEM منتقل شوند؛ هیچ username یا IP به label پرومتئوس تبدیل نمی‌شود.
 
 ## پوشش متریک‌ها
 
@@ -167,7 +278,8 @@ icacls $probeFile /inheritance:r /grant:r 'SYSTEM:R' 'Administrators:F'
 - Privilege: server admin، implicit Local Admin، service account direct admin و role memberهای admin/process/readwrite.
 - Processing/Backup: LastProcessed هر database، آخرین Processing موفق، مدت آخرین Processing، failure total و آخرین Backup از xEvent یا فایل ABF.
 - Performance: Query rate/duration/failure، cache، lock/wait، thread pool، processing rows/partition، DirectQuery، memory usage/limits/pressure و reliability.
-- Tabular capacity: `ssas_tabular_object_size_bytes`، row و segment count به تفکیک database/table_id/column_id.
+- Tabular capacity: `ssas_tabular_object_size_bytes`، `ssas_database_size_bytes`، row و segment count به تفکیک database/table_id/column_id.
+- Database memory: `ssas_database_memory_bytes` و `ssas_memory_object_usage_bytes` از `DISCOVER_OBJECT_MEMORY_USAGE` (با fallback برای نام DMV).
 - Host capacity: CPU، Working Set/Private Bytes، page fault، disk latency/IOPS و free space از collectorهای استاندارد `process`، `cpu`، `memory` و `logical_disk` ویندوز.
 
 Thresholdهای rule شامل ۲۴ ساعت برای Processing، ۴۸ ساعت برای Backup و افزایش ۵۰٪ مدت Processing نمونه هستند و باید با SLA هر مدل تنظیم شوند.

@@ -1,0 +1,44 @@
+# Filegroup headroom. Evaluated every 1m so samples stay inside Prometheus
+# staleness (5m). A 5m interval lets the series go stale between evaluations
+# and resets alert `for` timers such as SqlFilegroupFreeSpaceCritical.
+# mssql:filegroup_free_days is free MB divided by this filegroup's own 7-day
+# growth (MB/day). A 60GB database and a 72TB database therefore get different
+# free-MB thresholds from their own growth, not from one fixed number.
+# deriv needs 7 days of mssql:filegroup_used_mb after the filegroup label is scraped.
+groups:
+  - name: sql_exporter.recording.filegroup_space
+    interval: 1m
+    rules:
+      - record: mssql:filegroup_free_mb
+        expr: |
+          sum without (file_id, logical_name, type_desc) (
+            mssql_database_space_free_mb{type_desc="ROWS",filegroup!=""}
+          )
+
+      - record: mssql:filegroup_used_mb
+        expr: |
+          sum without (file_id, logical_name, type_desc) (
+            mssql_database_space_used_mb{type_desc="ROWS",filegroup!=""}
+          )
+
+      - record: mssql:filegroup_size_mb
+        expr: mssql:filegroup_free_mb + mssql:filegroup_used_mb
+
+      - record: mssql:filegroup_free_percent
+        expr: 100 * mssql:filegroup_free_mb / clamp_min(mssql:filegroup_size_mb, 1e-9)
+
+      - record: mssql:filegroup_growth_mb_per_day
+        expr: deriv(mssql:filegroup_used_mb[7d]) * 86400
+
+      - record: mssql:filegroup_free_days
+        expr: |
+          mssql:filegroup_free_mb
+          / clamp_min(mssql:filegroup_growth_mb_per_day > 0, 1e-9)
+
+      # Warning when remaining free space is under 14 days of this filegroup's growth,
+      # and growth is above the noise floor (64 MB/day).
+      - record: mssql:filegroup_free_mb:threshold_warning
+        expr: 14 * (mssql:filegroup_growth_mb_per_day > 64)
+
+      - record: mssql:filegroup_free_mb:threshold_critical
+        expr: 3 * (mssql:filegroup_growth_mb_per_day > 64)

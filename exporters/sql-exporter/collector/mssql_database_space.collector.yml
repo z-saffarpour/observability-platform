@@ -83,34 +83,40 @@ metrics:
 
   - metric_name: mssql_database_space_used_mb
     type: gauge
-    help: 'Used space (MB) via FILEPROPERTY SpaceUsed (ONLINE DBs with access).'
+    help: 'Used space (MB) via FILEPROPERTY SpaceUsed. filegroup is LOG for transaction logs.'
     key_labels:
       - db
       - file_id
       - logical_name
       - type_desc
+      - filegroup
+      - is_read_only
     values: [used_mb]
     query_ref: mssql_database_space_used
 
   - metric_name: mssql_database_space_free_mb
     type: gauge
-    help: 'Free space (MB) = size - SpaceUsed (ONLINE DBs with access).'
+    help: 'Free space inside the file (MB) = size - SpaceUsed. Aggregate by filegroup for filegroup free space.'
     key_labels:
       - db
       - file_id
       - logical_name
       - type_desc
+      - filegroup
+      - is_read_only
     values: [free_mb]
     query_ref: mssql_database_space_used
 
   - metric_name: mssql_database_space_used_percent
     type: gauge
-    help: 'Used percent of file size (ONLINE DBs with access).'
+    help: 'Used percent of file size. is_read_only is the filegroup flag (0/1); logs are 0.'
     key_labels:
       - db
       - file_id
       - logical_name
       - type_desc
+      - filegroup
+      - is_read_only
     values: [used_percent]
     query_ref: mssql_database_space_used
 
@@ -169,6 +175,8 @@ queries:
           file_id int NOT NULL,
           logical_name sysname NOT NULL,
           type_desc nvarchar(60) NOT NULL,
+          filegroup nvarchar(128) NOT NULL,
+          is_read_only nvarchar(1) NOT NULL,
           used_mb float NULL,
           free_mb float NULL,
           used_percent float NULL
@@ -187,12 +195,17 @@ queries:
       WHILE @@FETCH_STATUS = 0
       BEGIN
           SET @sql = N'USE ' + QUOTENAME(@db) + N';
-            INSERT INTO #mssql_db_space_used (db, file_id, logical_name, type_desc, used_mb, free_mb, used_percent)
+            INSERT INTO #mssql_db_space_used (db, file_id, logical_name, type_desc, filegroup, is_read_only, used_mb, free_mb, used_percent)
             SELECT
                 DB_NAME(),
                 f.file_id,
                 f.name,
                 f.type_desc,
+                CASE
+                  WHEN f.type_desc = N''LOG'' THEN N''LOG''
+                  ELSE ISNULL(fg.name, N''UNKNOWN'')
+                END,
+                CAST(ISNULL(fg.is_read_only, 0) AS nvarchar(1)),
                 CAST(FILEPROPERTY(f.name, ''SpaceUsed'') AS float) * 8.0 / 1024.0,
                 (CAST(f.size AS float) - CAST(FILEPROPERTY(f.name, ''SpaceUsed'') AS float)) * 8.0 / 1024.0,
                 CASE
@@ -201,6 +214,8 @@ queries:
                   ELSE 0.0
                 END
             FROM sys.database_files AS f WITH (NOLOCK)
+            LEFT JOIN sys.filegroups AS fg WITH (NOLOCK)
+                ON fg.data_space_id = f.data_space_id
             WHERE FILEPROPERTY(f.name, ''SpaceUsed'') IS NOT NULL;';
           BEGIN TRY
               EXEC (@sql);
@@ -217,6 +232,8 @@ queries:
           CAST(file_id AS nvarchar(20)) AS file_id,
           logical_name,
           type_desc,
+          filegroup,
+          is_read_only,
           used_mb,
           free_mb,
           used_percent

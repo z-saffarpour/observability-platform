@@ -13,6 +13,8 @@ Merge the contents of [`prometheus/scrape-configs/sql-exporter/oltp.yml`](../../
 ```yaml
 rule_files:
   - "rules/sql_exporter-recording.rules.yml"
+  - "rules/sql_exporter-recording-filegroup.rules.yml"
+  - "rules/sql_exporter-recording-log-growth.rules.yml"
   - "rules/sql_exporter-p0-availability.rules.yml"
   - "rules/sql_exporter-p0-hadr.rules.yml"
   - "rules/sql_exporter-p0-jobs.rules.yml"

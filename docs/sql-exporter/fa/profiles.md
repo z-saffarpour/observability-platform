@@ -75,18 +75,18 @@ Collector
 
 نسخه 0.24.4 نرم‌افزار SQL Exporter، گزینه `scrape_timeout` را فقط در سطح
 Global پشتیبانی می‌کند و برای هر Collector به‌صورت مستقل قابل تنظیم نیست.
-تنظیمات این مخزن حداکثر ۵۵ ثانیه برای یک Collection زمان در نظر می‌گیرد.
+تنظیمات این مخزن حداکثر ۱۱۹ ثانیه برای یک Collection زمان در نظر می‌گیرد.
 برای Job متناظر در Prometheus نیز timeout کمی بزرگ‌تر تنظیم کنید:
 
 ```yaml
 scrape_configs:
   - job_name: sql_exporter
-    scrape_interval: 90s
-    scrape_timeout: 60s
+    scrape_interval: 180s
+    scrape_timeout: 120s
 ```
 
 Prometheus در هر درخواست timeout خود را برای exporter ارسال می‌کند. timeout
-نهایی exporter برابر مقدار کوچک‌تر میان محدودیت محلی ۵۵ ثانیه و timeout سمت
+نهایی exporter برابر مقدار کوچک‌تر میان محدودیت محلی ۱۱۹ ثانیه و timeout سمت
 Prometheus منهای `scrape_timeout_offset` خواهد بود.
 
 Collectorهایی مانند `mssql_index_fragmentation`،

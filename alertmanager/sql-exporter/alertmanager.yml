@@ -71,6 +71,20 @@ inhibit_rules:
       - severity = "warning"
     equal: [alertname, instance]
 
+  # Filegroup P0 suppresses the 14-day warning for the same filegroup
+  - source_matchers:
+      - alertname = "SqlFilegroupFreeSpaceCritical"
+    target_matchers:
+      - alertname = "SqlFilegroupFreeSpaceLow"
+    equal: [instance, db, filegroup]
+
+  # Critical log growth suppresses the 10% warning for the same database
+  - source_matchers:
+      - alertname = "SqlDatabaseLogGrowthCritical"
+    target_matchers:
+      - alertname = "SqlDatabaseLogGrowthHigh"
+    equal: [instance, db]
+
 receivers:
   - name: sms-email-p0
     email_configs:

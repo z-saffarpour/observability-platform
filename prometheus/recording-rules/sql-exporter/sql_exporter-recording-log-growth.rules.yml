@@ -1,0 +1,20 @@
+# Log file growth over 24h. The MB threshold is 10% (warning) or 25% (critical)
+# of that database's own log size, so a 100GB log and a 2GB log do not share one number.
+groups:
+  - name: sql_exporter.recording.log_growth
+    interval: 1m
+    rules:
+      - record: mssql:log_size_mb
+        expr: sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb)
+
+      - record: mssql:log_growth_mb:24h
+        expr: mssql:log_size_mb - (mssql:log_size_mb offset 24h)
+
+      - record: mssql:log_growth_percent:24h
+        expr: 100 * mssql:log_growth_mb:24h / clamp_min(mssql:log_size_mb, 1e-9)
+
+      - record: mssql:log_growth_mb:threshold_warning
+        expr: 0.10 * mssql:log_size_mb
+
+      - record: mssql:log_growth_mb:threshold_critical
+        expr: 0.25 * mssql:log_size_mb

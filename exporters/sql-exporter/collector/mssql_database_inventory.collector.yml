@@ -1,0 +1,123 @@
+# User-database inventory for create/drop detection on the portal.
+#
+# Emits one mssql_database_info series per user database (database_id > 4)
+# plus mssql_database_count. Also reads CREATE/DROP DATABASE from the default
+# trace so databases that live shorter than the Prometheus scrape interval
+# still appear on the portal.
+#
+# Permissions: VIEW ANY DATABASE (mssql_standard) and VIEW SERVER STATE
+# (same as mssql_autogrowth / default trace). Empty when default trace is off.
+# Uses the current trace file path from sys.traces (not folder\log.trc) and
+# falls back to a single file if a rollover file is corrupt.
+
+collector_name: mssql_database_inventory
+
+min_interval: 60s
+
+metrics:
+  - metric_name: mssql_database_info
+    type: gauge
+    help: '1 if the user database currently exists on the instance (inventory for create/drop detection).'
+    key_labels:
+      - db
+      - state_desc
+      - create_date
+    static_value: 1
+    query: |
+      SELECT
+        name AS db,
+        state_desc,
+        CONVERT(varchar(19), create_date, 120) AS create_date
+      FROM sys.databases
+      WHERE database_id > 4
+
+  - metric_name: mssql_database_count
+    type: gauge
+    help: 'Number of user databases on the instance (database_id > 4).'
+    values: [cnt]
+    query: |
+      SELECT CAST(COUNT(*) AS float) AS cnt
+      FROM sys.databases
+      WHERE database_id > 4
+
+  - metric_name: mssql_database_ddl_age_seconds
+    type: gauge
+    help: 'Seconds since last CREATE/DROP DATABASE in the default trace (ObjectType=Database).'
+    key_labels:
+      - db
+      - event
+    values: [age_seconds]
+    query_ref: mssql_database_ddl_events
+
+  - metric_name: mssql_database_ddl_events
+    type: gauge
+    help: 'CREATE/DROP DATABASE events in the default trace (last 24h).'
+    key_labels:
+      - db
+      - event
+    values: [event_count]
+    query_ref: mssql_database_ddl_events
+
+queries:
+  - query_name: mssql_database_ddl_events
+    query: |
+      DECLARE @path nvarchar(260);
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      BEGIN TRY DROP TABLE #db_ddl; END TRY BEGIN CATCH END CATCH
+      CREATE TABLE #db_ddl (
+        db nvarchar(128) NOT NULL,
+        event nvarchar(20) NOT NULL,
+        event_count float NOT NULL,
+        age_seconds float NOT NULL
+      );
+
+      IF @path IS NULL
+      BEGIN
+          SELECT
+              CAST(N'' AS nvarchar(128)) AS db,
+              CAST(N'' AS nvarchar(20)) AS event,
+              CAST(NULL AS float) AS event_count,
+              CAST(NULL AS float) AS age_seconds
+          WHERE 1 = 0;
+      END
+      ELSE
+      BEGIN
+          BEGIN TRY
+              INSERT INTO #db_ddl (db, event, event_count, age_seconds)
+              SELECT
+                  ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N'')) AS db,
+                  CASE t.EventClass WHEN 46 THEN N'created' ELSE N'dropped' END AS event,
+                  CAST(COUNT(*) AS float) AS event_count,
+                  CAST(DATEDIFF(SECOND, MAX(t.StartTime), GETDATE()) AS float) AS age_seconds
+              FROM sys.fn_trace_gettable(@path, 2) AS t
+              WHERE t.EventClass IN (46, 47)
+                AND t.ObjectType = 16964
+                AND t.StartTime >= DATEADD(HOUR, -24, GETDATE())
+              GROUP BY
+                  ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N'')),
+                  t.EventClass;
+          END TRY
+          BEGIN CATCH
+              INSERT INTO #db_ddl (db, event, event_count, age_seconds)
+              SELECT
+                  ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N'')) AS db,
+                  CASE t.EventClass WHEN 46 THEN N'created' ELSE N'dropped' END AS event,
+                  CAST(COUNT(*) AS float) AS event_count,
+                  CAST(DATEDIFF(SECOND, MAX(t.StartTime), GETDATE()) AS float) AS age_seconds
+              FROM sys.fn_trace_gettable(@path, 1) AS t
+              WHERE t.EventClass IN (46, 47)
+                AND t.ObjectType = 16964
+                AND t.StartTime >= DATEADD(HOUR, -24, GETDATE())
+              GROUP BY
+                  ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N'')),
+                  t.EventClass;
+          END CATCH
+
+          SELECT db, event, event_count, age_seconds
+          FROM #db_ddl
+          WHERE db <> N''
+            AND db NOT IN (N'master', N'model', N'msdb', N'tempdb');
+      END

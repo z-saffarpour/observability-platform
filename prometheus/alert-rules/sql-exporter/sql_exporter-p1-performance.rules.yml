@@ -55,6 +55,44 @@ groups:
           description: "Transaction log for system database {{ $labels.db }} is {{ $value | humanize }}% used."
           runbook: "Check tempdb/msdb log reuse wait, long transactions, and log growth. master/model are tracked separately and do not fire this alert."
 
+      - alert: SqlDatabaseLogGrowthHigh
+        expr: |
+          (
+            mssql:log_growth_mb:24h{db!~"master|model|msdb|tempdb"}
+            > mssql:log_growth_mb:threshold_warning{db!~"master|model|msdb|tempdb"}
+          )
+          and
+          mssql:log_growth_mb:24h{db!~"master|model|msdb|tempdb"} > 64
+        for: 30m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: performance
+          collector: mssql_database_size_growth
+        annotations:
+          summary: "Transaction log grew beyond this database threshold"
+          description: "Log for {{ $labels.db }} on {{ $labels.instance }} grew {{ $value | printf \"%.0f\" }} MB in 24h. Warning starts at 10% of this database's current log size, and only above 64 MB."
+          runbook: "Check log_reuse_wait, log backups, long transactions, AG or replication, and index maintenance. SMS follows priority P1. A planned log expand matches this alert too."
+
+      - alert: SqlDatabaseLogGrowthCritical
+        expr: |
+          (
+            mssql:log_growth_mb:24h{db!~"master|model|msdb|tempdb"}
+            > mssql:log_growth_mb:threshold_critical{db!~"master|model|msdb|tempdb"}
+          )
+          and
+          mssql:log_growth_mb:24h{db!~"master|model|msdb|tempdb"} > 64
+        for: 15m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: performance
+          collector: mssql_database_size_growth
+        annotations:
+          summary: "Transaction log grew beyond the critical threshold for this database"
+          description: "Log for {{ $labels.db }} on {{ $labels.instance }} grew {{ $value | printf \"%.0f\" }} MB in 24h. Critical starts at 25% of this database's current log size, and only above 64 MB."
+          runbook: "Treat as log-growth emergency for this database. Find the reuse blocker before the volume fills. SMS follows priority P0."
+
       - alert: SqlBlockingPersistent
         expr: mssql_blocking_count > 0
         for: 5m

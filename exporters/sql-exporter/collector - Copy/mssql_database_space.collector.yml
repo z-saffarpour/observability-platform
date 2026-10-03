@@ -1,0 +1,234 @@
+# Database file capacity, free space, autogrowth, and VLF count.
+#
+#   GRANT VIEW SERVER STATE TO
+#   GRANT VIEW ANY DEFINITION TO
+#   Databases must be ONLINE with HAS_DBACCESS for used/free (FILEPROPERTY).
+#
+collector_name: mssql_database_space
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_database_space_size_mb
+    type: gauge
+    help: 'Database file size (MB) from sys.master_files.'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+      - physical_name
+    values: [size_mb]
+    query_ref: mssql_database_space_capacity
+
+  - metric_name: mssql_database_space_max_size_mb
+    type: gauge
+    help: 'Database file max_size (MB). -1 means unlimited.'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+      - physical_name
+    values: [max_size_mb]
+    query_ref: mssql_database_space_capacity
+
+  - metric_name: mssql_database_space_growth_mb
+    type: gauge
+    help: 'Autogrowth increment in MB when growth is fixed-size; 0 if percent growth.'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+      - physical_name
+    values: [growth_mb]
+    query_ref: mssql_database_space_capacity
+
+  - metric_name: mssql_database_space_growth_percent
+    type: gauge
+    help: 'Autogrowth percent when is_percent_growth=1; else 0.'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+      - physical_name
+    values: [growth_percent]
+    query_ref: mssql_database_space_capacity
+
+  - metric_name: mssql_database_space_is_percent_growth
+    type: gauge
+    help: '1 if file grows by percent, else 0.'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+      - physical_name
+    values: [is_percent_growth]
+    query_ref: mssql_database_space_capacity
+
+  - metric_name: mssql_database_space_pct_of_max
+    type: gauge
+    help: 'size as percent of max_size. -1 if unlimited max_size.'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+      - physical_name
+    values: [pct_of_max]
+    query_ref: mssql_database_space_capacity
+
+  - metric_name: mssql_database_space_used_mb
+    type: gauge
+    help: 'Used space (MB) via FILEPROPERTY SpaceUsed (ONLINE DBs with access).'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+    values: [used_mb]
+    query_ref: mssql_database_space_used
+
+  - metric_name: mssql_database_space_free_mb
+    type: gauge
+    help: 'Free space (MB) = size - SpaceUsed (ONLINE DBs with access).'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+    values: [free_mb]
+    query_ref: mssql_database_space_used
+
+  - metric_name: mssql_database_space_used_percent
+    type: gauge
+    help: 'Used percent of file size (ONLINE DBs with access).'
+    key_labels:
+      - db
+      - file_id
+      - logical_name
+      - type_desc
+    values: [used_percent]
+    query_ref: mssql_database_space_used
+
+  - metric_name: mssql_database_vlf_count
+    type: gauge
+    help: 'Virtual log file count per database (sys.dm_db_log_info).'
+    key_labels:
+      - db
+    values: [vlf_count]
+    query_ref: mssql_database_vlf
+
+queries:
+  - query_name: mssql_database_space_capacity
+    query: |
+      SELECT
+          DB_NAME(mf.database_id) AS db,
+          CAST(mf.file_id AS nvarchar(20)) AS file_id,
+          mf.name AS logical_name,
+          mf.type_desc,
+          mf.physical_name,
+          CAST(mf.size AS float) * 8.0 / 1024.0 AS size_mb,
+          CAST(
+            CASE
+              WHEN mf.max_size < 0 THEN -1.0
+              ELSE CAST(mf.max_size AS float) * 8.0 / 1024.0
+            END AS float
+          ) AS max_size_mb,
+          CAST(
+            CASE WHEN mf.is_percent_growth = 0 THEN CAST(mf.growth AS float) * 8.0 / 1024.0 ELSE 0.0 END
+            AS float
+          ) AS growth_mb,
+          CAST(
+            CASE WHEN mf.is_percent_growth = 1 THEN CAST(mf.growth AS float) ELSE 0.0 END
+            AS float
+          ) AS growth_percent,
+          CAST(mf.is_percent_growth AS float) AS is_percent_growth,
+          CAST(
+            CASE
+              WHEN mf.max_size < 0 THEN -1.0
+              WHEN mf.max_size = 0 THEN 0.0
+              ELSE (CAST(mf.size AS float) * 100.0) / NULLIF(CAST(mf.max_size AS float), 0)
+            END AS float
+          ) AS pct_of_max
+      FROM sys.master_files AS mf WITH (NOLOCK)
+      INNER JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.database_id = mf.database_id
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL;
+
+  - query_name: mssql_database_space_used
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#mssql_db_space_used') IS NOT NULL DROP TABLE #mssql_db_space_used;
+      CREATE TABLE #mssql_db_space_used (
+          db sysname NOT NULL,
+          file_id int NOT NULL,
+          logical_name sysname NOT NULL,
+          type_desc nvarchar(60) NOT NULL,
+          used_mb float NULL,
+          free_mb float NULL,
+          used_percent float NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      DECLARE c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1;
+
+      OPEN c;
+      FETCH NEXT FROM c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #mssql_db_space_used (db, file_id, logical_name, type_desc, used_mb, free_mb, used_percent)
+            SELECT
+                DB_NAME(),
+                f.file_id,
+                f.name,
+                f.type_desc,
+                CAST(FILEPROPERTY(f.name, ''SpaceUsed'') AS float) * 8.0 / 1024.0,
+                (CAST(f.size AS float) - CAST(FILEPROPERTY(f.name, ''SpaceUsed'') AS float)) * 8.0 / 1024.0,
+                CASE
+                  WHEN f.size > 0 THEN
+                    (CAST(FILEPROPERTY(f.name, ''SpaceUsed'') AS float) * 100.0) / CAST(f.size AS float)
+                  ELSE 0.0
+                END
+            FROM sys.database_files AS f WITH (NOLOCK)
+            WHERE FILEPROPERTY(f.name, ''SpaceUsed'') IS NOT NULL;';
+          BEGIN TRY
+              EXEC (@sql);
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM c INTO @db;
+      END
+      CLOSE c;
+      DEALLOCATE c;
+
+      SELECT
+          db,
+          CAST(file_id AS nvarchar(20)) AS file_id,
+          logical_name,
+          type_desc,
+          used_mb,
+          free_mb,
+          used_percent
+      FROM #mssql_db_space_used;
+
+  - query_name: mssql_database_vlf
+    query: |
+      SELECT
+          d.name AS db,
+          CAST(COUNT_BIG(*) AS float) AS vlf_count
+      FROM sys.databases AS d WITH (NOLOCK)
+      CROSS APPLY sys.dm_db_log_info(d.database_id) AS li
+      WHERE d.state = 0
+        AND d.source_database_id IS NULL
+      GROUP BY d.name;

@@ -23,6 +23,8 @@ them to each server’s SLA, baseline and role before production.
 | File | Priority / role | Content |
 |---|---|---|
 | `sql_exporter-recording.rules.yml` | — | Rates and KPIs |
+| `sql_exporter-recording-filegroup.rules.yml` | — | Filegroup free space and 7-day growth |
+| `sql_exporter-recording-log-growth.rules.yml` | — | Log growth over 24h and per-database thresholds |
 | `sql_exporter-p0-availability.rules.yml` | P0 | Target down, DB state, backup, integrity, restore |
 | `sql_exporter-p0-hadr.rules.yml` | P0 | Always On / WSFC / FCI |
 | `sql_exporter-p0-jobs.rules.yml` | P0 | SQL Agent job failed |
@@ -60,6 +62,8 @@ Sample P1 profile:
 ```yaml
 rule_files:
   - "rules/sql_exporter-recording.rules.yml"
+  - "rules/sql_exporter-recording-filegroup.rules.yml"
+  - "rules/sql_exporter-recording-log-growth.rules.yml"
   - "rules/sql_exporter-p0-availability.rules.yml"
   - "rules/sql_exporter-p0-hadr.rules.yml"
   - "rules/sql_exporter-p0-jobs.rules.yml"

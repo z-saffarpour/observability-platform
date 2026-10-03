@@ -23,6 +23,8 @@ SLA، Baseline و نقش هر سرور تنظیم شوند.
 | فایل | اولویت / نقش | محتوا |
 |---|---|---|
 | `sql_exporter-recording.rules.yml` | — | نرخ‌ها و KPIها |
+| `sql_exporter-recording-filegroup.rules.yml` | — | فضای خالی filegroup و رشد ۷روزه |
+| `sql_exporter-recording-log-growth.rules.yml` | — | رشد لاگ ۲۴ساعته و آستانهٔ هر دیتابیس |
 | `sql_exporter-p0-availability.rules.yml` | P0 | Target down، DB state، backup، integrity، restore |
 | `sql_exporter-p0-hadr.rules.yml` | P0 | Always On / WSFC / FCI |
 | `sql_exporter-p0-jobs.rules.yml` | P0 | SQL Agent job failed |
@@ -60,6 +62,8 @@ SLA، Baseline و نقش هر سرور تنظیم شوند.
 ```yaml
 rule_files:
   - "rules/sql_exporter-recording.rules.yml"
+  - "rules/sql_exporter-recording-filegroup.rules.yml"
+  - "rules/sql_exporter-recording-log-growth.rules.yml"
   - "rules/sql_exporter-p0-availability.rules.yml"
   - "rules/sql_exporter-p0-hadr.rules.yml"
   - "rules/sql_exporter-p0-jobs.rules.yml"

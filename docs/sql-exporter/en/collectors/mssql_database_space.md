@@ -39,9 +39,9 @@
 | `mssql_database_space_growth_percent` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc`, `physical_name` | `growth_percent` | query_ref=`mssql_database_space_capacity` | Autogrowth percent when is_percent_growth=1; else 0. |
 | `mssql_database_space_is_percent_growth` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc`, `physical_name` | `is_percent_growth` | query_ref=`mssql_database_space_capacity` | 1 if file grows by percent, else 0. |
 | `mssql_database_space_pct_of_max` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc`, `physical_name` | `pct_of_max` | query_ref=`mssql_database_space_capacity` | size as percent of max_size. -1 if unlimited max_size. |
-| `mssql_database_space_used_mb` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc` | `used_mb` | query_ref=`mssql_database_space_used` | Used space (MB) via FILEPROPERTY SpaceUsed (ONLINE DBs with access). |
-| `mssql_database_space_free_mb` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc` | `free_mb` | query_ref=`mssql_database_space_used` | Free space (MB) = size - SpaceUsed (ONLINE DBs with access). |
-| `mssql_database_space_used_percent` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc` | `used_percent` | query_ref=`mssql_database_space_used` | Used percent of file size (ONLINE DBs with access). |
+| `mssql_database_space_used_mb` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc`, `filegroup`, `is_read_only` | `used_mb` | query_ref=`mssql_database_space_used` | Used space (MB) via FILEPROPERTY SpaceUsed. `filegroup` is `LOG` for transaction logs. |
+| `mssql_database_space_free_mb` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc`, `filegroup`, `is_read_only` | `free_mb` | query_ref=`mssql_database_space_used` | Free space inside the file (MB). Sum by `filegroup` for filegroup free space. |
+| `mssql_database_space_used_percent` | `gauge` | `db`, `file_id`, `logical_name`, `type_desc`, `filegroup`, `is_read_only` | `used_percent` | query_ref=`mssql_database_space_used` | Used percent of file size. `is_read_only` is the filegroup flag. |
 | `mssql_database_vlf_count` | `gauge` | `db` | `vlf_count` | query_ref=`mssql_database_vlf` | Virtual log file count per database (sys.dm_db_log_info). |
 
 ## Operational notes
