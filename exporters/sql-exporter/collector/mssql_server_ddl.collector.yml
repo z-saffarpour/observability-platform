@@ -1,0 +1,1069 @@
+# Server-scoped DDL that is not a login (mssql_security_ddl) and not a
+# database, table, view, or procedure (mssql_schema_ddl).
+#
+# Covers event sessions, server audits, audit specifications, credentials,
+# endpoints, server triggers, event notifications, linked servers,
+# availability groups, resource pools, workload groups, cryptographic
+# providers, backup devices, and sp_configure (error 15457).
+#
+# Actor and client host come from observability_server_ddl (source=xe) or
+# from the default trace (source=trace). Catalog create/modify dates
+# (source=catalog) set login_name and client_host to a hyphen.
+# ALTER EVENT SESSION STATE = START/STOP is started or stopped when the XE
+# session stored the batch. Other alters do not store statement text.
+# Configuration values are parsed from the English 15457 message; a
+# localized message still keeps the quoted option name and uses '-' for
+# the values. Statement text is never a label.
+#
+# Built-in sessions (system_health, AlwaysOn_health, telemetry, this
+# platform's own observability_*_ddl sessions) are excluded.
+# Rows are the last 4 days, capped at 10000. Age uses the SQL Server local
+# clock. event_time is local YYYY-MM-DD HH:MM:SS.
+# mssql_server_ddl_event_timestamp_seconds is Unix UTC.
+#
+# Install the session with
+# scripts/powershell/sql-exporter/Install-ServerDdlEventSession.ps1.
+# Permissions: VIEW SERVER STATE. Catalog counts also need VIEW ANY
+# DEFINITION and HAS_DBACCESS for database audit specifications.
+# Empty event series are normal when nothing changed.
+# mssql_server_ddl_xe_enabled is 0 until that session is running;
+# trace and catalog rows are still collected.
+
+collector_name: mssql_server_ddl
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_server_ddl_trace_enabled
+    type: gauge
+    help: '1 if the default trace path is available for server DDL collection, else 0. Catalog rows are still collected when this is 0.'
+    values: [trace_enabled]
+    query_ref: mssql_server_ddl_trace
+
+  - metric_name: mssql_server_ddl_xe_enabled
+    type: gauge
+    help: '1 if observability_server_ddl is running with an event_file target, else 0. Trace and catalog rows are still collected when this is 0.'
+    values: [xe_enabled]
+    query_ref: mssql_server_ddl_xe
+
+  - metric_name: mssql_server_ddl_events
+    type: gauge
+    help: 'Server object or sp_configure changes in the last 4 days (cap 10000). source=xe has the actor and client_host. Catalog rows set both to a hyphen. value_before and value_after are set for configuration changes.'
+    key_labels:
+      - object_class
+      - event
+      - db
+      - object_name
+      - login_name
+      - client_host
+      - source
+      - event_time
+      - value_before
+      - value_after
+    values: [event_count]
+    query_ref: mssql_server_ddl_events
+
+  - metric_name: mssql_server_ddl_age_seconds
+    type: gauge
+    help: 'Seconds since that server-object or configuration change. The clock is SQL Server local time.'
+    key_labels:
+      - object_class
+      - event
+      - db
+      - object_name
+      - login_name
+      - client_host
+      - source
+      - event_time
+      - value_before
+      - value_after
+    values: [age_seconds]
+    query_ref: mssql_server_ddl_events
+
+  - metric_name: mssql_server_ddl_event_timestamp_seconds
+    type: gauge
+    help: 'Unix UTC seconds for that server-object or configuration change. event_time is SQL Server local time.'
+    key_labels:
+      - object_class
+      - event
+      - db
+      - object_name
+      - login_name
+      - client_host
+      - source
+      - event_time
+      - value_before
+      - value_after
+    values: [event_unix]
+    query_ref: mssql_server_ddl_events
+
+  - metric_name: mssql_server_ddl_object_count
+    type: gauge
+    help: 'Current count of server-scoped objects. Fixed classes emit 0 when empty. database_audit_specification is per database and tempdb is excluded.'
+    key_labels:
+      - object_class
+      - db
+    values: [object_count]
+    query_ref: mssql_server_ddl_object_count
+
+  - metric_name: mssql_server_ddl_object_state
+    type: gauge
+    help: '1 when that event session, audit, endpoint, server trigger, or cryptographic provider is running or enabled, else 0.'
+    key_labels:
+      - object_class
+      - db
+      - object_name
+    values: [is_enabled]
+    query_ref: mssql_server_ddl_object_state
+
+queries:
+  - query_name: mssql_server_ddl_trace
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @path nvarchar(260);
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      SELECT CAST(CASE WHEN @path IS NULL THEN 0 ELSE 1 END AS float) AS trace_enabled;
+
+  - query_name: mssql_server_ddl_xe
+    query: |
+      SET NOCOUNT ON;
+      SELECT CAST(CASE WHEN EXISTS (
+          SELECT 1
+          FROM sys.dm_xe_sessions AS s WITH (NOLOCK)
+          INNER JOIN sys.dm_xe_session_targets AS t WITH (NOLOCK)
+              ON t.event_session_address = s.address
+          WHERE s.name = N'observability_server_ddl'
+            AND t.target_name = N'event_file'
+      ) THEN 1 ELSE 0 END AS float) AS xe_enabled;
+
+  - query_name: mssql_server_ddl_events
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @path nvarchar(260);
+      DECLARE @since datetime = DATEADD(DAY, -4, GETDATE());
+      DECLARE @attempt int = 1;
+      DECLARE @trace_ok bit = 0;
+      DECLARE @files nvarchar(20);
+      DECLARE @trace_sql nvarchar(max);
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+      DECLARE @xe_file nvarchar(260);
+      DECLARE @xe_glob nvarchar(260);
+
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      IF OBJECT_ID(N'tempdb..#server_ddl_raw') IS NOT NULL DROP TABLE #server_ddl_raw;
+      IF OBJECT_ID(N'tempdb..#server_ddl') IS NOT NULL DROP TABLE #server_ddl;
+      IF OBJECT_ID(N'tempdb..#server_cfg') IS NOT NULL DROP TABLE #server_cfg;
+
+      CREATE TABLE #server_ddl_raw (
+          kind nvarchar(20) NOT NULL,
+          event_class int NOT NULL,
+          object_type int NOT NULL,
+          event_time varchar(19) NOT NULL,
+          database_name nvarchar(256) NOT NULL,
+          object_name nvarchar(256) NOT NULL,
+          actor nvarchar(256) NOT NULL,
+          client_host nvarchar(256) NOT NULL,
+          message_text nvarchar(400) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      CREATE TABLE #server_ddl (
+          object_class nvarchar(40) NOT NULL,
+          event nvarchar(20) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          object_name nvarchar(128) NOT NULL,
+          login_name nvarchar(128) NOT NULL,
+          client_host nvarchar(128) NOT NULL,
+          source nvarchar(16) NOT NULL,
+          event_time varchar(19) NOT NULL,
+          value_before nvarchar(32) NOT NULL,
+          value_after nvarchar(32) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      CREATE TABLE #server_cfg (
+          message_text nvarchar(400) NOT NULL,
+          login_name nvarchar(128) NOT NULL,
+          client_host nvarchar(128) NOT NULL,
+          source nvarchar(16) NOT NULL,
+          event_time varchar(19) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      WHILE @attempt <= 2 AND @trace_ok = 0 AND @path IS NOT NULL
+      BEGIN
+          SET @files = CASE WHEN @attempt = 1 THEN N'DEFAULT' ELSE N'1' END;
+          SET @trace_sql = N'
+            INSERT INTO #server_ddl_raw (
+                kind, event_class, object_type, event_time, database_name, object_name, actor, client_host, message_text, event_count
+            )
+            SELECT
+                CASE
+                    WHEN t.EventClass = 22 THEN N''config''
+                    WHEN t.EventClass = 117 THEN N''audit''
+                    ELSE N''object''
+                END,
+                t.EventClass,
+                ISNULL(t.ObjectType, 0),
+                CONVERT(varchar(19), t.StartTime, 120),
+                LEFT(ISNULL(t.DatabaseName, N''''), 256),
+                LEFT(ISNULL(t.ObjectName, N''''), 256),
+                LEFT(ISNULL(t.LoginName, N''''), 256),
+                LEFT(ISNULL(t.HostName, N''''), 256),
+                CASE
+                    WHEN t.EventClass = 22 THEN LEFT(ISNULL(CAST(t.TextData AS nvarchar(400)), N''''), 400)
+                    ELSE N''''
+                END,
+                CAST(COUNT_BIG(*) AS float)
+            FROM sys.fn_trace_gettable(@path, ' + @files + N') AS t
+            WHERE t.StartTime >= @since
+              AND (
+                    t.EventClass = 22
+                    OR t.Success = 1
+                    OR t.Success IS NULL
+                  )
+              AND (
+                    (
+                        t.EventClass IN (46, 47, 164)
+                        AND t.ObjectType IN (8276, 17475, 20036, 20037, 20549)
+                        AND ISNULL(t.ObjectName, N'''') <> N''''
+                    )
+                    OR t.EventClass = 117
+                    OR (
+                        t.EventClass = 22
+                        AND CAST(t.TextData AS nvarchar(400)) LIKE N''Configuration option ''''%'''' changed from %''
+                    )
+                  )
+            GROUP BY
+                CASE
+                    WHEN t.EventClass = 22 THEN N''config''
+                    WHEN t.EventClass = 117 THEN N''audit''
+                    ELSE N''object''
+                END,
+                t.EventClass,
+                ISNULL(t.ObjectType, 0),
+                CONVERT(varchar(19), t.StartTime, 120),
+                LEFT(ISNULL(t.DatabaseName, N''''), 256),
+                LEFT(ISNULL(t.ObjectName, N''''), 256),
+                LEFT(ISNULL(t.LoginName, N''''), 256),
+                LEFT(ISNULL(t.HostName, N''''), 256),
+                CASE
+                    WHEN t.EventClass = 22 THEN LEFT(ISNULL(CAST(t.TextData AS nvarchar(400)), N''''), 400)
+                    ELSE N''''
+                END;';
+          BEGIN TRY
+              EXEC sys.sp_executesql @trace_sql, N'@path nvarchar(260), @since datetime', @path = @path, @since = @since;
+              SET @trace_ok = 1;
+          END TRY
+          BEGIN CATCH
+              DELETE FROM #server_ddl_raw;
+              SET @trace_ok = 0;
+          END CATCH;
+          SET @attempt += 1;
+      END;
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          e.object_class,
+          e.event,
+          e.db,
+          e.object_name,
+          e.login_name,
+          e.client_host,
+          N'trace',
+          e.event_time,
+          N'-',
+          N'-',
+          CAST(SUM(e.event_count) AS float)
+      FROM (
+          SELECT
+              CASE
+                  WHEN a.kind = N'audit'
+                       AND NULLIF(LTRIM(RTRIM(a.database_name)), N'') IS NOT NULL
+                       AND LTRIM(RTRIM(a.database_name)) NOT IN (N'master', N'model', N'msdb', N'tempdb')
+                      THEN N'database_audit_specification'
+                  WHEN a.kind = N'audit' THEN N'server_audit'
+                  WHEN a.object_type = 8276 THEN N'server_trigger'
+                  WHEN a.object_type = 17475 THEN N'credential'
+                  WHEN a.object_type = 20549 THEN N'endpoint'
+                  WHEN a.object_type IN (20036, 20037) THEN N'event_notification'
+                  ELSE N''
+              END AS object_class,
+              CASE a.event_class
+                  WHEN 46 THEN N'created'
+                  WHEN 47 THEN N'dropped'
+                  ELSE N'altered'
+              END AS event,
+              CASE
+                  WHEN a.kind = N'audit'
+                       AND NULLIF(LTRIM(RTRIM(a.database_name)), N'') IS NOT NULL
+                       AND LTRIM(RTRIM(a.database_name)) NOT IN (N'master', N'model', N'msdb', N'tempdb')
+                      THEN LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.database_name)), NCHAR(13), N''), NCHAR(10), N''), 128)
+                  WHEN a.object_type IN (20036, 20037)
+                       AND NULLIF(LTRIM(RTRIM(a.database_name)), N'') IS NOT NULL
+                       AND LTRIM(RTRIM(a.database_name)) <> N'tempdb'
+                      THEN LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.database_name)), NCHAR(13), N''), NCHAR(10), N''), 128)
+                  ELSE N'-'
+              END AS db,
+              LEFT(REPLACE(REPLACE(LTRIM(RTRIM(
+                  COALESCE(NULLIF(a.object_name, N''), CASE WHEN a.kind = N'audit' THEN N'audit' ELSE N'' END)
+              )), NCHAR(13), N''), NCHAR(10), N''), 128) AS object_name,
+              ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.actor)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'unknown') AS login_name,
+              ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.client_host)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-') AS client_host,
+              a.event_time,
+              a.event_count
+          FROM #server_ddl_raw AS a
+          WHERE a.kind IN (N'object', N'audit')
+            AND a.event_time <> N''
+            AND LTRIM(RTRIM(a.database_name)) <> N'tempdb'
+      ) AS e
+      WHERE e.object_class <> N''
+        AND e.object_name <> N''
+        AND e.db <> N''
+      GROUP BY
+          e.object_class, e.event, e.db, e.object_name, e.login_name, e.client_host, e.event_time;
+
+      INSERT INTO #server_cfg (message_text, login_name, client_host, source, event_time, event_count)
+      SELECT
+          LEFT(a.message_text, 400),
+          ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.actor)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'unknown'),
+          ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.client_host)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-'),
+          N'trace',
+          a.event_time,
+          a.event_count
+      FROM #server_ddl_raw AS a
+      WHERE a.kind = N'config'
+        AND a.message_text <> N''
+        AND a.event_time <> N'';
+
+      SELECT @xe_file = CAST(t.target_data AS xml).value(N'(EventFileTarget/File/@name)[1]', N'nvarchar(260)')
+      FROM sys.dm_xe_sessions AS s WITH (NOLOCK)
+      INNER JOIN sys.dm_xe_session_targets AS t WITH (NOLOCK)
+          ON t.event_session_address = s.address
+      WHERE s.name = N'observability_server_ddl'
+        AND t.target_name = N'event_file';
+
+      IF @xe_file IS NOT NULL AND @xe_file <> N''
+      BEGIN
+          SET @xe_glob = LEFT(@xe_file, LEN(@xe_file) - CHARINDEX(N'\', REVERSE(@xe_file)) + 1) + N'observability_server_ddl*.xel';
+          BEGIN TRY
+              INSERT INTO #server_ddl (
+                  object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+              )
+              SELECT
+                  x.object_class,
+                  x.event,
+                  x.db,
+                  x.object_name,
+                  x.login_name,
+                  x.client_host,
+                  N'xe',
+                  x.event_time,
+                  N'-',
+                  N'-',
+                  CAST(COUNT_BIG(*) AS float)
+              FROM (
+                  SELECT
+                      CASE
+                          WHEN ot.type_key LIKE N'%EVENT_SESSION%' OR ot.type_key LIKE N'%XEVENT_SESSION%' THEN N'event_session'
+                          WHEN ot.type_key LIKE N'%AUDIT%' AND ot.type_key LIKE N'%SPECIFICATION%' AND ot.type_key LIKE N'%DATABASE%' THEN N'database_audit_specification'
+                          WHEN ot.type_key LIKE N'%AUDIT%' AND ot.type_key LIKE N'%SPECIFICATION%' THEN N'server_audit_specification'
+                          WHEN ot.type_key LIKE N'%AUDIT%' THEN N'server_audit'
+                          WHEN ot.type_key LIKE N'%CREDENTIAL%' THEN N'credential'
+                          WHEN ot.type_key LIKE N'%CRYPTOGRAPHIC%' THEN N'cryptographic_provider'
+                          WHEN ot.type_key LIKE N'%ENDPOINT%' THEN N'endpoint'
+                          WHEN ot.type_key LIKE N'%EVENT_NOTIFICATION%' THEN N'event_notification'
+                          WHEN ot.type_key LIKE N'%AVAILABILITY%' THEN N'availability_group'
+                          WHEN ot.type_key LIKE N'%WORKLOAD%' THEN N'workload_group'
+                          WHEN ot.type_key LIKE N'%RESOURCE_POOL%' THEN N'resource_pool'
+                          WHEN ot.type_key LIKE N'%SERVER_TRIGGER%' OR ot.type_key LIKE N'%SERVER_DDL_TRIGGER%' THEN N'server_trigger'
+                          WHEN ot.type_key LIKE N'%BACKUP_DEVICE%' OR ot.type_key LIKE N'%BACKUP DEVICE%' THEN N'backup_device'
+                          ELSE N''
+                      END AS object_class,
+                      CASE
+                          WHEN f.object_name = N'object_created' THEN N'created'
+                          WHEN f.object_name = N'object_deleted' THEN N'dropped'
+                          WHEN LOWER(ot.sql_text) LIKE N'%state = stop%' OR LOWER(ot.sql_text) LIKE N'%state=stop%' THEN N'stopped'
+                          WHEN LOWER(ot.sql_text) LIKE N'%state = start%' OR LOWER(ot.sql_text) LIKE N'%state=start%' THEN N'started'
+                          ELSE N'altered'
+                      END AS event,
+                      CASE
+                          WHEN ot.type_key LIKE N'%DATABASE%' AND ot.type_key LIKE N'%AUDIT%'
+                              THEN ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.database_name)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-')
+                          WHEN ot.type_key LIKE N'%EVENT_NOTIFICATION%'
+                              THEN ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.database_name)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-')
+                          ELSE N'-'
+                      END AS db,
+                      LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.object_name)), NCHAR(13), N''), NCHAR(10), N''), 128) AS object_name,
+                      ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.actor)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'unknown') AS login_name,
+                      ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.client_host)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-') AS client_host,
+                      CONVERT(varchar(19), CAST(SWITCHOFFSET(ot.event_utc, DATENAME(TZOFFSET, SYSDATETIMEOFFSET())) AS datetime), 120) AS event_time
+                  FROM sys.fn_xe_file_target_read_file(@xe_glob, NULL, NULL, NULL) AS f
+                  CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS xd
+                  CROSS APPLY (
+                      SELECT
+                          REPLACE(UPPER(COALESCE(
+                              NULLIF(xd.event_data.value(N'(event/data[@name="object_type"]/text)[1]', N'nvarchar(128)'), N''),
+                              NULLIF(xd.event_data.value(N'(event/data[@name="object_type"]/value)[1]', N'nvarchar(128)'), N''),
+                              N''
+                          )), N' ', N'_') AS type_key,
+                          COALESCE(
+                              NULLIF(xd.event_data.value(N'(event/data[@name="object_name"]/value)[1]', N'nvarchar(256)'), N''),
+                              NULLIF(xd.event_data.value(N'(event/data[@name="object_name"]/text)[1]', N'nvarchar(256)'), N''),
+                              N''
+                          ) AS object_name,
+                          COALESCE(
+                              NULLIF(xd.event_data.value(N'(event/action[@name="database_name"]/value)[1]', N'nvarchar(256)'), N''),
+                              NULLIF(xd.event_data.value(N'(event/data[@name="database_name"]/value)[1]', N'nvarchar(256)'), N''),
+                              N''
+                          ) AS database_name,
+                          ISNULL(xd.event_data.value(N'(event/action[@name="server_principal_name"]/value)[1]', N'nvarchar(256)'), N'') AS actor,
+                          ISNULL(xd.event_data.value(N'(event/action[@name="client_hostname"]/value)[1]', N'nvarchar(256)'), N'') AS client_host,
+                          ISNULL(xd.event_data.value(N'(event/action[@name="sql_text"]/value)[1]', N'nvarchar(400)'), N'') AS sql_text,
+                          xd.event_data.value(N'(event/@timestamp)[1]', N'datetimeoffset(7)') AS event_utc,
+                          ISNULL(xd.event_data.value(N'(event/data[@name="ddl_phase"]/text)[1]', N'nvarchar(32)'), N'Commit') AS ddl_phase
+                  ) AS ot
+                  WHERE f.object_name IN (N'object_created', N'object_altered', N'object_deleted')
+                    AND ot.ddl_phase = N'Commit'
+                    AND ot.event_utc >= TODATETIMEOFFSET(DATEADD(DAY, -4, SYSUTCDATETIME()), 0)
+                    AND ot.object_name <> N''
+                    AND ISNULL(ot.database_name, N'') <> N'tempdb'
+              ) AS x
+              WHERE x.object_class <> N''
+                AND x.object_name <> N''
+                AND x.event_time <> N''
+                AND NOT (
+                    x.object_class = N'event_session'
+                    AND (
+                        x.object_name IN (
+                            N'observability_server_ddl', N'observability_database_ddl', N'observability_schema_ddl', N'observability_security_ddl',
+                            N'system_health', N'AlwaysOn_health', N'telemetry_xevents', N'hkenginexesession',
+                            N'sp_server_diagnostics session', N'QuickSessionTSQL', N'QuickSessionStandard'
+                        )
+                        OR x.object_name LIKE N'telemetry%'
+                        OR x.object_name LIKE N'QuickSession%'
+                        OR x.object_name LIKE N'hkengine%'
+                    )
+                )
+              GROUP BY
+                  x.object_class, x.event, x.db, x.object_name, x.login_name, x.client_host, x.event_time;
+
+              INSERT INTO #server_cfg (message_text, login_name, client_host, source, event_time, event_count)
+              SELECT
+                  LEFT(c.message_text, 400),
+                  c.login_name,
+                  c.client_host,
+                  N'xe',
+                  c.event_time,
+                  CAST(COUNT_BIG(*) AS float)
+              FROM (
+                  SELECT
+                      LEFT(COALESCE(
+                          NULLIF(xd.event_data.value(N'(event/data[@name="message"]/value)[1]', N'nvarchar(400)'), N''),
+                          NULLIF(xd.event_data.value(N'(event/data[@name="message"]/text)[1]', N'nvarchar(400)'), N''),
+                          N''
+                      ), 400) AS message_text,
+                      ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(xd.event_data.value(N'(event/action[@name="server_principal_name"]/value)[1]', N'nvarchar(256)'), N''))), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'unknown') AS login_name,
+                      ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(xd.event_data.value(N'(event/action[@name="client_hostname"]/value)[1]', N'nvarchar(256)'), N''))), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-') AS client_host,
+                      CONVERT(varchar(19), CAST(SWITCHOFFSET(xd.event_data.value(N'(event/@timestamp)[1]', N'datetimeoffset(7)'), DATENAME(TZOFFSET, SYSDATETIMEOFFSET())) AS datetime), 120) AS event_time
+                  FROM sys.fn_xe_file_target_read_file(@xe_glob, NULL, NULL, NULL) AS f
+                  CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS xd
+                  WHERE f.object_name = N'error_reported'
+                    AND xd.event_data.value(N'(event/data[@name="error_number"]/value)[1]', N'int') = 15457
+                    AND xd.event_data.value(N'(event/@timestamp)[1]', N'datetimeoffset(7)') >= TODATETIMEOFFSET(DATEADD(DAY, -4, SYSUTCDATETIME()), 0)
+              ) AS c
+              WHERE c.message_text <> N''
+                AND c.event_time <> N''
+              GROUP BY c.message_text, c.login_name, c.client_host, c.event_time;
+          END TRY
+          BEGIN CATCH
+              DELETE FROM #server_ddl WHERE source = N'xe';
+              DELETE FROM #server_cfg WHERE source = N'xe';
+          END CATCH;
+      END;
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          N'configuration',
+          N'configured',
+          N'-',
+          CASE
+              WHEN p.q1 > 0 AND p.q2 > p.q1
+              THEN LEFT(REPLACE(REPLACE(SUBSTRING(c.message_text, p.q1 + 1, p.q2 - p.q1 - 1), NCHAR(13), N''), NCHAR(10), N''), 128)
+              ELSE N'configuration'
+          END,
+          c.login_name,
+          c.client_host,
+          c.source,
+          c.event_time,
+          ISNULL(NULLIF(LEFT(REPLACE(REPLACE(v.value_before, NCHAR(13), N''), NCHAR(10), N''), 32), N''), N'-'),
+          ISNULL(NULLIF(LEFT(REPLACE(REPLACE(v.value_after, NCHAR(13), N''), NCHAR(10), N''), 32), N''), N'-'),
+          c.event_count
+      FROM #server_cfg AS c
+      CROSS APPLY (
+          SELECT CHARINDEX(N'''', c.message_text) AS q1
+      ) AS q
+      CROSS APPLY (
+          SELECT
+              q.q1 AS q1,
+              CASE WHEN q.q1 > 0 THEN CHARINDEX(N'''', c.message_text, q.q1 + 1) ELSE 0 END AS q2
+      ) AS p
+      CROSS APPLY (
+          SELECT CHARINDEX(N'changed from ', c.message_text) AS from_at
+      ) AS f
+      CROSS APPLY (
+          SELECT
+              f.from_at,
+              CASE WHEN f.from_at > 0 THEN CHARINDEX(N' to ', c.message_text, f.from_at + 13) ELSE 0 END AS to_at
+      ) AS t
+      CROSS APPLY (
+          SELECT
+              CASE
+                  WHEN f.from_at > 0 AND t.to_at > f.from_at
+                  THEN LTRIM(RTRIM(SUBSTRING(c.message_text, f.from_at + 13, t.to_at - (f.from_at + 13))))
+                  ELSE N'-'
+              END AS value_before,
+              CASE
+                  WHEN t.to_at > 0
+                  THEN LTRIM(RTRIM(SUBSTRING(
+                      c.message_text,
+                      t.to_at + 4,
+                      CASE
+                          WHEN CHARINDEX(N'.', c.message_text, t.to_at + 4) > t.to_at
+                          THEN CHARINDEX(N'.', c.message_text, t.to_at + 4) - (t.to_at + 4)
+                          ELSE 32
+                      END
+                  )))
+                  ELSE N'-'
+              END AS value_after
+      ) AS v
+      WHERE c.event_time <> N'';
+
+      DELETE t
+      FROM #server_ddl AS t
+      INNER JOIN #server_ddl AS x
+          ON x.source = N'xe'
+         AND t.source = N'trace'
+         AND t.object_class = x.object_class
+         AND t.db = x.db
+         AND t.object_name = x.object_name
+         AND ABS(DATEDIFF(SECOND, CONVERT(datetime, t.event_time, 120), CONVERT(datetime, x.event_time, 120))) <= 15;
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          N'server_audit',
+          v.event_name,
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          N'-',
+          N'-',
+          N'catalog',
+          CONVERT(varchar(19), v.event_at, 120),
+          N'-',
+          N'-',
+          CAST(1 AS float)
+      FROM sys.server_audits AS a WITH (NOLOCK)
+      CROSS APPLY (
+          SELECT N'created' AS event_name, a.create_date AS event_at
+          WHERE a.create_date >= @since
+          UNION ALL
+          SELECT N'altered', a.modify_date
+          WHERE a.modify_date >= @since
+            AND DATEDIFF(SECOND, a.create_date, a.modify_date) > 2
+      ) AS v
+      WHERE a.name <> N'';
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          N'server_audit_specification',
+          v.event_name,
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          N'-',
+          N'-',
+          N'catalog',
+          CONVERT(varchar(19), v.event_at, 120),
+          N'-',
+          N'-',
+          CAST(1 AS float)
+      FROM sys.server_audit_specifications AS a WITH (NOLOCK)
+      CROSS APPLY (
+          SELECT N'created' AS event_name, a.create_date AS event_at
+          WHERE a.create_date >= @since
+          UNION ALL
+          SELECT N'altered', a.modify_date
+          WHERE a.modify_date >= @since
+            AND DATEDIFF(SECOND, a.create_date, a.modify_date) > 2
+      ) AS v
+      WHERE a.name <> N'';
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          N'credential',
+          v.event_name,
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(c.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          N'-',
+          N'-',
+          N'catalog',
+          CONVERT(varchar(19), v.event_at, 120),
+          N'-',
+          N'-',
+          CAST(1 AS float)
+      FROM sys.credentials AS c WITH (NOLOCK)
+      CROSS APPLY (
+          SELECT N'created' AS event_name, c.create_date AS event_at
+          WHERE c.create_date >= @since
+          UNION ALL
+          SELECT N'altered', c.modify_date
+          WHERE c.modify_date >= @since
+            AND DATEDIFF(SECOND, c.create_date, c.modify_date) > 2
+      ) AS v
+      WHERE c.name <> N'';
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          N'server_trigger',
+          v.event_name,
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(tr.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          N'-',
+          N'-',
+          N'catalog',
+          CONVERT(varchar(19), v.event_at, 120),
+          N'-',
+          N'-',
+          CAST(1 AS float)
+      FROM sys.server_triggers AS tr WITH (NOLOCK)
+      CROSS APPLY (
+          SELECT N'created' AS event_name, tr.create_date AS event_at
+          WHERE tr.create_date >= @since
+          UNION ALL
+          SELECT N'altered', tr.modify_date
+          WHERE tr.modify_date >= @since
+            AND DATEDIFF(SECOND, tr.create_date, tr.modify_date) > 2
+      ) AS v
+      WHERE tr.is_ms_shipped = 0
+        AND tr.name <> N'';
+
+      INSERT INTO #server_ddl (
+          object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+      )
+      SELECT
+          N'linked_server',
+          N'altered',
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(s.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          N'-',
+          N'-',
+          N'catalog',
+          CONVERT(varchar(19), s.modify_date, 120),
+          N'-',
+          N'-',
+          CAST(1 AS float)
+      FROM sys.servers AS s WITH (NOLOCK)
+      WHERE s.server_id > 0
+        AND s.is_linked = 1
+        AND s.modify_date >= @since
+        AND s.name <> N'';
+
+      IF CURSOR_STATUS('local', 'mssql_server_ddl_c') > -1
+          CLOSE mssql_server_ddl_c;
+      IF CURSOR_STATUS('local', 'mssql_server_ddl_c') >= -1
+          DEALLOCATE mssql_server_ddl_c;
+
+      DECLARE mssql_server_ddl_c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_server_ddl_c;
+      FETCH NEXT FROM mssql_server_ddl_c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #server_ddl (
+                object_class, event, db, object_name, login_name, client_host, source, event_time, value_before, value_after, event_count
+            )
+            SELECT
+                N''database_audit_specification'',
+                v.event_name,
+                @db,
+                LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.name)), NCHAR(13), N''''), NCHAR(10), N''''), 128),
+                N''-'',
+                N''-'',
+                N''catalog'',
+                CONVERT(varchar(19), v.event_at, 120),
+                N''-'',
+                N''-'',
+                CAST(1 AS float)
+            FROM sys.database_audit_specifications AS a WITH (NOLOCK)
+            CROSS APPLY (
+                SELECT N''created'' AS event_name, a.create_date AS event_at
+                WHERE a.create_date >= @since
+                UNION ALL
+                SELECT N''altered'', a.modify_date
+                WHERE a.modify_date >= @since
+                  AND DATEDIFF(SECOND, a.create_date, a.modify_date) > 2
+            ) AS v
+            WHERE a.name <> N'''';';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@since datetime, @db sysname', @since = @since, @db = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_server_ddl_c INTO @db;
+      END;
+      CLOSE mssql_server_ddl_c;
+      DEALLOCATE mssql_server_ddl_c;
+
+      DELETE c
+      FROM #server_ddl AS c
+      WHERE c.source = N'catalog'
+        AND EXISTS (
+            SELECT 1
+            FROM #server_ddl AS s
+            WHERE s.source IN (N'xe', N'trace')
+              AND s.object_class = c.object_class
+              AND s.db = c.db
+              AND s.object_name = c.object_name
+              AND ABS(DATEDIFF(SECOND, CONVERT(datetime, s.event_time, 120), CONVERT(datetime, c.event_time, 120))) <= 15
+        );
+
+      SELECT TOP (10000)
+          g.object_class,
+          g.event,
+          g.db,
+          g.object_name,
+          g.login_name,
+          g.client_host,
+          g.source,
+          g.event_time,
+          g.value_before,
+          g.value_after,
+          g.event_count,
+          CAST(CASE
+              WHEN DATEDIFF(SECOND, CONVERT(datetime, g.event_time, 120), GETDATE()) < 0 THEN 0
+              ELSE DATEDIFF(SECOND, CONVERT(datetime, g.event_time, 120), GETDATE())
+          END AS float) AS age_seconds,
+          CAST(
+              DATEDIFF(SECOND, CONVERT(datetime, '19700101', 112), CONVERT(datetime, g.event_time, 120))
+              + DATEDIFF(SECOND, GETDATE(), GETUTCDATE())
+          AS float) AS event_unix
+      FROM (
+          SELECT
+              d.object_class,
+              d.event,
+              d.db,
+              d.object_name,
+              d.login_name,
+              d.client_host,
+              d.source,
+              d.event_time,
+              d.value_before,
+              d.value_after,
+              CAST(SUM(d.event_count) AS float) AS event_count
+          FROM #server_ddl AS d
+          WHERE d.object_name <> N''
+            AND d.event_time <> N''
+            AND TRY_CONVERT(datetime, d.event_time, 120) IS NOT NULL
+          GROUP BY
+              d.object_class, d.event, d.db, d.object_name, d.login_name, d.client_host, d.source, d.event_time, d.value_before, d.value_after
+      ) AS g
+      ORDER BY event_unix DESC, age_seconds ASC;
+
+  - query_name: mssql_server_ddl_object_count
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#server_obj_count') IS NOT NULL DROP TABLE #server_obj_count;
+      CREATE TABLE #server_obj_count (
+          object_class nvarchar(40) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          object_count float NOT NULL
+      );
+
+      INSERT INTO #server_obj_count (object_class, db, object_count)
+      SELECT
+          t.object_class,
+          N'-',
+          CAST(ISNULL(c.object_count, 0) AS float)
+      FROM (VALUES
+          (N'event_session'),
+          (N'server_audit'),
+          (N'server_audit_specification'),
+          (N'credential'),
+          (N'endpoint'),
+          (N'server_trigger'),
+          (N'linked_server'),
+          (N'resource_pool'),
+          (N'workload_group'),
+          (N'backup_device'),
+          (N'event_notification')
+      ) AS t(object_class)
+      LEFT JOIN (
+          SELECT N'event_session' AS object_class, COUNT_BIG(*) AS object_count
+          FROM sys.server_event_sessions AS s WITH (NOLOCK)
+          WHERE s.name NOT IN (
+                  N'observability_server_ddl', N'observability_database_ddl', N'observability_schema_ddl', N'observability_security_ddl',
+                  N'system_health', N'AlwaysOn_health', N'telemetry_xevents', N'hkenginexesession',
+                  N'sp_server_diagnostics session', N'QuickSessionTSQL', N'QuickSessionStandard'
+              )
+            AND s.name NOT LIKE N'telemetry%'
+            AND s.name NOT LIKE N'QuickSession%'
+            AND s.name NOT LIKE N'hkengine%'
+          UNION ALL
+          SELECT N'server_audit', COUNT_BIG(*)
+          FROM sys.server_audits WITH (NOLOCK)
+          UNION ALL
+          SELECT N'server_audit_specification', COUNT_BIG(*)
+          FROM sys.server_audit_specifications WITH (NOLOCK)
+          UNION ALL
+          SELECT N'credential', COUNT_BIG(*)
+          FROM sys.credentials WITH (NOLOCK)
+          UNION ALL
+          SELECT N'endpoint', COUNT_BIG(*)
+          FROM sys.endpoints WITH (NOLOCK)
+          UNION ALL
+          SELECT N'server_trigger', COUNT_BIG(*)
+          FROM sys.server_triggers WITH (NOLOCK)
+          WHERE is_ms_shipped = 0
+          UNION ALL
+          SELECT N'linked_server', COUNT_BIG(*)
+          FROM sys.servers WITH (NOLOCK)
+          WHERE server_id > 0
+            AND is_linked = 1
+          UNION ALL
+          SELECT N'resource_pool', COUNT_BIG(*)
+          FROM sys.resource_governor_resource_pools WITH (NOLOCK)
+          WHERE pool_id > 1
+          UNION ALL
+          SELECT N'workload_group', COUNT_BIG(*)
+          FROM sys.resource_governor_workload_groups WITH (NOLOCK)
+          WHERE group_id > 1
+          UNION ALL
+          SELECT N'backup_device', COUNT_BIG(*)
+          FROM sys.backup_devices WITH (NOLOCK)
+          UNION ALL
+          SELECT N'event_notification', COUNT_BIG(*)
+          FROM sys.server_event_notifications WITH (NOLOCK)
+      ) AS c
+          ON c.object_class = t.object_class;
+
+      IF OBJECT_ID(N'sys.availability_groups', N'V') IS NOT NULL
+      BEGIN
+          BEGIN TRY
+              INSERT INTO #server_obj_count (object_class, db, object_count)
+              EXEC sys.sp_executesql N'
+                SELECT N''availability_group'', N''-'', CAST(COUNT_BIG(*) AS float)
+                FROM sys.availability_groups WITH (NOLOCK);';
+          END TRY
+          BEGIN CATCH
+              INSERT INTO #server_obj_count (object_class, db, object_count)
+              VALUES (N'availability_group', N'-', 0);
+          END CATCH;
+      END
+      ELSE
+          INSERT INTO #server_obj_count (object_class, db, object_count)
+          VALUES (N'availability_group', N'-', 0);
+
+      IF OBJECT_ID(N'sys.cryptographic_providers', N'V') IS NOT NULL
+      BEGIN
+          BEGIN TRY
+              INSERT INTO #server_obj_count (object_class, db, object_count)
+              EXEC sys.sp_executesql N'
+                SELECT N''cryptographic_provider'', N''-'', CAST(COUNT_BIG(*) AS float)
+                FROM sys.cryptographic_providers WITH (NOLOCK);';
+          END TRY
+          BEGIN CATCH
+              INSERT INTO #server_obj_count (object_class, db, object_count)
+              VALUES (N'cryptographic_provider', N'-', 0);
+          END CATCH;
+      END
+      ELSE
+          INSERT INTO #server_obj_count (object_class, db, object_count)
+          VALUES (N'cryptographic_provider', N'-', 0);
+
+      IF CURSOR_STATUS('local', 'mssql_server_ddl_cnt') > -1
+          CLOSE mssql_server_ddl_cnt;
+      IF CURSOR_STATUS('local', 'mssql_server_ddl_cnt') >= -1
+          DEALLOCATE mssql_server_ddl_cnt;
+
+      DECLARE mssql_server_ddl_cnt CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_server_ddl_cnt;
+      FETCH NEXT FROM mssql_server_ddl_cnt INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #server_obj_count (object_class, db, object_count)
+            SELECT N''database_audit_specification'', @db, CAST(COUNT_BIG(*) AS float)
+            FROM sys.database_audit_specifications WITH (NOLOCK);';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db sysname', @db = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_server_ddl_cnt INTO @db;
+      END;
+      CLOSE mssql_server_ddl_cnt;
+      DEALLOCATE mssql_server_ddl_cnt;
+
+      SELECT object_class, db, object_count
+      FROM #server_obj_count;
+
+  - query_name: mssql_server_ddl_object_state
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#server_obj_state') IS NOT NULL DROP TABLE #server_obj_state;
+      CREATE TABLE #server_obj_state (
+          object_class nvarchar(40) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          object_name nvarchar(128) NOT NULL,
+          is_enabled float NOT NULL
+      );
+
+      INSERT INTO #server_obj_state (object_class, db, object_name, is_enabled)
+      SELECT
+          N'event_session',
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(s.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          CAST(CASE WHEN x.name IS NULL THEN 0 ELSE 1 END AS float)
+      FROM sys.server_event_sessions AS s WITH (NOLOCK)
+      LEFT JOIN sys.dm_xe_sessions AS x WITH (NOLOCK)
+          ON x.name = s.name
+      WHERE s.name NOT IN (
+              N'observability_server_ddl', N'observability_database_ddl', N'observability_schema_ddl', N'observability_security_ddl',
+              N'system_health', N'AlwaysOn_health', N'telemetry_xevents', N'hkenginexesession',
+              N'sp_server_diagnostics session', N'QuickSessionTSQL', N'QuickSessionStandard'
+          )
+        AND s.name NOT LIKE N'telemetry%'
+        AND s.name NOT LIKE N'QuickSession%'
+        AND s.name NOT LIKE N'hkengine%'
+      UNION ALL
+      SELECT
+          N'server_audit',
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          CAST(CASE WHEN a.is_state_enabled = 1 THEN 1 ELSE 0 END AS float)
+      FROM sys.server_audits AS a WITH (NOLOCK)
+      UNION ALL
+      SELECT
+          N'server_audit_specification',
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          CAST(CASE WHEN a.is_state_enabled = 1 THEN 1 ELSE 0 END AS float)
+      FROM sys.server_audit_specifications AS a WITH (NOLOCK)
+      UNION ALL
+      SELECT
+          N'endpoint',
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(e.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          CAST(CASE WHEN e.state = 0 THEN 1 ELSE 0 END AS float)
+      FROM sys.endpoints AS e WITH (NOLOCK)
+      UNION ALL
+      SELECT
+          N'server_trigger',
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(tr.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          CAST(CASE WHEN tr.is_disabled = 0 THEN 1 ELSE 0 END AS float)
+      FROM sys.server_triggers AS tr WITH (NOLOCK)
+      WHERE tr.is_ms_shipped = 0;
+
+      IF OBJECT_ID(N'sys.cryptographic_providers', N'V') IS NOT NULL
+      BEGIN
+          BEGIN TRY
+              INSERT INTO #server_obj_state (object_class, db, object_name, is_enabled)
+              EXEC sys.sp_executesql N'
+                SELECT
+                    N''cryptographic_provider'',
+                    N''-'',
+                    LEFT(REPLACE(REPLACE(LTRIM(RTRIM(p.name)), NCHAR(13), N''''), NCHAR(10), N''''), 128),
+                    CAST(CASE WHEN p.is_enabled = 1 THEN 1 ELSE 0 END AS float)
+                FROM sys.cryptographic_providers AS p WITH (NOLOCK);';
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+      END;
+
+      IF CURSOR_STATUS('local', 'mssql_server_ddl_st') > -1
+          CLOSE mssql_server_ddl_st;
+      IF CURSOR_STATUS('local', 'mssql_server_ddl_st') >= -1
+          DEALLOCATE mssql_server_ddl_st;
+
+      DECLARE mssql_server_ddl_st CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_server_ddl_st;
+      FETCH NEXT FROM mssql_server_ddl_st INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #server_obj_state (object_class, db, object_name, is_enabled)
+            SELECT
+                N''database_audit_specification'',
+                @db,
+                LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.name)), NCHAR(13), N''''), NCHAR(10), N''''), 128),
+                CAST(CASE WHEN a.is_state_enabled = 1 THEN 1 ELSE 0 END AS float)
+            FROM sys.database_audit_specifications AS a WITH (NOLOCK)
+            WHERE a.name <> N'''';';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db sysname', @db = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_server_ddl_st INTO @db;
+      END;
+      CLOSE mssql_server_ddl_st;
+      DEALLOCATE mssql_server_ddl_st;
+
+      SELECT object_class, db, object_name, is_enabled
+      FROM (
+          SELECT
+              object_class,
+              db,
+              object_name,
+              is_enabled,
+              ROW_NUMBER() OVER (ORDER BY object_class, db, object_name) AS state_rank
+          FROM #server_obj_state
+          WHERE object_name <> N''
+      ) AS s
+      WHERE s.state_rank <= 500;

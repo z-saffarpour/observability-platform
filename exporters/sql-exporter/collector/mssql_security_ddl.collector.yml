@@ -1,0 +1,932 @@
+# Login, user, role, membership, and permission changes.
+#
+# CREATE LOGIN / CREATE USER / CREATE ROLE are not in the default trace
+# (that trace still has the legacy add-login/add-user/add-role events only).
+# When the observability_security_ddl Extended Events session is running,
+# those commits are read from its event file with the actor (source=xe).
+# Otherwise creates and alters come from catalog create_date/modify_date.
+# Catalog rows set login_name and client_host to a hyphen and source=catalog.
+# client_host is the XE client_hostname, or HostName from the default trace.
+# Long-term rows are dbo.security_ddl_event in the audit database on this
+# instance (Install-SecurityDdlArchive.sql). The .xel files are only the
+# buffer for that job.
+#
+# The default trace supplies role membership, GRANT/DENY/REVOKE, database
+# owner change, and audit/trace changes. Object permission rows are counted
+# without the securable name. Install the session with
+# scripts/powershell/sql-exporter/Install-SecurityDdlEventSession.ps1.
+#
+# Rows are the last 4 days, capped at 10000. Principal and membership rows
+# are kept ahead of permission rows. Statement text is never selected.
+# Age uses the SQL Server local clock. event_time is local YYYY-MM-DD HH:MM:SS.
+# mssql_security_ddl_event_timestamp_seconds is Unix UTC.
+#
+# Permissions: VIEW SERVER STATE for the trace. VIEW ANY DEFINITION and
+# HAS_DBACCESS for catalog counts. Empty event series are normal when nothing
+# changed; mssql_security_ddl_trace_enabled is 0 when the default trace is off,
+# and catalog rows are still returned in that case.
+
+collector_name: mssql_security_ddl
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_security_ddl_trace_enabled
+    type: gauge
+    help: '1 if the default trace path is available for security change collection, else 0. Catalog rows are still collected when this is 0.'
+    values: [trace_enabled]
+    query_ref: mssql_security_ddl_trace
+
+  - metric_name: mssql_security_ddl_xe_enabled
+    type: gauge
+    help: '1 if observability_security_ddl is running with an event_file target, else 0. Catalog rows are still collected when this is 0.'
+    values: [xe_enabled]
+    query_ref: mssql_security_ddl_xe
+
+  - metric_name: mssql_security_ddl_events
+    type: gauge
+    help: 'Login, user, role, membership, or permission changes in the last 4 days (cap 10000). source=xe has the actor and client_host. Catalog-only rows set login_name and client_host to a hyphen.'
+    key_labels:
+      - change_class
+      - principal_type
+      - event
+      - db
+      - principal_name
+      - role_name
+      - login_name
+      - client_host
+      - source
+      - event_time
+    values: [event_count]
+    query_ref: mssql_security_ddl_events
+
+  - metric_name: mssql_security_ddl_age_seconds
+    type: gauge
+    help: 'Seconds since that security change. The clock is SQL Server local time.'
+    key_labels:
+      - change_class
+      - principal_type
+      - event
+      - db
+      - principal_name
+      - role_name
+      - login_name
+      - client_host
+      - source
+      - event_time
+    values: [age_seconds]
+    query_ref: mssql_security_ddl_events
+
+  - metric_name: mssql_security_ddl_event_timestamp_seconds
+    type: gauge
+    help: 'Unix UTC seconds for that security change. event_time is SQL Server local time.'
+    key_labels:
+      - change_class
+      - principal_type
+      - event
+      - db
+      - principal_name
+      - role_name
+      - login_name
+      - client_host
+      - source
+      - event_time
+    values: [event_unix]
+    query_ref: mssql_security_ddl_events
+
+  - metric_name: mssql_security_principal_count
+    type: gauge
+    help: 'Current count of server logins or database users and roles. Fixed types emit 0 when empty. tempdb is excluded.'
+    key_labels:
+      - scope
+      - principal_type
+      - db
+    values: [principal_count]
+    query_ref: mssql_security_principal_count
+
+  - metric_name: mssql_security_permission_count
+    type: gauge
+    help: 'Current explicit GRANT (including WITH GRANT) or DENY entries. This is not effective permission. tempdb is excluded.'
+    key_labels:
+      - scope
+      - permission_state
+      - db
+    values: [permission_count]
+    query_ref: mssql_security_permission_count
+
+queries:
+  - query_name: mssql_security_ddl_trace
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @path nvarchar(260);
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      SELECT CAST(CASE WHEN @path IS NULL THEN 0 ELSE 1 END AS float) AS trace_enabled;
+
+  - query_name: mssql_security_ddl_xe
+    query: |
+      SET NOCOUNT ON;
+      SELECT CAST(CASE WHEN EXISTS (
+          SELECT 1
+          FROM sys.dm_xe_sessions AS s WITH (NOLOCK)
+          INNER JOIN sys.dm_xe_session_targets AS t WITH (NOLOCK)
+              ON t.event_session_address = s.address
+          WHERE s.name = N'observability_security_ddl'
+            AND t.target_name = N'event_file'
+      ) THEN 1 ELSE 0 END AS float) AS xe_enabled;
+
+  - query_name: mssql_security_ddl_events
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @path nvarchar(260);
+      DECLARE @since datetime = DATEADD(DAY, -4, GETDATE());
+      DECLARE @attempt int = 1;
+      DECLARE @trace_ok bit = 0;
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+      DECLARE @xe_file nvarchar(260);
+      DECLARE @xe_glob nvarchar(260);
+
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      IF OBJECT_ID(N'tempdb..#security_ddl_raw') IS NOT NULL DROP TABLE #security_ddl_raw;
+      IF OBJECT_ID(N'tempdb..#security_ddl') IS NOT NULL DROP TABLE #security_ddl;
+      IF OBJECT_ID(N'tempdb..#security_ddl_xe') IS NOT NULL DROP TABLE #security_ddl_xe;
+      IF OBJECT_ID(N'tempdb..#security_ddl_cat') IS NOT NULL DROP TABLE #security_ddl_cat;
+
+      CREATE TABLE #security_ddl_raw (
+          event_class int NOT NULL,
+          event_subclass int NOT NULL,
+          event_time varchar(19) NOT NULL,
+          database_name nvarchar(256) NOT NULL,
+          actor nvarchar(256) NOT NULL,
+          client_host nvarchar(256) NOT NULL,
+          target_login nvarchar(256) NOT NULL,
+          target_user nvarchar(256) NOT NULL,
+          db_user nvarchar(256) NOT NULL,
+          role_name nvarchar(256) NOT NULL,
+          object_name nvarchar(256) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      CREATE TABLE #security_ddl (
+          change_class nvarchar(20) NOT NULL,
+          principal_type nvarchar(32) NOT NULL,
+          event nvarchar(20) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          principal_name nvarchar(128) NOT NULL,
+          role_name nvarchar(128) NOT NULL,
+          login_name nvarchar(128) NOT NULL,
+          client_host nvarchar(128) NOT NULL,
+          source nvarchar(16) NOT NULL,
+          event_time varchar(19) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      CREATE TABLE #security_ddl_xe (
+          change_class nvarchar(20) NOT NULL,
+          principal_type nvarchar(32) NOT NULL,
+          event nvarchar(20) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          principal_name nvarchar(128) NOT NULL,
+          role_name nvarchar(128) NOT NULL,
+          login_name nvarchar(128) NOT NULL,
+          client_host nvarchar(128) NOT NULL,
+          source nvarchar(16) NOT NULL,
+          event_time varchar(19) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      CREATE TABLE #security_ddl_cat (
+          change_class nvarchar(20) NOT NULL,
+          principal_type nvarchar(32) NOT NULL,
+          event nvarchar(20) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          principal_name nvarchar(128) NOT NULL,
+          role_name nvarchar(128) NOT NULL,
+          login_name nvarchar(128) NOT NULL,
+          client_host nvarchar(128) NOT NULL,
+          source nvarchar(16) NOT NULL,
+          event_time varchar(19) NOT NULL,
+          event_count float NOT NULL
+      );
+
+      WHILE @attempt <= 2 AND @trace_ok = 0 AND @path IS NOT NULL
+      BEGIN
+          BEGIN TRY
+              IF @attempt = 1
+                  INSERT INTO #security_ddl_raw (
+                      event_class, event_subclass, event_time, database_name, actor, client_host,
+                      target_login, target_user, db_user, role_name, object_name, event_count
+                  )
+                  SELECT
+                      t.EventClass,
+                      ISNULL(t.EventSubClass, -1),
+                      CONVERT(varchar(19), t.StartTime, 120),
+                      LEFT(ISNULL(t.DatabaseName, N''), 256),
+                      LEFT(ISNULL(t.LoginName, N''), 256),
+                      LEFT(ISNULL(t.HostName, N''), 256),
+                      LEFT(ISNULL(t.TargetLoginName, N''), 256),
+                      LEFT(ISNULL(t.TargetUserName, N''), 256),
+                      LEFT(ISNULL(t.DBUserName, N''), 256),
+                      LEFT(ISNULL(t.RoleName, N''), 256),
+                      CASE
+                          WHEN t.EventClass IN (102, 103, 113, 170) THEN N''
+                          ELSE LEFT(ISNULL(t.ObjectName, N''), 256)
+                      END,
+                      CAST(COUNT_BIG(*) AS float)
+                  FROM sys.fn_trace_gettable(@path, DEFAULT) AS t
+                  WHERE t.EventClass IN (102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 117, 130, 152, 170, 175, 177)
+                    AND (t.Success = 1 OR t.Success IS NULL)
+                    AND t.StartTime >= @since
+                  GROUP BY
+                      t.EventClass,
+                      ISNULL(t.EventSubClass, -1),
+                      CONVERT(varchar(19), t.StartTime, 120),
+                      LEFT(ISNULL(t.DatabaseName, N''), 256),
+                      LEFT(ISNULL(t.LoginName, N''), 256),
+                      LEFT(ISNULL(t.HostName, N''), 256),
+                      LEFT(ISNULL(t.TargetLoginName, N''), 256),
+                      LEFT(ISNULL(t.TargetUserName, N''), 256),
+                      LEFT(ISNULL(t.DBUserName, N''), 256),
+                      LEFT(ISNULL(t.RoleName, N''), 256),
+                      CASE
+                          WHEN t.EventClass IN (102, 103, 113, 170) THEN N''
+                          ELSE LEFT(ISNULL(t.ObjectName, N''), 256)
+                      END;
+              ELSE
+                  INSERT INTO #security_ddl_raw (
+                      event_class, event_subclass, event_time, database_name, actor, client_host,
+                      target_login, target_user, db_user, role_name, object_name, event_count
+                  )
+                  SELECT
+                      t.EventClass,
+                      ISNULL(t.EventSubClass, -1),
+                      CONVERT(varchar(19), t.StartTime, 120),
+                      LEFT(ISNULL(t.DatabaseName, N''), 256),
+                      LEFT(ISNULL(t.LoginName, N''), 256),
+                      LEFT(ISNULL(t.HostName, N''), 256),
+                      LEFT(ISNULL(t.TargetLoginName, N''), 256),
+                      LEFT(ISNULL(t.TargetUserName, N''), 256),
+                      LEFT(ISNULL(t.DBUserName, N''), 256),
+                      LEFT(ISNULL(t.RoleName, N''), 256),
+                      CASE
+                          WHEN t.EventClass IN (102, 103, 113, 170) THEN N''
+                          ELSE LEFT(ISNULL(t.ObjectName, N''), 256)
+                      END,
+                      CAST(COUNT_BIG(*) AS float)
+                  FROM sys.fn_trace_gettable(@path, 1) AS t
+                  WHERE t.EventClass IN (102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 117, 130, 152, 170, 175, 177)
+                    AND (t.Success = 1 OR t.Success IS NULL)
+                    AND t.StartTime >= @since
+                  GROUP BY
+                      t.EventClass,
+                      ISNULL(t.EventSubClass, -1),
+                      CONVERT(varchar(19), t.StartTime, 120),
+                      LEFT(ISNULL(t.DatabaseName, N''), 256),
+                      LEFT(ISNULL(t.LoginName, N''), 256),
+                      LEFT(ISNULL(t.HostName, N''), 256),
+                      LEFT(ISNULL(t.TargetLoginName, N''), 256),
+                      LEFT(ISNULL(t.TargetUserName, N''), 256),
+                      LEFT(ISNULL(t.DBUserName, N''), 256),
+                      LEFT(ISNULL(t.RoleName, N''), 256),
+                      CASE
+                          WHEN t.EventClass IN (102, 103, 113, 170) THEN N''
+                          ELSE LEFT(ISNULL(t.ObjectName, N''), 256)
+                      END;
+
+              SET @trace_ok = 1;
+          END TRY
+          BEGIN CATCH
+              DELETE FROM #security_ddl_raw;
+              SET @trace_ok = 0;
+          END CATCH;
+          SET @attempt += 1;
+      END;
+
+      INSERT INTO #security_ddl (
+          change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+      )
+      SELECT
+          e.change_class,
+          e.principal_type,
+          e.event,
+          e.db,
+          e.principal_name,
+          e.role_name,
+          e.login_name,
+          e.client_host,
+          N'trace',
+          e.event_time,
+          CAST(SUM(e.event_count) AS float)
+      FROM (
+          SELECT
+              CASE
+                  WHEN a.event_class IN (102, 103, 113, 170) THEN N'permission'
+                  WHEN a.event_class IN (108, 110) THEN N'membership'
+                  WHEN a.event_class IN (117, 175) THEN N'audit'
+                  ELSE N'principal'
+              END AS change_class,
+              CASE
+                  WHEN a.event_class IN (102, 103, 113, 170) THEN N'permission'
+                  WHEN a.event_class IN (108, 104, 105, 106, 107) THEN N'login'
+                  WHEN a.event_class IN (110, 109) THEN N'user'
+                  WHEN a.event_class = 111 THEN N'role'
+                  WHEN a.event_class = 112 THEN N'application_role'
+                  WHEN a.event_class = 152 THEN N'owner'
+                  WHEN a.event_class = 117 THEN N'audit'
+                  WHEN a.event_class = 175 THEN N'trace'
+                  WHEN a.event_class = 177
+                       AND NULLIF(LTRIM(RTRIM(a.role_name)), N'') IS NOT NULL
+                       AND NULLIF(LTRIM(RTRIM(a.target_login)), N'') IS NULL THEN N'server_role'
+                  WHEN a.event_class = 177 THEN N'login'
+                  WHEN a.event_class = 130
+                       AND NULLIF(LTRIM(RTRIM(a.role_name)), N'') IS NOT NULL
+                       AND NULLIF(LTRIM(RTRIM(a.target_user)), N'') IS NULL
+                       AND NULLIF(LTRIM(RTRIM(a.db_user)), N'') IS NULL THEN N'role'
+                  WHEN a.event_class = 130 THEN N'user'
+                  ELSE N'principal'
+              END AS principal_type,
+              CASE
+                  WHEN a.event_class IN (102, 103, 113, 170) AND a.event_subclass = 1 THEN N'granted'
+                  WHEN a.event_class IN (102, 103, 113, 170) AND a.event_subclass = 2 THEN N'revoked'
+                  WHEN a.event_class IN (102, 103, 113, 170) AND a.event_subclass = 3 THEN N'denied'
+                  WHEN a.event_class = 105 AND a.event_subclass = 1 THEN N'created'
+                  WHEN a.event_class = 105 AND a.event_subclass = 2 THEN N'dropped'
+                  WHEN a.event_class = 105 AND a.event_subclass = 3 THEN N'denied'
+                  WHEN a.event_class IN (104, 109, 111, 130, 177) AND a.event_subclass = 1 THEN N'created'
+                  WHEN a.event_class IN (104, 109, 111) AND a.event_subclass = 2 THEN N'dropped'
+                  WHEN a.event_class IN (130, 177) AND a.event_subclass = 3 THEN N'dropped'
+                  WHEN a.event_class IN (108, 110) AND a.event_subclass = 1 THEN N'added'
+                  WHEN a.event_class IN (108, 110) AND a.event_subclass = 2 THEN N'removed'
+                  WHEN a.event_class IN (107, 112) THEN N'password_changed'
+                  WHEN a.event_class = 177 AND a.event_subclass = 5 THEN N'disabled'
+                  WHEN a.event_class = 177 AND a.event_subclass = 6 THEN N'enabled'
+                  ELSE N'altered'
+              END AS event,
+              CASE
+                  WHEN a.event_class IN (104, 105, 106, 107, 108, 170, 175, 177) THEN N'-'
+                  ELSE ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.database_name)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-')
+              END AS db,
+              LEFT(REPLACE(REPLACE(LTRIM(RTRIM(
+                  CASE a.event_class
+                      WHEN 175 THEN N'default-trace'
+                      WHEN 117 THEN COALESCE(NULLIF(LTRIM(RTRIM(a.object_name)), N''), N'audit')
+                      ELSE COALESCE(
+                          NULLIF(LTRIM(RTRIM(a.target_login)), N''),
+                          NULLIF(LTRIM(RTRIM(a.target_user)), N''),
+                          NULLIF(LTRIM(RTRIM(a.db_user)), N''),
+                          NULLIF(LTRIM(RTRIM(a.role_name)), N''),
+                          NULLIF(LTRIM(RTRIM(a.object_name)), N''),
+                          N'unknown')
+                  END
+              )), NCHAR(13), N''), NCHAR(10), N''), 128) AS principal_name,
+              CASE
+                  WHEN a.event_class IN (108, 110)
+                      THEN ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.role_name)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-')
+                  ELSE N'-'
+              END AS role_name,
+              ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.actor)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'unknown') AS login_name,
+              ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(a.client_host)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-') AS client_host,
+              a.event_time,
+              a.event_count
+          FROM #security_ddl_raw AS a
+          WHERE a.event_class IN (104, 105, 106, 107, 108, 117, 170, 175, 177)
+             OR (
+                 LTRIM(RTRIM(a.database_name)) <> N''
+                 AND LTRIM(RTRIM(a.database_name)) <> N'tempdb'
+             )
+      ) AS e
+      WHERE e.principal_name <> N''
+        AND e.principal_name NOT LIKE N'##%'
+        AND e.event_time <> N''
+      GROUP BY
+          e.change_class, e.principal_type, e.event, e.db, e.principal_name, e.role_name, e.login_name, e.client_host, e.event_time;
+
+      SELECT @xe_file = CAST(t.target_data AS xml).value(N'(EventFileTarget/File/@name)[1]', N'nvarchar(260)')
+      FROM sys.dm_xe_sessions AS s WITH (NOLOCK)
+      INNER JOIN sys.dm_xe_session_targets AS t WITH (NOLOCK)
+          ON t.event_session_address = s.address
+      WHERE s.name = N'observability_security_ddl'
+        AND t.target_name = N'event_file';
+
+      IF @xe_file IS NOT NULL AND @xe_file <> N''
+      BEGIN
+          SET @xe_glob = LEFT(@xe_file, LEN(@xe_file) - CHARINDEX(N'\', REVERSE(@xe_file)) + 1) + N'observability_security_ddl*.xel';
+          BEGIN TRY
+              INSERT INTO #security_ddl_xe (
+                  change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+              )
+              SELECT
+                  N'principal',
+                  x.principal_type,
+                  x.event,
+                  x.db,
+                  x.principal_name,
+                  N'-',
+                  x.login_name,
+                  x.client_host,
+                  N'xe',
+                  x.event_time,
+                  CAST(COUNT_BIG(*) AS float)
+              FROM (
+                  SELECT
+                      CASE
+                          WHEN ot.object_type LIKE N'%SERVER%' AND ot.object_type LIKE N'%ROLE%' THEN N'server_role'
+                          WHEN ot.object_type LIKE N'%APPLICATION%' AND ot.object_type LIKE N'%ROLE%' THEN N'application_role'
+                          WHEN ot.object_type LIKE N'%ROLE%' THEN N'role'
+                          WHEN ot.object_type LIKE N'%GROUP%' THEN N'windows_group'
+                          WHEN ot.object_type LIKE N'%USER%' THEN N'user'
+                          ELSE N'login'
+                      END AS principal_type,
+                      CASE f.object_name
+                          WHEN N'object_created' THEN N'created'
+                          WHEN N'object_deleted' THEN N'dropped'
+                          ELSE N'altered'
+                      END AS event,
+                      CASE
+                          WHEN ot.object_type LIKE N'%LOGIN%'
+                               OR (ot.object_type LIKE N'%SERVER%' AND ot.object_type LIKE N'%ROLE%') THEN N'-'
+                          ELSE ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.database_name)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-')
+                      END AS db,
+                      LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.object_name)), NCHAR(13), N''), NCHAR(10), N''), 128) AS principal_name,
+                      ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.actor)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'unknown') AS login_name,
+                      ISNULL(NULLIF(LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ot.client_host)), NCHAR(13), N''), NCHAR(10), N''), 128), N''), N'-') AS client_host,
+                      CONVERT(varchar(19), CAST(SWITCHOFFSET(ot.event_utc, DATENAME(TZOFFSET, SYSDATETIMEOFFSET())) AS datetime), 120) AS event_time
+                  FROM sys.fn_xe_file_target_read_file(@xe_glob, NULL, NULL, NULL) AS f
+                  CROSS APPLY (SELECT CAST(f.event_data AS xml) AS event_data) AS xd
+                  CROSS APPLY (
+                      SELECT
+                          ISNULL(xd.event_data.value(N'(event/data[@name="object_type"]/text)[1]', N'nvarchar(128)'), N'') AS object_type,
+                          ISNULL(xd.event_data.value(N'(event/data[@name="object_name"]/value)[1]', N'nvarchar(256)'), N'') AS object_name,
+                          COALESCE(
+                              NULLIF(xd.event_data.value(N'(event/action[@name="database_name"]/value)[1]', N'nvarchar(256)'), N''),
+                              NULLIF(xd.event_data.value(N'(event/data[@name="database_name"]/value)[1]', N'nvarchar(256)'), N''),
+                              N''
+                          ) AS database_name,
+                          ISNULL(xd.event_data.value(N'(event/action[@name="server_principal_name"]/value)[1]', N'nvarchar(256)'), N'') AS actor,
+                          ISNULL(xd.event_data.value(N'(event/action[@name="client_hostname"]/value)[1]', N'nvarchar(256)'), N'') AS client_host,
+                          xd.event_data.value(N'(event/@timestamp)[1]', N'datetimeoffset(7)') AS event_utc,
+                          ISNULL(xd.event_data.value(N'(event/data[@name="ddl_phase"]/text)[1]', N'nvarchar(32)'), N'Commit') AS ddl_phase
+                  ) AS ot
+                  WHERE f.object_name IN (N'object_created', N'object_altered', N'object_deleted')
+                    AND ot.ddl_phase = N'Commit'
+                    AND ot.event_utc >= TODATETIMEOFFSET(DATEADD(DAY, -4, SYSUTCDATETIME()), 0)
+                    AND ot.object_name <> N''
+                    AND ot.object_name NOT LIKE N'##%'
+                    AND ot.object_type NOT LIKE N'%TABLE%'
+                    AND ot.object_type NOT LIKE N'%PROCEDURE%'
+                    AND ot.object_type NOT LIKE N'%TYPE%'
+                    AND (
+                        ot.object_type LIKE N'%LOGIN%'
+                        OR (ot.object_type LIKE N'%SERVER%' AND ot.object_type LIKE N'%ROLE%')
+                        OR ot.database_name <> N'tempdb'
+                    )
+                    AND (
+                        ot.object_type LIKE N'%LOGIN%'
+                        OR ot.object_type LIKE N'%USER%'
+                        OR ot.object_type LIKE N'%ROLE%'
+                        OR ot.object_type LIKE N'%GROUP%'
+                    )
+              ) AS x
+              WHERE x.principal_name <> N''
+                AND x.event_time <> N''
+              GROUP BY
+                  x.principal_type, x.event, x.db, x.principal_name, x.login_name, x.client_host, x.event_time;
+          END TRY
+          BEGIN CATCH
+              DELETE FROM #security_ddl_xe;
+          END CATCH;
+
+          DELETE s
+          FROM #security_ddl AS s
+          INNER JOIN #security_ddl_xe AS x
+              ON s.change_class = N'principal'
+             AND s.source = N'trace'
+             AND s.db = x.db
+             AND s.principal_name = x.principal_name
+             AND s.event = x.event
+             AND ABS(DATEDIFF(SECOND, CONVERT(datetime, s.event_time, 120), CONVERT(datetime, x.event_time, 120))) <= 15;
+
+          INSERT INTO #security_ddl (
+              change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+          )
+          SELECT
+              change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+          FROM #security_ddl_xe;
+      END;
+
+      INSERT INTO #security_ddl_cat (
+          change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+      )
+      SELECT
+          N'principal',
+          CASE sp.type
+              WHEN N'G' THEN N'windows_group'
+              WHEN N'R' THEN N'server_role'
+              WHEN N'E' THEN N'external_login'
+              WHEN N'X' THEN N'external_group'
+              WHEN N'C' THEN N'certificate_login'
+              WHEN N'K' THEN N'key_login'
+              WHEN N'U' THEN N'windows_login'
+              WHEN N'S' THEN N'sql_login'
+              ELSE N'login'
+          END,
+          v.event_name,
+          N'-',
+          LEFT(REPLACE(REPLACE(LTRIM(RTRIM(sp.name)), NCHAR(13), N''), NCHAR(10), N''), 128),
+          N'-',
+          N'-',
+          N'-',
+          N'catalog',
+          CONVERT(varchar(19), v.event_at, 120),
+          CAST(1 AS float)
+      FROM sys.server_principals AS sp WITH (NOLOCK)
+      CROSS APPLY (
+          SELECT N'created' AS event_name, sp.create_date AS event_at
+          WHERE sp.create_date >= @since
+          UNION ALL
+          SELECT N'altered', sp.modify_date
+          WHERE sp.modify_date >= @since
+            AND DATEDIFF(SECOND, sp.create_date, sp.modify_date) > 2
+      ) AS v
+      WHERE sp.name NOT LIKE N'##%'
+        AND sp.name <> N'public'
+        AND (
+            sp.type IN (N'S', N'U', N'G', N'E', N'X', N'C', N'K')
+            OR (sp.type = N'R' AND sp.is_fixed_role = 0)
+        );
+
+      IF CURSOR_STATUS('local', 'mssql_security_ddl_c') > -1
+          CLOSE mssql_security_ddl_c;
+      IF CURSOR_STATUS('local', 'mssql_security_ddl_c') >= -1
+          DEALLOCATE mssql_security_ddl_c;
+
+      DECLARE mssql_security_ddl_c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_security_ddl_c;
+      FETCH NEXT FROM mssql_security_ddl_c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #security_ddl_cat (
+                change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+            )
+            SELECT
+                N''principal'',
+                CASE dp.type
+                    WHEN N''G'' THEN N''windows_group''
+                    WHEN N''R'' THEN N''role''
+                    WHEN N''A'' THEN N''application_role''
+                    WHEN N''U'' THEN N''windows_user''
+                    WHEN N''S'' THEN N''sql_user''
+                    WHEN N''E'' THEN N''external_user''
+                    WHEN N''X'' THEN N''external_group''
+                    ELSE N''user''
+                END,
+                v.event_name,
+                @db,
+                LEFT(REPLACE(REPLACE(LTRIM(RTRIM(dp.name)), NCHAR(13), N''''), NCHAR(10), N''''), 128),
+                N''-'',
+                N''-'',
+                N''-'',
+                N''catalog'',
+                CONVERT(varchar(19), v.event_at, 120),
+                CAST(1 AS float)
+            FROM sys.database_principals AS dp WITH (NOLOCK)
+            CROSS APPLY (
+                SELECT N''created'' AS event_name, dp.create_date AS event_at
+                WHERE dp.create_date >= @since
+                UNION ALL
+                SELECT N''altered'', dp.modify_date
+                WHERE dp.modify_date >= @since
+                  AND DATEDIFF(SECOND, dp.create_date, dp.modify_date) > 2
+            ) AS v
+            WHERE dp.principal_id > 4
+              AND dp.is_fixed_role = 0
+              AND dp.name NOT LIKE N''##%''
+              AND dp.name NOT IN (N''public'', N''dbo'', N''guest'', N''INFORMATION_SCHEMA'', N''sys'');';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@since datetime, @db sysname', @since = @since, @db = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_security_ddl_c INTO @db;
+      END;
+      CLOSE mssql_security_ddl_c;
+      DEALLOCATE mssql_security_ddl_c;
+
+      INSERT INTO #security_ddl (
+          change_class, principal_type, event, db, principal_name, role_name, login_name, client_host, source, event_time, event_count
+      )
+      SELECT
+          c.change_class,
+          c.principal_type,
+          c.event,
+          c.db,
+          c.principal_name,
+          c.role_name,
+          c.login_name,
+          c.client_host,
+          c.source,
+          c.event_time,
+          c.event_count
+      FROM #security_ddl_cat AS c
+      WHERE c.principal_name <> N''
+        AND c.principal_name NOT LIKE N'##%'
+        AND c.event_time <> N''
+        AND NOT EXISTS (
+            SELECT 1
+            FROM #security_ddl AS s
+            WHERE s.db = c.db
+              AND ABS(DATEDIFF(SECOND, CONVERT(datetime, s.event_time, 120), CONVERT(datetime, c.event_time, 120))) <= 15
+              AND (
+                  (
+                      s.principal_name = c.principal_name
+                      AND s.change_class = N'principal'
+                      AND (
+                          s.event = c.event
+                          OR (c.event = N'altered' AND s.event IN (N'altered', N'password_changed', N'enabled', N'disabled'))
+                      )
+                  )
+                  OR (
+                      c.event = N'altered'
+                      AND s.change_class = N'membership'
+                      AND s.event IN (N'added', N'removed')
+                      AND (
+                          s.principal_name = c.principal_name
+                          OR (
+                              c.principal_type IN (N'role', N'server_role')
+                              AND s.role_name = c.principal_name
+                          )
+                      )
+                  )
+              )
+        );
+
+      SELECT TOP (10000)
+          x.change_class,
+          x.principal_type,
+          x.event,
+          x.db,
+          x.principal_name,
+          x.role_name,
+          x.login_name,
+          x.client_host,
+          x.source,
+          x.event_time,
+          x.event_count,
+          x.age_seconds,
+          x.event_unix
+      FROM (
+          SELECT
+              d.change_class,
+              d.principal_type,
+              d.event,
+              d.db,
+              d.principal_name,
+              d.role_name,
+              d.login_name,
+              d.client_host,
+              d.source,
+              d.event_time,
+              d.event_count,
+              CAST(CASE
+                  WHEN DATEDIFF(SECOND, CONVERT(datetime, d.event_time, 120), GETDATE()) < 0 THEN 0
+                  ELSE DATEDIFF(SECOND, CONVERT(datetime, d.event_time, 120), GETDATE())
+              END AS float) AS age_seconds,
+              CAST(
+                  DATEDIFF(SECOND, CONVERT(datetime, '19700101', 112), CONVERT(datetime, d.event_time, 120))
+                  + DATEDIFF(SECOND, GETDATE(), GETUTCDATE())
+              AS float) AS event_unix,
+              CASE d.change_class
+                  WHEN N'principal' THEN 0
+                  WHEN N'membership' THEN 1
+                  WHEN N'audit' THEN 2
+                  ELSE 3
+              END AS sort_pri
+          FROM #security_ddl AS d
+      ) AS x
+      ORDER BY x.sort_pri, x.event_unix DESC, x.age_seconds ASC;
+
+  - query_name: mssql_security_principal_count
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#security_principal_count') IS NOT NULL DROP TABLE #security_principal_count;
+      CREATE TABLE #security_principal_count (
+          scope nvarchar(16) NOT NULL,
+          principal_type nvarchar(32) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          principal_count float NOT NULL
+      );
+
+      INSERT INTO #security_principal_count (scope, principal_type, db, principal_count)
+      SELECT
+          N'server',
+          t.principal_type,
+          N'-',
+          CAST(ISNULL(c.principal_count, 0) AS float)
+      FROM (VALUES
+          (N'sql_login'),
+          (N'windows_login'),
+          (N'windows_group'),
+          (N'server_role')
+      ) AS t(principal_type)
+      LEFT JOIN (
+          SELECT
+              CASE sp.type
+                  WHEN N'S' THEN N'sql_login'
+                  WHEN N'U' THEN N'windows_login'
+                  WHEN N'G' THEN N'windows_group'
+                  WHEN N'R' THEN N'server_role'
+              END AS principal_type,
+              COUNT_BIG(*) AS principal_count
+          FROM sys.server_principals AS sp WITH (NOLOCK)
+          WHERE sp.name NOT LIKE N'##%'
+            AND (
+                sp.type IN (N'S', N'U', N'G')
+                OR (sp.type = N'R' AND sp.is_fixed_role = 0)
+            )
+          GROUP BY
+              CASE sp.type
+                  WHEN N'S' THEN N'sql_login'
+                  WHEN N'U' THEN N'windows_login'
+                  WHEN N'G' THEN N'windows_group'
+                  WHEN N'R' THEN N'server_role'
+              END
+      ) AS c
+          ON c.principal_type = t.principal_type
+      UNION ALL
+      SELECT
+          N'server',
+          CASE sp.type
+              WHEN N'E' THEN N'external_login'
+              WHEN N'X' THEN N'external_group'
+              WHEN N'C' THEN N'certificate_login'
+              ELSE N'key_login'
+          END,
+          N'-',
+          CAST(COUNT_BIG(*) AS float)
+      FROM sys.server_principals AS sp WITH (NOLOCK)
+      WHERE sp.name NOT LIKE N'##%'
+        AND sp.type IN (N'E', N'X', N'C', N'K')
+      GROUP BY sp.type;
+
+      IF CURSOR_STATUS('local', 'mssql_security_ddl_pc') > -1
+          CLOSE mssql_security_ddl_pc;
+      IF CURSOR_STATUS('local', 'mssql_security_ddl_pc') >= -1
+          DEALLOCATE mssql_security_ddl_pc;
+
+      DECLARE mssql_security_ddl_pc CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_security_ddl_pc;
+      FETCH NEXT FROM mssql_security_ddl_pc INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #security_principal_count (scope, principal_type, db, principal_count)
+            SELECT
+                N''database'',
+                t.principal_type,
+                @db,
+                CAST(ISNULL(c.principal_count, 0) AS float)
+            FROM (VALUES
+                (N''sql_user''),
+                (N''windows_user''),
+                (N''windows_group''),
+                (N''role''),
+                (N''application_role'')
+            ) AS t(principal_type)
+            LEFT JOIN (
+                SELECT
+                    CASE dp.type
+                        WHEN N''S'' THEN N''sql_user''
+                        WHEN N''U'' THEN N''windows_user''
+                        WHEN N''G'' THEN N''windows_group''
+                        WHEN N''R'' THEN N''role''
+                        WHEN N''A'' THEN N''application_role''
+                    END AS principal_type,
+                    COUNT_BIG(*) AS principal_count
+                FROM sys.database_principals AS dp WITH (NOLOCK)
+                WHERE dp.principal_id > 4
+                  AND dp.is_fixed_role = 0
+                  AND dp.name NOT LIKE N''##%''
+                  AND dp.name NOT IN (N''public'', N''dbo'', N''guest'', N''INFORMATION_SCHEMA'', N''sys'')
+                  AND dp.type IN (N''S'', N''U'', N''G'', N''R'', N''A'')
+                GROUP BY
+                    CASE dp.type
+                        WHEN N''S'' THEN N''sql_user''
+                        WHEN N''U'' THEN N''windows_user''
+                        WHEN N''G'' THEN N''windows_group''
+                        WHEN N''R'' THEN N''role''
+                        WHEN N''A'' THEN N''application_role''
+                    END
+            ) AS c
+                ON c.principal_type = t.principal_type;';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db sysname', @db = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_security_ddl_pc INTO @db;
+      END;
+      CLOSE mssql_security_ddl_pc;
+      DEALLOCATE mssql_security_ddl_pc;
+
+      SELECT scope, principal_type, db, principal_count
+      FROM #security_principal_count;
+
+  - query_name: mssql_security_permission_count
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @db sysname;
+      DECLARE @sql nvarchar(max);
+
+      IF OBJECT_ID(N'tempdb..#security_permission_count') IS NOT NULL DROP TABLE #security_permission_count;
+      CREATE TABLE #security_permission_count (
+          scope nvarchar(16) NOT NULL,
+          permission_state nvarchar(16) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          permission_count float NOT NULL
+      );
+
+      INSERT INTO #security_permission_count (scope, permission_state, db, permission_count)
+      SELECT
+          N'server',
+          s.permission_state,
+          N'-',
+          CAST(ISNULL(c.permission_count, 0) AS float)
+      FROM (VALUES (N'grant'), (N'deny')) AS s(permission_state)
+      LEFT JOIN (
+          SELECT
+              CASE WHEN p.state IN (N'G', N'W') THEN N'grant' ELSE N'deny' END AS permission_state,
+              COUNT_BIG(*) AS permission_count
+          FROM sys.server_permissions AS p WITH (NOLOCK)
+          GROUP BY CASE WHEN p.state IN (N'G', N'W') THEN N'grant' ELSE N'deny' END
+      ) AS c
+          ON c.permission_state = s.permission_state;
+
+      IF CURSOR_STATUS('local', 'mssql_security_ddl_perm') > -1
+          CLOSE mssql_security_ddl_perm;
+      IF CURSOR_STATUS('local', 'mssql_security_ddl_perm') >= -1
+          DEALLOCATE mssql_security_ddl_perm;
+
+      DECLARE mssql_security_ddl_perm CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_security_ddl_perm;
+      FETCH NEXT FROM mssql_security_ddl_perm INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #security_permission_count (scope, permission_state, db, permission_count)
+            SELECT
+                N''database'',
+                s.permission_state,
+                @db,
+                CAST(ISNULL(c.permission_count, 0) AS float)
+            FROM (VALUES (N''grant''), (N''deny'')) AS s(permission_state)
+            LEFT JOIN (
+                SELECT
+                    CASE WHEN p.state IN (N''G'', N''W'') THEN N''grant'' ELSE N''deny'' END AS permission_state,
+                    COUNT_BIG(*) AS permission_count
+                FROM sys.database_permissions AS p WITH (NOLOCK)
+                GROUP BY CASE WHEN p.state IN (N''G'', N''W'') THEN N''grant'' ELSE N''deny'' END
+            ) AS c
+                ON c.permission_state = s.permission_state;';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql, N'@db sysname', @db = @db;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_security_ddl_perm INTO @db;
+      END;
+      CLOSE mssql_security_ddl_perm;
+      DEALLOCATE mssql_security_ddl_perm;
+
+      SELECT scope, permission_state, db, permission_count
+      FROM #security_permission_count;

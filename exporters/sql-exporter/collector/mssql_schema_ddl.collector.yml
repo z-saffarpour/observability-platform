@@ -1,0 +1,376 @@
+# CREATE/ALTER/DROP of user databases, tables, views, and stored procedures.
+# Long-term events are the Extended Events session observability_database_ddl,
+# the database pair of observability_server_ddl. This collector reads the
+# default trace, not that session.
+#
+# This collector reads Object:Created (46), Object:Deleted (47), and
+# Object:Altered (164) from the default trace for:
+#   16964 database, 8277 user table, 8278 view,
+#   8272 stored procedure, 17232 CLR procedure,
+#   21076 Transact-SQL trigger, 16724 CLR trigger,
+#   21572 database DDL trigger.
+# ENABLE TRIGGER and DISABLE TRIGGER are event enabled or disabled when the
+# default trace statement text says so. Otherwise the trigger change is altered.
+# Indexes, constraints, statistics, and internal tables are not included.
+#
+# Also emits a catalog count per database and object type so a missed trace
+# event can still be seen as a count change. Schema is resolved with
+# OBJECT_SCHEMA_NAME while the object still exists; drops usually keep '-'.
+#
+# Permissions: VIEW SERVER STATE. Catalog counts also need access to each
+# online user database (HAS_DBACCESS). Empty event series when the default
+# trace is off; mssql_schema_ddl_trace_enabled is 0 in that case.
+# Object events are capped at the 10000 newest rows. Database events in the
+# same 4-day window are all emitted. Trigger enable/disable rows are all emitted.
+# object_type is database, table, view, procedure, or trigger.
+# The default trace rollover can still drop events before 4 days. This metric
+# only returns rows that are still in the current trace files.
+# Age uses the SQL Server local clock, same as the default trace StartTime.
+# mssql_schema_ddl_event_timestamp_seconds is the event log: one series per
+# event second, value = Unix UTC, label event_time = local YYYY-MM-DD HH:MM:SS.
+
+collector_name: mssql_schema_ddl
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_schema_ddl_trace_enabled
+    type: gauge
+    help: '1 if the default trace path is available for schema DDL collection, else 0.'
+    values: [trace_enabled]
+    query_ref: mssql_schema_ddl_trace
+
+  - metric_name: mssql_schema_ddl_events
+    type: gauge
+    help: 'CREATE/ALTER/DROP count for one database, table, view, procedure, or trigger event second in the default trace (last 4 days). Trigger ENABLE is event enabled and DISABLE is event disabled when the trace text contains the statement. Object rows are capped at 10000; database and trigger rows are not.'
+    key_labels:
+      - db
+      - schema_name
+      - object_name
+      - object_type
+      - event
+      - login_name
+      - event_time
+    values: [event_count]
+    query_ref: mssql_schema_ddl_events
+
+  - metric_name: mssql_schema_ddl_age_seconds
+    type: gauge
+    help: 'Seconds since that CREATE/ALTER/DROP or trigger ENABLE/DISABLE event (default trace, last 4 days).'
+    key_labels:
+      - db
+      - schema_name
+      - object_name
+      - object_type
+      - event
+      - login_name
+      - event_time
+    values: [age_seconds]
+    query_ref: mssql_schema_ddl_events
+
+  - metric_name: mssql_schema_ddl_event_timestamp_seconds
+    type: gauge
+    help: 'Unix UTC seconds when that database, table, view, procedure, or trigger CREATE/ALTER/DROP or ENABLE/DISABLE happened. event_time is SQL Server local time.'
+    key_labels:
+      - db
+      - schema_name
+      - object_name
+      - object_type
+      - event
+      - login_name
+      - event_time
+    values: [event_unix]
+    query_ref: mssql_schema_ddl_events
+
+  - metric_name: mssql_schema_object_count
+    type: gauge
+    help: 'Current count of user tables, views, or procedures in an online database (tempdb excluded).'
+    key_labels:
+      - db
+      - object_type
+    values: [object_count]
+    query_ref: mssql_schema_object_count
+
+queries:
+  - query_name: mssql_schema_ddl_trace
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @path nvarchar(260);
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      SELECT CAST(CASE WHEN @path IS NULL THEN 0 ELSE 1 END AS float) AS trace_enabled;
+
+  - query_name: mssql_schema_ddl_events
+    query: |
+      SET NOCOUNT ON;
+      DECLARE @path nvarchar(260);
+      SELECT @path = path
+      FROM sys.traces WITH (NOLOCK)
+      WHERE is_default = 1;
+
+      BEGIN TRY DROP TABLE #schema_ddl; END TRY BEGIN CATCH END CATCH;
+      CREATE TABLE #schema_ddl (
+          db nvarchar(128) NOT NULL,
+          schema_name nvarchar(128) NOT NULL,
+          object_name nvarchar(128) NOT NULL,
+          object_type nvarchar(20) NOT NULL,
+          event nvarchar(20) NOT NULL,
+          login_name nvarchar(128) NOT NULL,
+          event_time nvarchar(19) NOT NULL,
+          event_count float NOT NULL,
+          age_seconds float NOT NULL,
+          event_unix float NOT NULL
+      );
+
+      IF @path IS NOT NULL
+      BEGIN
+          BEGIN TRY
+              INSERT INTO #schema_ddl (db, schema_name, object_name, object_type, event, login_name, event_time, event_count, age_seconds, event_unix)
+              SELECT
+                  e.db,
+                  e.schema_name,
+                  e.object_name,
+                  e.object_type,
+                  e.event,
+                  e.login_name,
+                  e.event_time,
+                  CAST(COUNT(*) AS float) AS event_count,
+                  CAST(CASE
+                      WHEN DATEDIFF(SECOND, MAX(e.start_time), GETDATE()) < 0 THEN 0
+                      ELSE DATEDIFF(SECOND, MAX(e.start_time), GETDATE())
+                  END AS float) AS age_seconds,
+                  CAST(
+                      DATEDIFF(SECOND, CONVERT(datetime, '19700101', 112), CONVERT(datetime, e.event_time, 120))
+                      + DATEDIFF(SECOND, GETDATE(), GETUTCDATE())
+                  AS float) AS event_unix
+              FROM (
+                  SELECT
+                      CASE
+                          WHEN t.ObjectType = 16964 THEN ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N''))
+                          ELSE ISNULL(t.DatabaseName, N'')
+                      END AS db,
+                      CASE
+                          WHEN t.ObjectType = 16964 THEN N'-'
+                          ELSE ISNULL(NULLIF(OBJECT_SCHEMA_NAME(t.ObjectID, t.DatabaseID), N''), N'-')
+                      END AS schema_name,
+                      LEFT(REPLACE(REPLACE(
+                          CASE
+                              WHEN t.ObjectType = 16964 THEN ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N''))
+                              ELSE ISNULL(t.ObjectName, N'')
+                          END, NCHAR(13), N''), NCHAR(10), N''), 128) AS object_name,
+                      CASE
+                          WHEN t.ObjectType = 16964 THEN N'database'
+                          WHEN t.ObjectType IN (16724, 21076, 21572) THEN N'trigger'
+                          WHEN t.EventClass = 164 AND (
+                                  t.TextData LIKE N'%DISABLE%TRIGGER%'
+                                  OR t.TextData LIKE N'%ENABLE%TRIGGER%'
+                               ) THEN N'trigger'
+                          WHEN t.ObjectType = 8277 THEN N'table'
+                          WHEN t.ObjectType = 8278 THEN N'view'
+                          ELSE N'procedure'
+                      END AS object_type,
+                      CASE
+                          WHEN t.EventClass = 46 THEN N'created'
+                          WHEN t.EventClass = 47 THEN N'dropped'
+                          WHEN t.EventClass = 164 AND t.TextData LIKE N'%DISABLE%TRIGGER%' THEN N'disabled'
+                          WHEN t.EventClass = 164 AND t.TextData LIKE N'%ENABLE%TRIGGER%' THEN N'enabled'
+                          ELSE N'altered'
+                      END AS event,
+                      ISNULL(NULLIF(LTRIM(RTRIM(t.LoginName)), N''), N'unknown') AS login_name,
+                      CONVERT(varchar(19), t.StartTime, 120) AS event_time,
+                      t.StartTime AS start_time
+                  FROM sys.fn_trace_gettable(@path, DEFAULT) AS t
+                  WHERE t.EventClass IN (46, 47, 164)
+                    AND t.ObjectType IN (16964, 8272, 8277, 8278, 16724, 17232, 21076, 21572)
+                    AND (t.Success = 1 OR t.Success IS NULL)
+                    AND t.StartTime >= DATEADD(DAY, -4, GETDATE())
+                    AND (
+                        (
+                            t.ObjectType = 16964
+                            AND ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N'')) NOT IN (N'', N'master', N'model', N'msdb', N'tempdb')
+                        )
+                        OR (
+                            t.ObjectType <> 16964
+                            AND ISNULL(t.DatabaseName, N'') <> N''
+                            AND t.DatabaseName <> N'tempdb'
+                            AND ISNULL(t.ObjectName, N'') <> N''
+                            AND t.ObjectName NOT LIKE N'#%'
+                        )
+                    )
+              ) AS e
+              GROUP BY e.db, e.schema_name, e.object_name, e.object_type, e.event, e.login_name, e.event_time;
+          END TRY
+          BEGIN CATCH
+              INSERT INTO #schema_ddl (db, schema_name, object_name, object_type, event, login_name, event_time, event_count, age_seconds, event_unix)
+              SELECT
+                  e.db,
+                  e.schema_name,
+                  e.object_name,
+                  e.object_type,
+                  e.event,
+                  e.login_name,
+                  e.event_time,
+                  CAST(COUNT(*) AS float) AS event_count,
+                  CAST(CASE
+                      WHEN DATEDIFF(SECOND, MAX(e.start_time), GETDATE()) < 0 THEN 0
+                      ELSE DATEDIFF(SECOND, MAX(e.start_time), GETDATE())
+                  END AS float) AS age_seconds,
+                  CAST(
+                      DATEDIFF(SECOND, CONVERT(datetime, '19700101', 112), CONVERT(datetime, e.event_time, 120))
+                      + DATEDIFF(SECOND, GETDATE(), GETUTCDATE())
+                  AS float) AS event_unix
+              FROM (
+                  SELECT
+                      CASE
+                          WHEN t.ObjectType = 16964 THEN ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N''))
+                          ELSE ISNULL(t.DatabaseName, N'')
+                      END AS db,
+                      CASE
+                          WHEN t.ObjectType = 16964 THEN N'-'
+                          ELSE ISNULL(NULLIF(OBJECT_SCHEMA_NAME(t.ObjectID, t.DatabaseID), N''), N'-')
+                      END AS schema_name,
+                      LEFT(REPLACE(REPLACE(
+                          CASE
+                              WHEN t.ObjectType = 16964 THEN ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N''))
+                              ELSE ISNULL(t.ObjectName, N'')
+                          END, NCHAR(13), N''), NCHAR(10), N''), 128) AS object_name,
+                      CASE
+                          WHEN t.ObjectType = 16964 THEN N'database'
+                          WHEN t.ObjectType IN (16724, 21076, 21572) THEN N'trigger'
+                          WHEN t.EventClass = 164 AND (
+                                  t.TextData LIKE N'%DISABLE%TRIGGER%'
+                                  OR t.TextData LIKE N'%ENABLE%TRIGGER%'
+                               ) THEN N'trigger'
+                          WHEN t.ObjectType = 8277 THEN N'table'
+                          WHEN t.ObjectType = 8278 THEN N'view'
+                          ELSE N'procedure'
+                      END AS object_type,
+                      CASE
+                          WHEN t.EventClass = 46 THEN N'created'
+                          WHEN t.EventClass = 47 THEN N'dropped'
+                          WHEN t.EventClass = 164 AND t.TextData LIKE N'%DISABLE%TRIGGER%' THEN N'disabled'
+                          WHEN t.EventClass = 164 AND t.TextData LIKE N'%ENABLE%TRIGGER%' THEN N'enabled'
+                          ELSE N'altered'
+                      END AS event,
+                      ISNULL(NULLIF(LTRIM(RTRIM(t.LoginName)), N''), N'unknown') AS login_name,
+                      CONVERT(varchar(19), t.StartTime, 120) AS event_time,
+                      t.StartTime AS start_time
+                  FROM sys.fn_trace_gettable(@path, 1) AS t
+                  WHERE t.EventClass IN (46, 47, 164)
+                    AND t.ObjectType IN (16964, 8272, 8277, 8278, 16724, 17232, 21076, 21572)
+                    AND (t.Success = 1 OR t.Success IS NULL)
+                    AND t.StartTime >= DATEADD(DAY, -4, GETDATE())
+                    AND (
+                        (
+                            t.ObjectType = 16964
+                            AND ISNULL(NULLIF(LTRIM(t.ObjectName), N''), ISNULL(t.DatabaseName, N'')) NOT IN (N'', N'master', N'model', N'msdb', N'tempdb')
+                        )
+                        OR (
+                            t.ObjectType <> 16964
+                            AND ISNULL(t.DatabaseName, N'') <> N''
+                            AND t.DatabaseName <> N'tempdb'
+                            AND ISNULL(t.ObjectName, N'') <> N''
+                            AND t.ObjectName NOT LIKE N'#%'
+                        )
+                    )
+              ) AS e
+              GROUP BY e.db, e.schema_name, e.object_name, e.object_type, e.event, e.login_name, e.event_time;
+          END CATCH;
+      END;
+
+      SELECT
+          db,
+          schema_name,
+          object_name,
+          object_type,
+          event,
+          login_name,
+          event_time,
+          event_count,
+          age_seconds,
+          event_unix
+      FROM (
+          SELECT
+              db,
+              schema_name,
+              object_name,
+              object_type,
+              event,
+              login_name,
+              event_time,
+              event_count,
+              age_seconds,
+              event_unix,
+              ROW_NUMBER() OVER (
+                  PARTITION BY CASE WHEN object_type = N'database' THEN 0 ELSE 1 END
+                  ORDER BY event_unix DESC, age_seconds ASC
+              ) AS event_rank
+          FROM #schema_ddl
+          WHERE object_name <> N''
+            AND event_time <> N''
+      ) AS ranked
+      WHERE object_type IN (N'database', N'trigger')
+         OR event_rank <= 10000;
+
+  - query_name: mssql_schema_object_count
+    query: |
+      SET NOCOUNT ON;
+      IF OBJECT_ID(N'tempdb..#schema_obj_count') IS NOT NULL DROP TABLE #schema_obj_count;
+      CREATE TABLE #schema_obj_count (
+          db sysname NOT NULL,
+          object_type nvarchar(20) NOT NULL,
+          object_count float NOT NULL
+      );
+
+      DECLARE @db sysname, @sql nvarchar(max);
+      IF CURSOR_STATUS('local', 'mssql_schema_ddl_c') > -1
+          CLOSE mssql_schema_ddl_c;
+      IF CURSOR_STATUS('local', 'mssql_schema_ddl_c') >= -1
+          DEALLOCATE mssql_schema_ddl_c;
+
+      DECLARE mssql_schema_ddl_c CURSOR LOCAL FAST_FORWARD FOR
+          SELECT name
+          FROM sys.databases WITH (NOLOCK)
+          WHERE state = 0
+            AND source_database_id IS NULL
+            AND HAS_DBACCESS(name) = 1
+            AND name <> N'tempdb';
+
+      OPEN mssql_schema_ddl_c;
+      FETCH NEXT FROM mssql_schema_ddl_c INTO @db;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+          SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            INSERT INTO #schema_obj_count (db, object_type, object_count)
+            SELECT
+                DB_NAME(),
+                CASE
+                    WHEN o.type IN (N''P'', N''PC'') THEN N''procedure''
+                    WHEN o.type = N''V'' THEN N''view''
+                    ELSE N''table''
+                END,
+                CAST(COUNT_BIG(*) AS float)
+            FROM sys.objects AS o WITH (NOLOCK)
+            WHERE o.is_ms_shipped = 0
+              AND o.type IN (N''U'', N''V'', N''P'', N''PC'')
+              AND o.name NOT LIKE N''#%''
+            GROUP BY
+                CASE
+                    WHEN o.type IN (N''P'', N''PC'') THEN N''procedure''
+                    WHEN o.type = N''V'' THEN N''view''
+                    ELSE N''table''
+                END;';
+          BEGIN TRY
+              EXEC sys.sp_executesql @sql;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+          FETCH NEXT FROM mssql_schema_ddl_c INTO @db;
+      END;
+      CLOSE mssql_schema_ddl_c;
+      DEALLOCATE mssql_schema_ddl_c;
+
+      SELECT db, object_type, object_count
+      FROM #schema_obj_count;

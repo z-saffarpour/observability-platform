@@ -28,3 +28,172 @@ groups:
           summary: "Database grew by more than 10 GiB in 24 hours"
           description: "Database {{ $labels.db }} data files grew {{ $value | humanize }} MiB in 24 hours."
           runbook: "Capacity planning — confirm expected load vs unexpected growth."
+
+      - alert: SqlDatabaseCreated
+        expr: mssql_schema_ddl_age_seconds{event="created", object_type="database"} < 1800
+        for: 5m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "User database created"
+          description: "Database {{ $labels.db }} was created by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the create was planned. Dashboard: sqlx-schema-change. Trace window is 4 days and still misses events after default-trace rollover."
+
+      - alert: SqlDatabaseAltered
+        expr: mssql_schema_ddl_age_seconds{event="altered", object_type="database"} < 1800
+        for: 5m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "User database altered"
+          description: "Database {{ $labels.db }} was altered by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the ALTER DATABASE was planned. Dashboard: sqlx-schema-change."
+
+      - alert: SqlDatabaseDropped
+        expr: mssql_schema_ddl_age_seconds{event="dropped", object_type="database"} < 1800
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "User database dropped"
+          description: "Database {{ $labels.db }} was dropped by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the drop was planned and a backup exists. Dashboard: sqlx-schema-change."
+
+      - alert: SqlSchemaObjectCreated
+        expr: mssql_schema_ddl_age_seconds{event="created", object_type=~"table|view|procedure"} < 1800
+        for: 5m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Table, view, or procedure created"
+          description: "{{ $labels.object_type }} {{ $labels.schema_name }}.{{ $labels.object_name }} was created in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the create was a planned release. Schema '-' means the object was already gone or not visible. Dashboard: sqlx-schema-change."
+
+      - alert: SqlSchemaObjectAltered
+        expr: mssql_schema_ddl_age_seconds{event="altered", object_type=~"table|view|procedure"} < 1800
+        for: 5m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Table, view, or procedure altered"
+          description: "{{ $labels.object_type }} {{ $labels.schema_name }}.{{ $labels.object_name }} was altered in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the ALTER was a planned release. Dashboard: sqlx-schema-change."
+
+      - alert: SqlSchemaObjectDropped
+        expr: mssql_schema_ddl_age_seconds{event="dropped", object_type=~"table|view|procedure"} < 1800
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Table, view, or procedure dropped"
+          description: "{{ $labels.object_type }} {{ $labels.schema_name }}.{{ $labels.object_name }} was dropped in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the drop was planned. A dropped table is a data-loss risk until a backup or deploy record matches it. Dashboard: sqlx-schema-change."
+
+      - alert: SqlTriggerDisabled
+        expr: mssql_schema_ddl_age_seconds{event="disabled", object_type="trigger"} < 1800
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Trigger disabled"
+          description: "Trigger {{ $labels.schema_name }}.{{ $labels.object_name }} was disabled in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the DISABLE TRIGGER was planned. A disabled trigger changes DML behavior until it is enabled. Dashboard: sqlx-schema-change."
+
+      - alert: SqlTriggerEnabled
+        expr: mssql_schema_ddl_age_seconds{event="enabled", object_type="trigger"} < 1800
+        for: 5m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Trigger enabled"
+          description: "Trigger {{ $labels.schema_name }}.{{ $labels.object_name }} was enabled in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the ENABLE TRIGGER was planned. Dashboard: sqlx-schema-change."
+
+      - alert: SqlSchemaDdlTraceDisabled
+        expr: mssql_schema_ddl_trace_enabled == 0
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Default trace is off; schema create/drop events are not collected"
+          description: "SQL Server default trace has no path, so database, table, view, and procedure CREATE/ALTER/DROP events are invisible on this instance."
+          runbook: "Enable the default trace (sp_configure 'default trace enabled', 1) or accept that only catalog counts remain."
+
+      - alert: SqlServerConfigurationChanged
+        expr: mssql_server_ddl_age_seconds{object_class="configuration"} < 1800
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_server_ddl
+        annotations:
+          summary: "SQL Server configuration option changed"
+          description: "Option {{ $labels.object_name }} changed from {{ $labels.value_before }} to {{ $labels.value_after }} by {{ $labels.login_name }} from {{ $labels.client_host }} at {{ $labels.event_time }} (SQL Server local time)."
+          runbook: "Confirm the sp_configure change was planned and that RECONFIGURE completed. Dashboard: sqlx-server-ddl. Actor and client host require observability_server_ddl; English default-trace rows can still name the option."
+
+      - alert: SqlServerEventSessionChanged
+        expr: mssql_server_ddl_age_seconds{object_class="event_session"} < 1800
+        for: 5m
+        labels:
+          severity: info
+          priority: P2
+          alert_profile: config
+          collector: mssql_server_ddl
+        annotations:
+          summary: "Extended Events session {{ $labels.event }}"
+          description: "Event session {{ $labels.object_name }} was {{ $labels.event }} by {{ $labels.login_name }} from {{ $labels.client_host }} at {{ $labels.event_time }} (SQL Server local time)."
+          runbook: "Confirm the event session create, alter, start, or stop was planned. STATE = START/STOP is started or stopped only when observability_server_ddl is running. Dashboard: sqlx-server-ddl."
+
+      - alert: SqlServerAuditChanged
+        expr: mssql_server_ddl_age_seconds{object_class=~"server_audit|server_audit_specification|database_audit_specification"} < 1800
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_server_ddl
+        annotations:
+          summary: "SQL Server audit object {{ $labels.event }}"
+          description: "{{ $labels.object_class }} {{ $labels.object_name }} in {{ $labels.db }} was {{ $labels.event }} by {{ $labels.login_name }} from {{ $labels.client_host }} at {{ $labels.event_time }} (SQL Server local time)."
+          runbook: "Confirm the audit or audit specification change was planned. A hyphen login means the row came from catalog dates, not from the actor. Dashboard: sqlx-server-ddl."
+
+      - alert: SqlServerSecuritySurfaceChanged
+        expr: mssql_server_ddl_age_seconds{object_class=~"endpoint|credential|linked_server|server_trigger"} < 1800
+        for: 5m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: config
+          collector: mssql_server_ddl
+        annotations:
+          summary: "SQL Server endpoint, credential, linked server, or server trigger {{ $labels.event }}"
+          description: "{{ $labels.object_class }} {{ $labels.object_name }} was {{ $labels.event }} by {{ $labels.login_name }} from {{ $labels.client_host }} at {{ $labels.event_time }} (SQL Server local time)."
+          runbook: "Confirm the server-surface change was planned. Credential secrets are not in this metric. Dashboard: sqlx-server-ddl."

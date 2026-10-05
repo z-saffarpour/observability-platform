@@ -65,6 +65,7 @@ if ([string]::IsNullOrWhiteSpace($Source)) {
 # ---------------------------------------------------------------------------
 
 # Never deploy to any server (also purged remotely).
+
 $ExcludeEverywhere = @(
     'mssql_missing_index.collector.yml'
     'mssql_index_usage.collector.yml'
@@ -72,8 +73,9 @@ $ExcludeEverywhere = @(
 )
 
 # Deploy only to the listed server(s). On all other hosts the file is purged.
+
 $AllowOnlyOn = @{
-    'mssql_restore.collector.yml' = @('sql-host-02')
+    # 'mssql_restore.collector.yml' = @('sql-host-02')
 }
 
 # ---------------------------------------------------------------------------
