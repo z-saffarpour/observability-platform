@@ -326,8 +326,7 @@ queries:
              OR s.command LIKE N'%BACKUP %LOG%'
              OR (s.subsystem = N'SSIS' AND s.command LIKE N'%[Bb]ackup%')
             )
-            AND j.name NOT LIKE N'%BACKUP%Transfer%'
-            AND s.command NOT LIKE N'%Backup%Transfer%'            
+            AND j.name LIKE N'%Backup'
       )
       SELECT
           bj.job_name,
@@ -373,8 +372,7 @@ queries:
                      OR s.command LIKE N'%BACKUP %LOG%'
                      OR (s.subsystem = N'SSIS' AND s.command LIKE N'%[Bb]ackup%')
                     )
-                  AND j.name NOT LIKE N'%BACKUP%Transfer%'
-                  AND s.command NOT LIKE N'%Backup%Transfer%'
+                    AND j.name LIKE N'%Backup'
             )
       )
       SELECT
@@ -399,8 +397,10 @@ queries:
             ON j.job_id = s.job_id
         LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
             ON j.category_id = c.category_id
-        WHERE j.name LIKE N'%Backup%Transfer%'
-           OR s.command LIKE N'%Backup%Transfer%'
+        WHERE j.name LIKE N'%BackupTransfer%'
+
+           OR j.name LIKE N'%TransferBackups%'
+           OR j.name LIKE N'%TransferLogBackups%'
       )
       SELECT
           tj.job_name,
@@ -433,8 +433,7 @@ queries:
                     s.command LIKE N'%BACKUP %DATABASE%'
                  OR s.command LIKE N'%BACKUP %LOG%'
             )
-              AND j.name NOT LIKE N'%BACKUP%Transfer%'
-              AND s.command NOT LIKE N'%Backup%Transfer%'
+            AND j.name LIKE N'%Backup'
         )
         AND CONVERT(datetime,
               STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
