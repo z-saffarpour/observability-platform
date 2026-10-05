@@ -1,4 +1,7 @@
-# Stale / heavily modified statistics (TOP N across online user databases).
+# Stale / heavily modified statistics (bounded TOP N across online user databases).
+#
+# Age uses STATS_DATE. dm_db_stats_properties runs only for a capped candidate set
+# per database (oldest statistics plus statistics on the largest tables).
 #
 # It is required that the SQL Server user has the following permissions:
 #
@@ -9,13 +12,13 @@
 #
 collector_name: mssql_stats
 
-# dm_db_stats_properties across many DBs is relatively heavy; 10m is enough for DBA review.
+# STATS_DATE still walks each user database; 10m is enough for DBA review.
 min_interval: 600s
 
 metrics:
   - metric_name: mssql_stats_age_seconds
     type: gauge
-    help: 'TOP statistics by age (seconds since last update).'
+    help: 'Age in seconds for a bounded set of stale or heavily modified statistics.'
     key_labels:
       - db
       - schema_name
@@ -70,7 +73,7 @@ metrics:
 
   - metric_name: mssql_stats_stale_count
     type: gauge
-    help: 'Count of stale/heavily-modified statistics per database (matching collector thresholds).'
+    help: 'Count of user statistics per database whose STATS_DATE is missing or older than 7 days.'
     key_labels:
       - db
     values: [stale_count]
@@ -107,13 +110,59 @@ queries:
       WHILE @@FETCH_STATUS = 0
       BEGIN
           SET @sql = N'USE ' + QUOTENAME(@db) + N';
+            ;WITH oldest AS (
+                SELECT TOP (20)
+                    s.object_id,
+                    s.stats_id
+                FROM sys.stats AS s
+                INNER JOIN sys.objects AS o
+                    ON o.object_id = s.object_id
+                CROSS APPLY (
+                    SELECT STATS_DATE(s.object_id, s.stats_id) AS last_updated
+                ) AS d
+                WHERE o.is_ms_shipped = 0
+                  AND o.type IN (N''U'', N''V'')
+                ORDER BY
+                    CASE WHEN d.last_updated IS NULL THEN 0 ELSE 1 END,
+                    d.last_updated ASC
+            ),
+            largest_objects AS (
+                SELECT TOP (8)
+                    p.object_id
+                FROM sys.partitions AS p
+                INNER JOIN sys.objects AS o
+                    ON o.object_id = p.object_id
+                WHERE o.is_ms_shipped = 0
+                  AND o.type = N''U''
+                  AND p.index_id IN (0, 1)
+                GROUP BY p.object_id
+                ORDER BY SUM(p.rows) DESC
+            ),
+            largest_stats AS (
+                SELECT TOP (20)
+                    s.object_id,
+                    s.stats_id
+                FROM sys.stats AS s
+                INNER JOIN largest_objects AS l
+                    ON l.object_id = s.object_id
+                ORDER BY s.stats_id
+            ),
+            candidates AS (
+                SELECT object_id, stats_id FROM oldest
+                UNION
+                SELECT object_id, stats_id FROM largest_stats
+            )
             INSERT INTO #mssql_stats (db, schema_name, table_name, stats_name, age_seconds, modification_counter, rows, rows_sampled, sample_percent)
             SELECT TOP (40)
                 DB_NAME(),
-                OBJECT_SCHEMA_NAME(s.object_id),
-                OBJECT_NAME(s.object_id),
+                ISNULL(OBJECT_SCHEMA_NAME(c.object_id), N''''),
+                ISNULL(OBJECT_NAME(c.object_id), N''''),
                 s.name,
-                CAST(DATEDIFF(SECOND, ISNULL(sp.last_updated, ''19000101''), GETDATE()) AS float),
+                CASE
+                    WHEN sp.last_updated IS NULL THEN 2147483647.0
+                    WHEN sp.last_updated < DATEADD(YEAR, -50, GETDATE()) THEN 2147483647.0
+                    ELSE CAST(DATEDIFF(SECOND, sp.last_updated, GETDATE()) AS float)
+                END,
                 CAST(ISNULL(sp.modification_counter, 0) AS float),
                 CAST(ISNULL(sp.rows, 0) AS float),
                 CAST(ISNULL(sp.rows_sampled, 0) AS float),
@@ -123,17 +172,14 @@ queries:
                         ELSE 100.0 * ISNULL(sp.rows_sampled, 0) / sp.rows
                     END AS float
                 )
-            FROM sys.stats AS s WITH (NOLOCK)
-            CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp
-            INNER JOIN sys.objects AS o WITH (NOLOCK)
-                ON o.object_id = s.object_id
-            WHERE o.is_ms_shipped = 0
-              AND o.type IN (''U'', ''V'')
-              AND (
-                    sp.modification_counter >= 1000
-                 OR sp.last_updated < DATEADD(DAY, -7, GETDATE())
-                 OR sp.last_updated IS NULL
-              )
+            FROM candidates AS c
+            INNER JOIN sys.stats AS s
+                ON s.object_id = c.object_id
+               AND s.stats_id = c.stats_id
+            CROSS APPLY sys.dm_db_stats_properties(c.object_id, c.stats_id) AS sp
+            WHERE sp.modification_counter >= 1000
+               OR sp.last_updated < DATEADD(DAY, -7, GETDATE())
+               OR sp.last_updated IS NULL
             ORDER BY
                 ISNULL(sp.modification_counter, 0) DESC,
                 ISNULL(sp.last_updated, ''19000101'') ASC;';
@@ -187,16 +233,17 @@ queries:
             SELECT
                 DB_NAME(),
                 CAST(COUNT_BIG(*) AS float)
-            FROM sys.stats AS s WITH (NOLOCK)
-            CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp
-            INNER JOIN sys.objects AS o WITH (NOLOCK)
+            FROM sys.stats AS s
+            INNER JOIN sys.objects AS o
                 ON o.object_id = s.object_id
+            CROSS APPLY (
+                SELECT STATS_DATE(s.object_id, s.stats_id) AS last_updated
+            ) AS d
             WHERE o.is_ms_shipped = 0
-              AND o.type IN (''U'', ''V'')
+              AND o.type IN (N''U'', N''V'')
               AND (
-                    sp.modification_counter >= 1000
-                 OR sp.last_updated < DATEADD(DAY, -7, GETDATE())
-                 OR sp.last_updated IS NULL
+                    d.last_updated IS NULL
+                 OR d.last_updated < DATEADD(DAY, -7, GETDATE())
               );';
           BEGIN TRY
               EXEC (@sql);
