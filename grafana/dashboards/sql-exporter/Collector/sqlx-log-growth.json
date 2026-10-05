@@ -1,0 +1,1216 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations and Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Transaction log file growth over 24h from mssql_database_log_size_mb. Warning is 10% of that database log size; critical is 25%. Growth under 64 MB is ignored. master, model, msdb, and tempdb are excluded.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "Log Usage",
+      "type": "link",
+      "url": "/d/sqlx-log-usage?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Database Space",
+      "type": "link",
+      "url": "/d/sqlx-database-space?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Autogrowth",
+      "type": "link",
+      "url": "/d/sqlx-autogrowth?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Filegroup",
+      "type": "link",
+      "url": "/d/sqlx-filegroup?${__url_time_range}&${instance:queryparam}"
+    },
+    {
+      "targetBlank": true,
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/sqlx-00-overview?${__url_time_range}&${instance:queryparam}"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Health / KPI",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"})) or vector(0)",
+          "instant": true,
+          "legendFormat": "User databases",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "User databases",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) > 0.10 * sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"})) and (sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Warning > 10%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Warning > 10%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count(((sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) > 0.25 * sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"})) and (sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Critical > 25%",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Critical > 25%",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1024
+              },
+              {
+                "color": "red",
+                "value": 10240
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max((sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Largest 24h growth",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Largest 24h growth",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max((100 * (sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) / clamp_min(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}), 1))) or vector(0)",
+          "instant": true,
+          "legendFormat": "Largest growth %",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Largest growth %",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "count((sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Logs grown > 64 MB",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Logs grown > 64 MB",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum((sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) > 64) or vector(0)",
+          "instant": true,
+          "legendFormat": "Growth MB total",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Growth MB total",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "max(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"})) or vector(0)",
+          "instant": true,
+          "legendFormat": "Largest log",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Largest log",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
+      "panels": [],
+      "title": "Log size and 24h growth",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) and on(instance, db) topk(15, (sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)))",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Log size MB - 15 largest 24h growers",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h))",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Trailing 24h log growth (MB)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(100 * (sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) / clamp_min(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}), 1))",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Trailing 24h log growth (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"})",
+          "instant": false,
+          "legendFormat": "{{instance}} / {{db}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Log size MB",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 20,
+      "panels": [],
+      "title": "Per database",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ce0xqwhy35wqod"
+      },
+      "description": "24h growth of the transaction log file. Warn above MB is 10% of this database log. Critical above MB is 25%. master, model, msdb, and tempdb are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Growth %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 25
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Growth %"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"})",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h))",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(100 * (sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}) - sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"} offset 24h)) / clamp_min(sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}), 1))",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "C",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(0.10 * sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}))",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ce0xqwhy35wqod"
+          },
+          "editorMode": "code",
+          "expr": "(0.25 * sum without (state_desc, recovery_model_desc) (mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db=~\"${db:regex}\", db!~\"master|model|msdb|tempdb\"}))",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E",
+          "format": "table"
+        }
+      ],
+      "title": "Log growth by database (24h)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "owner": true,
+              "state_desc": true,
+              "recovery_model_desc": true
+            },
+            "indexByName": {
+              "Server": 0,
+              "Database": 1,
+              "Log MB": 2,
+              "Growth 24h MB": 3,
+              "Growth %": 4,
+              "Warn above MB": 5,
+              "Critical above MB": 6
+            },
+            "renameByName": {
+              "instance": "Server",
+              "db": "Database",
+              "Value #A": "Log MB",
+              "Value #B": "Growth 24h MB",
+              "Value #C": "Growth %",
+              "Value #D": "Warn above MB",
+              "Value #E": "Critical above MB"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Growth %"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 22,
+      "options": {
+        "content": "The threshold is a **number for each database**, not one fleet-wide MB value. Warning SMS (P1) fires when the log file grows more than **10% of that database's current log size** in 24 hours. Critical SMS (P0) fires above **25%**. Growth under **64 MB** is ignored.\n\nExample: a 100 GB log warns at 10 GB and pages critically at 25 GB. A 4 GB log warns at 400 MB and pages critically at 1 GB. `master`, `model`, `msdb`, and `tempdb` are excluded. A planned log expand matches the same rule. Source metric: `mssql_database_log_size_mb`.",
+        "mode": "markdown"
+      },
+      "title": "Threshold",
+      "type": "text"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "sql_exporter",
+    "mssql",
+    "collector",
+    "log-growth"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+        "includeAll": true,
+        "label": "Server",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_up{job=\"sql_exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "ce0xqwhy35wqod"
+        },
+        "definition": "label_values(mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db!~\"master|model|msdb|tempdb\"}, db)",
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "db",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(mssql_database_log_size_mb{job=\"sql_exporter\", instance=~\"$instance\", db!~\"master|model|msdb|tempdb\"}, db)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Collector log growth",
+  "uid": "sqlx-log-growth"
+}
