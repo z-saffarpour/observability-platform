@@ -1,5 +1,8 @@
 # Recent deadlock victim <-> other process pairs from system_health (xml_deadlock_report).
 #
+# The ring buffer is searched as text and only up to 5 event fragments are cast to XML.
+# Casting the whole system_health ring buffer exceeds the scrape deadline on busy instances.
+#
 # Portal / refresh-data scrape mssql_deadlock_pair_info from Prometheus only (no direct SQL).
 #
 # Permissions: GRANT VIEW SERVER STATE TO
@@ -34,74 +37,99 @@ metrics:
 queries:
   - query_name: mssql_deadlock_pairs
     query: |
+      SET NOCOUNT ON;
       SET QUOTED_IDENTIFIER ON;
       SET ANSI_NULLS ON;
-      DECLARE @x XML;
-      SELECT @x = CAST(target_data AS XML)
-      FROM sys.dm_xe_session_targets st
-      JOIN sys.dm_xe_sessions s ON s.address = st.event_session_address
-      WHERE s.name = N'system_health' AND st.target_name = N'ring_buffer';
 
-      IF @x IS NULL
+      DECLARE @raw nvarchar(max);
+      DECLARE @start int = 1;
+      DECLARE @hit int;
+      DECLARE @guard int = 0;
+      DECLARE @hits TABLE (pos int NOT NULL PRIMARY KEY);
+
+      SELECT @raw = t.target_data
+      FROM sys.dm_xe_session_targets AS t
+      INNER JOIN sys.dm_xe_sessions AS s
+          ON s.address = t.event_session_address
+      WHERE s.name = N'system_health'
+        AND t.target_name = N'ring_buffer';
+
+      IF @raw IS NULL
+          SET @raw = N'';
+
+      WHILE @guard < 5000
       BEGIN
-        SELECT
-          CAST(NULL AS varchar(30)) AS event_time,
-          CAST(NULL AS varchar(16)) AS victim_spid,
-          CAST(NULL AS nvarchar(128)) AS victim_login,
-          CAST(NULL AS nvarchar(128)) AS victim_host,
-          CAST(NULL AS nvarchar(128)) AS victim_program,
-          CAST(NULL AS nvarchar(128)) AS victim_db,
-          CAST(NULL AS nvarchar(160)) AS victim_sql,
-          CAST(NULL AS varchar(16)) AS other_spid,
-          CAST(NULL AS nvarchar(128)) AS other_login,
-          CAST(NULL AS nvarchar(128)) AS other_host,
-          CAST(NULL AS nvarchar(128)) AS other_program,
-          CAST(NULL AS nvarchar(128)) AS other_db,
-          CAST(NULL AS nvarchar(160)) AS other_sql,
-          CAST(NULL AS varchar(16)) AS process_count
-        WHERE 1 = 0;
-        RETURN;
+          SET @hit = CHARINDEX(N'xml_deadlock_report', @raw, @start);
+          IF @hit = 0
+              BREAK;
+          IF NOT EXISTS (SELECT 1 FROM @hits WHERE pos = @hit)
+              INSERT INTO @hits (pos) VALUES (@hit);
+          SET @start = @hit + 20;
+          SET @guard += 1;
       END;
 
-      ;WITH ev AS (
-        SELECT TOP (5)
-          n.value('@timestamp', 'datetimeoffset') AS event_time,
-          n.query('(data[@name="xml_report"]/value/deadlock)[1]') AS dl
-        FROM @x.nodes('RingBufferTarget/event[@name="xml_deadlock_report"]') q(n)
-        ORDER BY n.value('@timestamp', 'datetimeoffset') DESC
+      ;WITH last5 AS (
+          SELECT TOP (5) pos
+          FROM @hits
+          ORDER BY pos DESC
+      ),
+      windows AS (
+          SELECT SUBSTRING(@raw, CASE WHEN pos > 80 THEN pos - 80 ELSE 1 END, 400000) AS window
+          FROM last5
+      ),
+      frags AS (
+          SELECT TRY_CAST(
+              SUBSTRING(w.window, s.open_at, s.close_at - s.open_at + 8) AS xml
+          ) AS event_xml
+          FROM windows AS w
+          CROSS APPLY (
+              SELECT
+                  CHARINDEX(N'<event ', w.window) AS open_at,
+                  CHARINDEX(N'</event>', w.window) AS close_at
+          ) AS s
+          WHERE s.open_at > 0
+            AND s.close_at > s.open_at
+      ),
+      ev AS (
+          SELECT
+              event_xml.value(N'(/event/@timestamp)[1]', N'datetimeoffset') AS event_time,
+              event_xml.query(N'(event/data[@name="xml_report"]/value/deadlock)[1]') AS dl
+          FROM frags
+          WHERE event_xml IS NOT NULL
+            AND event_xml.exist(N'/event[@name="xml_deadlock_report"]') = 1
       ),
       procs AS (
-        SELECT
-          e.event_time,
-          p.value('@spid', 'int') AS spid,
-          p.value('@loginname', 'nvarchar(128)') AS login_name,
-          p.value('@hostname', 'nvarchar(128)') AS host_name,
-          p.value('@clientapp', 'nvarchar(256)') AS program_name,
-          p.value('@currentdbname', 'nvarchar(128)') AS db_name,
-          LEFT(REPLACE(REPLACE(ISNULL(p.value('(inputbuf/text())[1]', 'nvarchar(max)'), N''), CHAR(13), N' '), CHAR(10), N' '), 120) AS sql_text,
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM e.dl.nodes('/deadlock/victim-list/victimProcess') vl(v2)
-            WHERE v2.value('@id','nvarchar(128)') = p.value('@id','nvarchar(128)')
-          ) THEN 1 ELSE 0 END AS is_victim
-        FROM ev e
-        CROSS APPLY e.dl.nodes('/deadlock/process-list/process') pl(p)
+          SELECT
+              e.event_time,
+              p.value(N'@spid', N'int') AS spid,
+              p.value(N'@loginname', N'nvarchar(128)') AS login_name,
+              p.value(N'@hostname', N'nvarchar(128)') AS host_name,
+              p.value(N'@clientapp', N'nvarchar(256)') AS program_name,
+              p.value(N'@currentdbname', N'nvarchar(128)') AS db_name,
+              LEFT(REPLACE(REPLACE(ISNULL(p.value(N'(inputbuf/text())[1]', N'nvarchar(max)'), N''), CHAR(13), N' '), CHAR(10), N' '), 120) AS sql_text,
+              CASE WHEN EXISTS (
+                  SELECT 1
+                  FROM e.dl.nodes(N'/deadlock/victim-list/victimProcess') vl(v2)
+                  WHERE v2.value(N'@id', N'nvarchar(128)') = p.value(N'@id', N'nvarchar(128)')
+              ) THEN 1 ELSE 0 END AS is_victim
+          FROM ev AS e
+          CROSS APPLY e.dl.nodes(N'/deadlock/process-list/process') pl(p)
       )
-      SELECT TOP 5
-        CONVERT(varchar(19), SWITCHOFFSET(event_time, '+00:00'), 126) + 'Z' AS event_time,
-        CAST(MAX(CASE WHEN is_victim = 1 THEN spid END) AS varchar(16)) AS victim_spid,
-        ISNULL(MAX(CASE WHEN is_victim = 1 THEN login_name END), N'') AS victim_login,
-        ISNULL(MAX(CASE WHEN is_victim = 1 THEN host_name END), N'') AS victim_host,
-        ISNULL(MAX(CASE WHEN is_victim = 1 THEN LEFT(program_name, 64) END), N'') AS victim_program,
-        ISNULL(MAX(CASE WHEN is_victim = 1 THEN db_name END), N'') AS victim_db,
-        ISNULL(MAX(CASE WHEN is_victim = 1 THEN sql_text END), N'') AS victim_sql,
-        CAST(MAX(CASE WHEN is_victim = 0 THEN spid END) AS varchar(16)) AS other_spid,
-        ISNULL(MAX(CASE WHEN is_victim = 0 THEN login_name END), N'') AS other_login,
-        ISNULL(MAX(CASE WHEN is_victim = 0 THEN host_name END), N'') AS other_host,
-        ISNULL(MAX(CASE WHEN is_victim = 0 THEN LEFT(program_name, 64) END), N'') AS other_program,
-        ISNULL(MAX(CASE WHEN is_victim = 0 THEN db_name END), N'') AS other_db,
-        ISNULL(MAX(CASE WHEN is_victim = 0 THEN sql_text END), N'') AS other_sql,
-        CAST(COUNT(*) AS varchar(16)) AS process_count
+      SELECT TOP (5)
+          CONVERT(varchar(19), SWITCHOFFSET(event_time, '+00:00'), 126) + N'Z' AS event_time,
+          CAST(MAX(CASE WHEN is_victim = 1 THEN spid END) AS varchar(16)) AS victim_spid,
+          ISNULL(MAX(CASE WHEN is_victim = 1 THEN login_name END), N'') AS victim_login,
+          ISNULL(MAX(CASE WHEN is_victim = 1 THEN host_name END), N'') AS victim_host,
+          ISNULL(MAX(CASE WHEN is_victim = 1 THEN LEFT(program_name, 64) END), N'') AS victim_program,
+          ISNULL(MAX(CASE WHEN is_victim = 1 THEN db_name END), N'') AS victim_db,
+          ISNULL(MAX(CASE WHEN is_victim = 1 THEN sql_text END), N'') AS victim_sql,
+          CAST(MAX(CASE WHEN is_victim = 0 THEN spid END) AS varchar(16)) AS other_spid,
+          ISNULL(MAX(CASE WHEN is_victim = 0 THEN login_name END), N'') AS other_login,
+          ISNULL(MAX(CASE WHEN is_victim = 0 THEN host_name END), N'') AS other_host,
+          ISNULL(MAX(CASE WHEN is_victim = 0 THEN LEFT(program_name, 64) END), N'') AS other_program,
+          ISNULL(MAX(CASE WHEN is_victim = 0 THEN db_name END), N'') AS other_db,
+          ISNULL(MAX(CASE WHEN is_victim = 0 THEN sql_text END), N'') AS other_sql,
+          CAST(COUNT(*) AS varchar(16)) AS process_count
       FROM procs
       GROUP BY event_time
       ORDER BY event_time DESC;
