@@ -1,4 +1,7 @@
-# Lock inventory and waiting locks.
+# Lock waits and latch stats.
+#
+# Waiting-lock metrics come from sys.dm_os_waiting_tasks (LCK_*), not sys.dm_tran_locks.
+# A full lock-manager scan on a busy OLTP database exceeds the scrape deadline.
 #
 #   GRANT VIEW SERVER STATE TO
 #
@@ -9,7 +12,7 @@ min_interval: 30s
 metrics:
   - metric_name: mssql_locks_count
     type: gauge
-    help: 'Lock counts by resource type, mode and status.'
+    help: 'Waiting LCK_* task counts by resource type, mode and database. request_status is WAIT.'
     key_labels:
       - resource_type
       - request_mode
@@ -20,13 +23,13 @@ metrics:
 
   - metric_name: mssql_locks_waiting
     type: gauge
-    help: 'Number of lock requests in WAIT status.'
+    help: 'Number of tasks currently waiting on LCK_* locks.'
     values: [waiting_locks]
     query_ref: mssql_locks_waiting_count
 
   - metric_name: mssql_locks_wait_time_ms
     type: gauge
-    help: 'Wait time (ms) for sessions waiting on locks.'
+    help: 'Max wait duration (ms) for tasks waiting on LCK_* locks.'
     key_labels:
       - session_id
       - db
@@ -87,49 +90,181 @@ metrics:
 queries:
   - query_name: mssql_locks_summary
     query: |
-      ;WITH normalized_locks AS
-      (
+      ;WITH lck AS (
           SELECT
-              ISNULL(resource_type, N'') AS resource_type,
-              ISNULL(request_mode, N'') AS request_mode,
-              ISNULL(request_status, N'') AS request_status,
-              ISNULL(DB_NAME(resource_database_id), N'') AS db
-          FROM sys.dm_tran_locks WITH (NOLOCK)
-          WHERE request_session_id > 50
+              ISNULL(w.wait_type, N'') AS wait_type,
+              LOWER(ISNULL(w.resource_description, N'')) AS resource_description
+          FROM sys.dm_os_waiting_tasks AS w WITH (NOLOCK)
+          WHERE w.wait_type LIKE N'LCK[_]%'
+      ),
+      parsed AS (
+          SELECT
+              CASE
+                  WHEN resource_description LIKE N'keylock%' THEN N'KEY'
+                  WHEN resource_description LIKE N'pagelock%' THEN N'PAGE'
+                  WHEN resource_description LIKE N'ridlock%' THEN N'RID'
+                  WHEN resource_description LIKE N'objectlock%' THEN N'OBJECT'
+                  WHEN resource_description LIKE N'databaselock%' OR resource_description LIKE N'dblock%' THEN N'DATABASE'
+                  WHEN resource_description LIKE N'applicationlock%' OR resource_description LIKE N'applock%' THEN N'APPLICATION'
+                  WHEN resource_description LIKE N'hobtlock%' THEN N'HOBT'
+                  WHEN resource_description LIKE N'filelock%' THEN N'FILE'
+                  WHEN resource_description LIKE N'extentlock%' THEN N'EXTENT'
+                  WHEN resource_description LIKE N'allocunitlock%' THEN N'ALLOCATION_UNIT'
+                  WHEN resource_description LIKE N'metadatalock%' OR resource_description LIKE N'metalock%' THEN N'METADATA'
+                  ELSE N''
+              END AS resource_type,
+              CASE wait_type
+                  WHEN N'LCK_M_SCH_S' THEN N'Sch-S'
+                  WHEN N'LCK_M_SCH_M' THEN N'Sch-M'
+                  WHEN N'LCK_M_S' THEN N'S'
+                  WHEN N'LCK_M_U' THEN N'U'
+                  WHEN N'LCK_M_X' THEN N'X'
+                  WHEN N'LCK_M_IS' THEN N'IS'
+                  WHEN N'LCK_M_IU' THEN N'IU'
+                  WHEN N'LCK_M_IX' THEN N'IX'
+                  WHEN N'LCK_M_SIU' THEN N'SIU'
+                  WHEN N'LCK_M_SIX' THEN N'SIX'
+                  WHEN N'LCK_M_UIX' THEN N'UIX'
+                  WHEN N'LCK_M_BU' THEN N'BU'
+                  WHEN N'LCK_M_RS_S' THEN N'RS_S'
+                  WHEN N'LCK_M_RS_U' THEN N'RS_U'
+                  WHEN N'LCK_M_RI_NL' THEN N'RI_NL'
+                  WHEN N'LCK_M_RI_S' THEN N'RI_S'
+                  WHEN N'LCK_M_RI_U' THEN N'RI_U'
+                  WHEN N'LCK_M_RI_X' THEN N'RI_X'
+                  WHEN N'LCK_M_RX_S' THEN N'RX_S'
+                  WHEN N'LCK_M_RX_U' THEN N'RX_U'
+                  WHEN N'LCK_M_RX_X' THEN N'RX_X'
+                  ELSE N''
+              END AS request_mode,
+              TRY_CONVERT(
+                  int,
+                  SUBSTRING(
+                      tail.digits,
+                      1,
+                      NULLIF(PATINDEX(N'%[^0-9]%', tail.digits), 0) - 1
+                  )
+              ) AS database_id
+          FROM lck
+          CROSS APPLY (
+              SELECT SUBSTRING(
+                  resource_description,
+                  NULLIF(PATINDEX(N'%dbid=%', resource_description), 0) + 5,
+                  11
+              ) + N' ' AS digits
+          ) AS tail
       )
       SELECT TOP (50)
           resource_type,
           request_mode,
-          request_status,
-          db,
-          CAST(COUNT(*) AS float) AS lock_count
-      FROM normalized_locks
-      GROUP BY resource_type, request_mode, request_status, db
-      ORDER BY COUNT(*) DESC;
+          N'WAIT' AS request_status,
+          ISNULL(DB_NAME(database_id), N'') AS db,
+          CAST(COUNT_BIG(*) AS float) AS lock_count
+      FROM parsed
+      GROUP BY
+          resource_type,
+          request_mode,
+          ISNULL(DB_NAME(database_id), N'')
+      ORDER BY lock_count DESC;
 
   - query_name: mssql_locks_waiting_count
     query: |
-      SELECT CAST(COUNT(*) AS float) AS waiting_locks
-      FROM sys.dm_tran_locks WITH (NOLOCK)
-      WHERE request_status = N'WAIT';
+      SELECT CAST(COUNT_BIG(*) AS float) AS waiting_locks
+      FROM sys.dm_os_waiting_tasks WITH (NOLOCK)
+      WHERE wait_type LIKE N'LCK[_]%';
 
   - query_name: mssql_locks_waiting_detail
     query: |
+      ;WITH lck AS (
+          SELECT
+              w.session_id,
+              w.wait_duration_ms,
+              ISNULL(w.wait_type, N'') AS wait_type,
+              LOWER(ISNULL(w.resource_description, N'')) AS resource_description,
+              ISNULL(s.login_name, N'') AS login_name
+          FROM sys.dm_os_waiting_tasks AS w WITH (NOLOCK)
+          LEFT JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+              ON s.session_id = w.session_id
+          WHERE w.wait_type LIKE N'LCK[_]%'
+      ),
+      parsed AS (
+          SELECT
+              session_id,
+              wait_duration_ms,
+              wait_type,
+              login_name,
+              CASE
+                  WHEN resource_description LIKE N'keylock%' THEN N'KEY'
+                  WHEN resource_description LIKE N'pagelock%' THEN N'PAGE'
+                  WHEN resource_description LIKE N'ridlock%' THEN N'RID'
+                  WHEN resource_description LIKE N'objectlock%' THEN N'OBJECT'
+                  WHEN resource_description LIKE N'databaselock%' OR resource_description LIKE N'dblock%' THEN N'DATABASE'
+                  WHEN resource_description LIKE N'applicationlock%' OR resource_description LIKE N'applock%' THEN N'APPLICATION'
+                  WHEN resource_description LIKE N'hobtlock%' THEN N'HOBT'
+                  WHEN resource_description LIKE N'filelock%' THEN N'FILE'
+                  WHEN resource_description LIKE N'extentlock%' THEN N'EXTENT'
+                  WHEN resource_description LIKE N'allocunitlock%' THEN N'ALLOCATION_UNIT'
+                  WHEN resource_description LIKE N'metadatalock%' OR resource_description LIKE N'metalock%' THEN N'METADATA'
+                  ELSE N''
+              END AS resource_type,
+              CASE wait_type
+                  WHEN N'LCK_M_SCH_S' THEN N'Sch-S'
+                  WHEN N'LCK_M_SCH_M' THEN N'Sch-M'
+                  WHEN N'LCK_M_S' THEN N'S'
+                  WHEN N'LCK_M_U' THEN N'U'
+                  WHEN N'LCK_M_X' THEN N'X'
+                  WHEN N'LCK_M_IS' THEN N'IS'
+                  WHEN N'LCK_M_IU' THEN N'IU'
+                  WHEN N'LCK_M_IX' THEN N'IX'
+                  WHEN N'LCK_M_SIU' THEN N'SIU'
+                  WHEN N'LCK_M_SIX' THEN N'SIX'
+                  WHEN N'LCK_M_UIX' THEN N'UIX'
+                  WHEN N'LCK_M_BU' THEN N'BU'
+                  WHEN N'LCK_M_RS_S' THEN N'RS_S'
+                  WHEN N'LCK_M_RS_U' THEN N'RS_U'
+                  WHEN N'LCK_M_RI_NL' THEN N'RI_NL'
+                  WHEN N'LCK_M_RI_S' THEN N'RI_S'
+                  WHEN N'LCK_M_RI_U' THEN N'RI_U'
+                  WHEN N'LCK_M_RI_X' THEN N'RI_X'
+                  WHEN N'LCK_M_RX_S' THEN N'RX_S'
+                  WHEN N'LCK_M_RX_U' THEN N'RX_U'
+                  WHEN N'LCK_M_RX_X' THEN N'RX_X'
+                  ELSE N''
+              END AS request_mode,
+              TRY_CONVERT(
+                  int,
+                  SUBSTRING(
+                      tail.digits,
+                      1,
+                      NULLIF(PATINDEX(N'%[^0-9]%', tail.digits), 0) - 1
+                  )
+              ) AS database_id
+          FROM lck
+          CROSS APPLY (
+              SELECT SUBSTRING(
+                  resource_description,
+                  NULLIF(PATINDEX(N'%dbid=%', resource_description), 0) + 5,
+                  11
+              ) + N' ' AS digits
+          ) AS tail
+      )
       SELECT TOP (40)
-          CAST(l.request_session_id AS nvarchar(20)) AS session_id,
-          ISNULL(DB_NAME(l.resource_database_id), N'') AS db,
-          ISNULL(l.resource_type, N'') AS resource_type,
-          ISNULL(l.request_mode, N'') AS request_mode,
-          ISNULL(r.wait_type, N'') AS wait_type,
-          ISNULL(s.login_name, N'') AS login_name,
-          CAST(ISNULL(r.wait_time, 0) AS float) AS wait_time_ms
-      FROM sys.dm_tran_locks AS l WITH (NOLOCK)
-      LEFT JOIN sys.dm_exec_requests AS r WITH (NOLOCK)
-          ON l.request_session_id = r.session_id
-      LEFT JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
-          ON l.request_session_id = s.session_id
-      WHERE l.request_status = N'WAIT'
-      ORDER BY ISNULL(r.wait_time, 0) DESC;
+          CAST(session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(database_id), N'') AS db,
+          resource_type,
+          request_mode,
+          wait_type,
+          login_name,
+          CAST(MAX(wait_duration_ms) AS float) AS wait_time_ms
+      FROM parsed
+      GROUP BY
+          session_id,
+          ISNULL(DB_NAME(database_id), N''),
+          resource_type,
+          request_mode,
+          wait_type,
+          login_name
+      ORDER BY wait_time_ms DESC;
 
   - query_name: mssql_latch_stats
     query: |
@@ -155,47 +290,71 @@ queries:
 
   - query_name: mssql_lock_related_requests
     query: |
+      ;WITH req AS (
+          SELECT
+              CAST(r.session_id AS nvarchar(20)) AS session_id,
+              ISNULL(DB_NAME(r.database_id), N'') AS db,
+              ISNULL(s.login_name, N'') AS login_name,
+              LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
+              r.status AS status,
+              ISNULL(r.wait_type, N'') AS wait_type,
+              r.command AS command,
+              LEFT(
+                REPLACE(REPLACE(REPLACE(
+                  ISNULL(
+                    SUBSTRING(
+                      t.text,
+                      (r.statement_start_offset / 2) + 1,
+                      CASE
+                        WHEN r.statement_end_offset = -1 THEN 100
+                        WHEN r.statement_end_offset > r.statement_start_offset
+                          THEN ((r.statement_end_offset - r.statement_start_offset) / 2) + 1
+                        ELSE 100
+                      END
+                    ),
+                    N''
+                  ),
+                  CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
+                100
+              ) AS statement_snip,
+              CAST(r.total_elapsed_time AS float) AS elapsed_ms,
+              CAST(r.wait_time AS float) AS wait_time_ms
+          FROM sys.dm_exec_requests AS r WITH (NOLOCK)
+          INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
+              ON r.session_id = s.session_id
+          OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
+          WHERE r.session_id <> @@SPID
+            AND r.exec_context_id = 0
+            AND s.is_user_process = 1
+            AND ISNULL(s.program_name, N'') NOT LIKE N'%sql_exporter%'
+            AND (
+              r.total_elapsed_time >= 3000
+              OR r.blocking_session_id <> 0
+              OR r.wait_type LIKE N'LCK[_]%'
+              OR r.wait_type LIKE N'PAGELATCH%'
+              OR r.wait_type LIKE N'LATCH%'
+              OR r.wait_type IN (N'WRITELOG', N'LOGBUFFER', N'ASYNC_NETWORK_IO')
+            )
+      )
       SELECT TOP (40)
-          CAST(r.session_id AS nvarchar(20)) AS session_id,
-          ISNULL(DB_NAME(r.database_id), N'') AS db,
-          ISNULL(s.login_name, N'') AS login_name,
-          LEFT(ISNULL(s.program_name, N''), 64) AS program_name,
-          r.status AS status,
-          ISNULL(r.wait_type, N'') AS wait_type,
-          r.command AS command,
-          LEFT(
-            REPLACE(REPLACE(REPLACE(
-              ISNULL(
-                SUBSTRING(
-                  t.text,
-                  (r.statement_start_offset / 2) + 1,
-                  CASE
-                    WHEN r.statement_end_offset = -1 THEN 100
-                    WHEN r.statement_end_offset > r.statement_start_offset
-                      THEN ((r.statement_end_offset - r.statement_start_offset) / 2) + 1
-                    ELSE 100
-                  END
-                ),
-                N''
-              ),
-              CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '),
-            100
-          ) AS statement_snip,
-          CAST(r.total_elapsed_time AS float) AS elapsed_ms,
-          CAST(r.wait_time AS float) AS wait_time_ms
-      FROM sys.dm_exec_requests AS r WITH (NOLOCK)
-      INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
-          ON r.session_id = s.session_id
-      OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
-      WHERE r.session_id <> @@SPID
-        AND s.is_user_process = 1
-        AND ISNULL(s.program_name, N'') NOT LIKE N'%sql_exporter%'
-        AND (
-          r.total_elapsed_time >= 3000
-          OR r.blocking_session_id <> 0
-          OR r.wait_type LIKE N'LCK[_]%'
-          OR r.wait_type LIKE N'PAGELATCH%'
-          OR r.wait_type LIKE N'LATCH%'
-          OR r.wait_type IN (N'WRITELOG', N'LOGBUFFER', N'ASYNC_NETWORK_IO')
-        )
-      ORDER BY r.wait_time DESC, r.total_elapsed_time DESC;
+          session_id,
+          db,
+          login_name,
+          program_name,
+          status,
+          wait_type,
+          command,
+          statement_snip,
+          MAX(elapsed_ms) AS elapsed_ms,
+          MAX(wait_time_ms) AS wait_time_ms
+      FROM req
+      GROUP BY
+          session_id,
+          db,
+          login_name,
+          program_name,
+          status,
+          wait_type,
+          command,
+          statement_snip
+      ORDER BY wait_time_ms DESC, elapsed_ms DESC;
