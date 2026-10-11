@@ -47,3 +47,4 @@ amtool check-config .\prometheus\alertmanager\alertmanager.yml
 - برای غیرفعال‌کردن SMS در P1، بلوک `webhook_configs` زیر `email-sms-p1` را حذف کنید.
 - Inhibit ruleها وقتی P0 یا `severity=critical` برای همان `alertname` + `instance` فعال است، اعلان‌های اولویت پایین‌تر را سرکوب می‌کنند.
 - مسیریابی گیرنده بر اساس label `owner` است. `FMR-DBA`، `OK-DBA`، `FMR-BI-Develop` و `OK-BI-Develop` هر کدام mailbox و webhook جدا دارند. P0 و P1 همچنان SMS دارند و P2 فقط Email است. owner ناشناخته به receiver مشترک می‌رود.
+- هر owner می‌تواند چند شماره SMS در `sms-gateway.json` داشته باشد (`phones` به‌صورت آرایه JSON یا رشته جدا شده با کاما) و چند ایمیل که در `to` با کاما جدا می‌شوند. بعد از تغییر شماره، gateway را ری‌استارت کنید. بعد از تغییر ایمیل، Alertmanager را reload کنید.

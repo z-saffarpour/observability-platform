@@ -13,6 +13,7 @@ groups:
           collector: mssql_autogrowth
         annotations:
           summary: "Frequent SQL Server file autogrowth"
+          summary_fa: "رشد خودکار فایل SQL Server زیاد است"
           description: "{{ $value }} autogrowth events were observed in the available 24-hour trace window."
           runbook: "Pre-size files and review growth increments to reduce fragmentation/stalls."
 
@@ -25,7 +26,8 @@ groups:
           alert_profile: maintenance
           collector: mssql_columnstore
         annotations:
-          summary: "Columnstore deleted-row ratio is high"
+          summary: "Columnstore deleted-row ratio is high for database {{ $labels.db }}"
+          summary_fa: "نسبت ردیف‌های حذف‌شده Columnstore در دیتابیس {{ $labels.db }} بالا است"
           description: "Compressed rowgroups in {{ $labels.db }} have a deleted-row ratio of {{ $value | humanizePercentage }}."
           runbook: "Schedule REORGANIZE/REBUILD for affected columnstore indexes."
 
@@ -38,7 +40,8 @@ groups:
           alert_profile: maintenance
           collector: mssql_index_fragmentation
         annotations:
-          summary: "Large SQL index is highly fragmented"
+          summary: "A large index in database {{ $labels.db }} is highly fragmented"
+          summary_fa: "یک ایندکس بزرگ در دیتابیس {{ $labels.db }} به‌شدت تکه‌تکه است"
           description: "Index {{ $labels.index_name }} on {{ $labels.db }}.{{ $labels.schema_name }}.{{ $labels.table_name }} is {{ $value | humanize }}% fragmented."
           runbook: "DBA review only — schedule index maintenance; do not page on-call."
 
@@ -51,7 +54,8 @@ groups:
           alert_profile: maintenance
           collector: mssql_index_usage
         annotations:
-          summary: "Index has high write activity"
+          summary: "An index in database {{ $labels.db }} has high write activity"
+          summary_fa: "فعالیت نوشتن یک ایندکس در دیتابیس {{ $labels.db }} بالا است"
           description: "Index {{ $labels.index_name }} on {{ $labels.db }} has {{ $value | humanize }} cumulative updates; review reads before removal."
           runbook: "DBA review — compare seeks/scans before dropping unused indexes."
 
@@ -64,7 +68,8 @@ groups:
           alert_profile: maintenance
           collector: mssql_missing_index
         annotations:
-          summary: "High-impact missing-index suggestion"
+          summary: "High-impact missing-index suggestion for database {{ $labels.db }}"
+          summary_fa: "پیشنهاد missing index با اثر بالا برای دیتابیس {{ $labels.db }}"
           description: "Table {{ $labels.db }}.{{ $labels.schema_name }}.{{ $labels.table_name }} has improvement score {{ $value | humanize }}."
           runbook: "DBA review — validate with Query Store before creating indexes."
 
@@ -77,7 +82,8 @@ groups:
           alert_profile: maintenance
           collector: mssql_stats
         annotations:
-          summary: "Many SQL Server statistics are stale"
+          summary: "Many statistics are stale in database {{ $labels.db }}"
+          summary_fa: "آمارهای زیادی در دیتابیس {{ $labels.db }} کهنه هستند"
           description: "Database {{ $labels.db }} has {{ $value }} statistics classified as stale."
           runbook: "DBA review — schedule UPDATE STATISTICS for affected objects."
 
@@ -90,7 +96,8 @@ groups:
           alert_profile: maintenance
           collector: mssql_query_store
         annotations:
-          summary: "Query Store is disabled"
+          summary: "Query Store is disabled for database {{ $labels.db }}"
+          summary_fa: "Query Store برای دیتابیس {{ $labels.db }} غیرفعال است"
           description: "Query Store is disabled for database {{ $labels.db }}; ignore if this is intentional."
           runbook: "Enable Query Store only when desired; mute for DBs where disabled by design."
 
@@ -104,5 +111,6 @@ groups:
           collector: mssql_job_running
         annotations:
           summary: "SQL Agent job has been running for more than two hours"
+          summary_fa: "job در SQL Agent بیش از دو ساعت در حال اجراست"
           description: "Job {{ $labels.job_name }} has run for {{ $value | humanizeDuration }}."
           runbook: "Compare with baseline duration; check blocking and step progress."

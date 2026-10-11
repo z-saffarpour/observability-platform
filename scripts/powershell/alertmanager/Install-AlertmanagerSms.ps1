@@ -91,6 +91,30 @@ if ([string]::IsNullOrWhiteSpace([string]$config.authorizationValue) -or [string
     throw 'authorizationValue in the SMS config is still CHANGE_ME. Fill the local config before installing.'
 }
 if (-not $config.phones) { throw 'The SMS config must contain a phones map.' }
+foreach ($phoneProperty in @($config.phones.PSObject.Properties)) {
+    $phoneValue = $phoneProperty.Value
+    if ($phoneValue -is [string]) {
+        $phoneItems = @($phoneValue)
+    }
+    elseif ($phoneValue -is [Array] -or $phoneValue -is [Collections.IList]) {
+        $phoneItems = @($phoneValue)
+    }
+    else {
+        throw "phones.$($phoneProperty.Name) must be a string or an array of strings."
+    }
+    foreach ($phoneItem in $phoneItems) {
+        if ($phoneItem -isnot [string]) {
+            throw "phones.$($phoneProperty.Name) must be a string or an array of strings."
+        }
+    }
+}
+$languageProperty = $config.PSObject.Properties['language']
+if ($languageProperty -and -not [string]::IsNullOrWhiteSpace([string]$languageProperty.Value)) {
+    $smsLanguage = ([string]$languageProperty.Value).Trim().ToLowerInvariant()
+    if ($smsLanguage -notin @('en', 'fa')) {
+        throw "language must be en or fa. Current value: $smsLanguage"
+    }
+}
 
 $existingService = Get-CimInstance Win32_Service -Filter ("Name='{0}'" -f $ServiceName.Replace("'", "''")) -ErrorAction SilentlyContinue
 if ($existingService -and $existingService.PathName -notmatch '(?i)nssm\.exe') {

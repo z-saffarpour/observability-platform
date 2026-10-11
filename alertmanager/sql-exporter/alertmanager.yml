@@ -23,12 +23,14 @@ templates:
   - "templates/*.tmpl"
 
 # Owner routes send that team's servers to that team's mailbox and SMS gateway.
-# Replace CHANGE_ME_<OWNER>_EMAIL. SMS goes to the local gateway installed by
-# Install-AlertmanagerSms.ps1. The ?owner= value selects the phone number.
-# Unknown owners stay on the shared receivers.
+# Replace CHANGE_ME_<OWNER>_EMAIL. Several addresses go in one `to`, separated
+# by commas. SMS numbers are the phones list in sms-gateway.json. The ?owner=
+# value selects that owner's numbers. Unknown owners stay on the shared receivers.
 route:
   receiver: email-p2
-  group_by: [owner, priority, alertname, instance, job]
+  # db splits database-scoped alerts per server and database.
+  # Alerts with no db label still group together on the other labels.
+  group_by: [owner, priority, alertname, instance, db, job]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
@@ -211,19 +213,20 @@ route:
       continue: false
 
 inhibit_rules:
-  # Critical P0 suppresses same alertname at lower priority on the same instance
+  # P0 suppresses the same alertname at lower priority for the same server and database.
+  # Server-level alerts have an empty db label and still inhibit each other.
   - source_matchers:
       - priority = "P0"
     target_matchers:
       - priority =~ "P1|P2"
-    equal: [alertname, instance]
+    equal: [alertname, instance, db]
 
-  # Critical severity suppresses warning for the same alert/instance
+  # Critical severity suppresses warning for the same alert, server, and database.
   - source_matchers:
       - severity = "critical"
     target_matchers:
       - severity = "warning"
-    equal: [alertname, instance]
+    equal: [alertname, instance, db]
 
   # Filegroup P0 suppresses the 14-day warning for the same filegroup
   - source_matchers:
@@ -245,7 +248,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P0][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
@@ -259,7 +262,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P1][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
@@ -271,7 +274,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P2][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0-ok-dba
@@ -279,7 +282,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P0][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
@@ -293,7 +296,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P1][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
@@ -305,7 +308,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P2][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0-fmr-bi-develop
@@ -313,7 +316,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P0][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
@@ -327,7 +330,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P1][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
@@ -339,7 +342,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P2][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0-ok-bi-develop
@@ -347,7 +350,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P0][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
@@ -361,7 +364,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P1][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
@@ -373,7 +376,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P2][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0
@@ -381,7 +384,7 @@ receivers:
       - to: "CHANGE_ME_P0_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P0][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       # SMS gateway / custom notifier. Expected to accept Alertmanager webhook JSON.
@@ -397,7 +400,7 @@ receivers:
       - to: "CHANGE_ME_P1_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P1][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       # Keep SMS for P1 if your gateway supports priority filtering; otherwise remove this block.
@@ -410,5 +413,5 @@ receivers:
       - to: "CHANGE_ME_P2_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: "[P2][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'

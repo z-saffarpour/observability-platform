@@ -13,6 +13,7 @@ groups:
           collector: scrape
         annotations:
           summary: "sql_exporter is unavailable on {{ $labels.instance }}"
+          summary_fa: "sql_exporter روی {{ $labels.instance }} در دسترس نیست"
           description: "Prometheus has failed to scrape the SQL exporter target for five minutes."
           runbook: "Check service prometheus_sql_exporter, port 9399, firewall, and scrape Basic Auth."
 
@@ -25,7 +26,8 @@ groups:
           alert_profile: availability
           collector: mssql_standard
         annotations:
-          summary: "SQL Server database is not ONLINE"
+          summary: "Database {{ $labels.db }} is {{ $labels.state_desc }}, not ONLINE"
+          summary_fa: "دیتابیس {{ $labels.db }} در وضعیت {{ $labels.state_desc }} است و ONLINE نیست"
           description: "Database {{ $labels.db }} state code is {{ $value }}."
           runbook: "Check database state (SUSPECT/RECOVERING/OFFLINE). Review ERRORLOG and recent failovers."
 
@@ -38,7 +40,8 @@ groups:
           alert_profile: availability
           collector: mssql_backup
         annotations:
-          summary: "Full database backup is missing or too old"
+          summary: "Full backup for database {{ $labels.db }} is missing or too old"
+          summary_fa: "بکاپ Full دیتابیس {{ $labels.db }} موجود نیست یا خیلی قدیمی است"
           description: "Database {{ $labels.db }} has no recent full backup; age={{ $value | humanizeDuration }}."
           runbook: "Verify backup jobs, disk/space targets, and msdb backup history. Threshold sample: 25h."
 
@@ -51,7 +54,8 @@ groups:
           alert_profile: availability
           collector: mssql_database_integrity
         annotations:
-          summary: "Database integrity signal requires attention"
+          summary: "Database {{ $labels.db }} integrity signal requires attention"
+          summary_fa: "سیگنال یکپارچگی دیتابیس {{ $labels.db }} نیاز به توجه دارد"
           description: "Suspect pages exist or CHECKDB is older than seven days for {{ $labels.db }}."
           runbook: "If suspect pages > 0, treat as critical corruption signal. Otherwise schedule/verify CHECKDB."
 
@@ -64,6 +68,7 @@ groups:
           alert_profile: availability
           collector: mssql_restore
         annotations:
-          summary: "Restore secondary is behind its sample RPO"
+          summary: "Restore secondary for database {{ $labels.db }} is behind its sample RPO"
+          summary_fa: "secondary بازیابی دیتابیس {{ $labels.db }} از RPO نمونه عقب است"
           description: "Restore gap for {{ $labels.db }} is {{ $value | humanizeDuration }}."
           runbook: "Check restore/log-shipping jobs, file share access, and RPO threshold (sample 30m)."

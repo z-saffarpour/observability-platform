@@ -47,3 +47,4 @@ amtool check-config .\prometheus\alertmanager\alertmanager.yml
 - To disable SMS on P1, remove the `webhook_configs` block under `email-sms-p1`.
 - Inhibit rules drop lower-priority duplicates when a matching P0/critical alert is already firing for the same `alertname` + `instance`.
 - Receivers are selected by the `owner` label. `FMR-DBA`, `OK-DBA`, `FMR-BI-Develop`, and `OK-BI-Develop` each have their own mailbox and SMS webhook. P0 and P1 still send SMS; P2 stays email only. An unknown owner uses the shared receivers.
+- One owner can have several SMS numbers in `sms-gateway.json` (`phones` as a JSON array or a comma-separated string) and several email addresses separated by commas in `to`. Restart the gateway after a phone change. Reload Alertmanager after an email change.
