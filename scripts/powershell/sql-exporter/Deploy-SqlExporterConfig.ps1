@@ -121,23 +121,29 @@ function New-SqlExporterConfigWithProfile {
     }
 
     $profileRaw = Get-Content -LiteralPath $ProfilePath -Raw
-    if ($profileRaw -notmatch '(?ms)^collectors:\s*\r?\n(?:[ \t]+-[ \t]+\S[^\r\n]*\r?\n?)+') {
+    # Section comments and blank lines stay inside the collectors block.
+    $profilePattern = '(?m)^collectors:[ \t]*\r?\n(?:(?:[ \t]+(?:#[^\r\n]*|-[ \t]+\S[^\r\n]*))\r?\n?|[ \t]*\r?\n)+'
+    if ($profileRaw -notmatch $profilePattern) {
         throw "Profile does not contain a collectors list: $ProfilePath"
     }
 
     $rootBlock = $Matches[0].TrimEnd("`r", "`n")
+    if ($rootBlock -notmatch '(?m)^[ \t]+-[ \t]+\S') {
+        throw "Profile does not contain a collectors list: $ProfilePath"
+    }
     $indented = (($rootBlock -split '\r?\n') | ForEach-Object { '  ' + $_ }) -join [Environment]::NewLine
     $replacement = ('  # Applied by deploy script from profiles/{0}' -f $ProfileLeaf) +
         [Environment]::NewLine + $indented
 
-    $pattern = '(?m)^  collectors:\s*(?:\[[^\]]*\]|(?:\r?\n(?:[ \t]+-[ \t]+[^\r\n]+)+))'
+    $pattern = '(?m)^  collectors:[ \t]*(?:\[[^\r\n]*\]|\r?\n(?:(?:[ \t]+(?:#[^\r\n]*|-[ \t]+\S[^\r\n]*))\r?\n?|[ \t]*\r?\n)*)'
     $found = [regex]::Matches($config, $pattern)
     if ($found.Count -eq 0) {
         throw "Could not find an active target.collectors entry in: $BaseConfigPath"
     }
 
     $last = $found[$found.Count - 1]
-    $newConfig = $config.Substring(0, $last.Index) + $replacement + $config.Substring($last.Index + $last.Length)
+    $matchedText = $last.Value -replace '(?:\r?\n[ \t]*)+\z', ''
+    $newConfig = $config.Substring(0, $last.Index) + $replacement + $config.Substring($last.Index + $matchedText.Length)
 
     $outDir = Split-Path -Parent $OutputPath
     if (-not (Test-Path -LiteralPath $outDir)) {

@@ -111,15 +111,23 @@ function Get-SqlProfileFromMetrics {
         if ($BufferPoolDatabase.Contains($ShortName)) { return 'dwh-restore.yml' }
         return 'restore-secondary.yml'
     }
-    if ($HadrCluster.Contains($ShortName)) { return 'oltp-cluster.yml' }
-    if ($AlwaysOn.Contains($ShortName)) { return 'oltp-alwayson.yml' }
+    # Role signatures win over generic AG. Those profiles now include the HADR
+    # collectors, so an AG warehouse or publisher must not be rewritten to
+    # oltp-cluster.yml / oltp-alwayson.yml.
     if ($ReplicationPublication.Contains($ShortName) -or $Replication.Contains($ShortName)) {
         return 'replication.yml'
     }
     if ($SsisActive.Contains($ShortName) -and -not $BufferPoolDatabase.Contains($ShortName)) {
         return 'ssis.yml'
     }
-    if ($BufferPoolDatabase.Contains($ShortName)) { return 'dwh.yml' }
+    if ($BufferPoolDatabase.Contains($ShortName)) {
+        if ($HadrCluster.Contains($ShortName) -or $AlwaysOn.Contains($ShortName)) {
+            return 'dwh-alwayson.yml'
+        }
+        return 'dwh.yml'
+    }
+    if ($HadrCluster.Contains($ShortName)) { return 'oltp-cluster.yml' }
+    if ($AlwaysOn.Contains($ShortName)) { return 'oltp-alwayson.yml' }
     return 'oltp.yml'
 }
 
