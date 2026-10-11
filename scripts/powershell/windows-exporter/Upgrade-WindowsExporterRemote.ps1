@@ -10,6 +10,9 @@
   client; do not start windows_exporter.exe locally. Without -Profile/-AutoProfile the
   existing --config.file is left unchanged. The prometheus_windows_ssas service is
   installed separately with Install-SsasMetricsTask.ps1 on SSAS hosts.
+  -TransferMode Archive sends one zip for every mode (Preserve, ServiceBase,
+  NSSM, profile, AutoProfile, preserved web config, and the SSAS script bundle).
+  File remains the default.
 .EXAMPLE
   .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 -Computers SERVER01,SERVER02 -WhatIf
 .EXAMPLE
@@ -29,6 +32,12 @@
     -Computers SERVER01 `
     -BasicAuthUsername 'scrape_user' `
     -BasicAuthPassword (Read-Host -AsSecureString 'Password') `
+    -RemoteCredential (Get-Credential)
+.EXAMPLE
+  .\scripts\powershell\windows-exporter\Upgrade-WindowsExporterRemote.ps1 `
+    -Computers SQL01 `
+    -Profile sql-server.yml `
+    -TransferMode Archive `
     -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
@@ -53,7 +62,8 @@ param(
     [pscredential]$RemoteCredential,
     [ValidateSet('Preserve','ServiceBase','NSSM')][string]$ServiceMode = 'Preserve',
     [ValidateRange(5,600)][int]$ServiceTimeoutSec = 60,
-    [ValidateRange(1,100)][int]$KeepBackups = 5
+    [ValidateRange(1,100)][int]$KeepBackups = 5,
+    [ValidateSet('File','Archive')][string]$TransferMode = 'File'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -76,6 +86,90 @@ function Get-PlainText([Security.SecureString]$Value) {
     $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
     try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+}
+
+function New-WindowsExporterTransferArchive {
+    param(
+        [Parameter(Mandatory)][hashtable]$PackageSources,
+        [Parameter(Mandatory)][string[]]$PackageItems,
+        [string]$WebConfigPath,
+        [Parameter(Mandatory)][string]$ProfilesDir,
+        [string]$PowerShellSource,
+        [string[]]$PowerShellFiles,
+        [string]$SsasSource,
+        [string[]]$SsasFiles,
+        [Parameter(Mandatory)][string]$ServiceHelpersPath,
+        [Parameter(Mandatory)][string]$WebConfigHelpersPath
+    )
+
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('windows-exporter-stage-' + [guid]::NewGuid().ToString('N'))
+    $zip = Join-Path ([IO.Path]::GetTempPath()) ('windows-exporter-stage-' + [guid]::NewGuid().ToString('N') + '.zip')
+    try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        foreach ($item in $PackageItems) {
+            if ($item -eq 'web-config.yml') { continue }
+            Copy-Item -LiteralPath $PackageSources[$item] -Destination (Join-Path $work $item) -Force
+        }
+        if (-not [string]::IsNullOrWhiteSpace($WebConfigPath)) {
+            Copy-Item -LiteralPath $WebConfigPath -Destination (Join-Path $work 'web-config.yml') -Force
+        }
+        Copy-Item -LiteralPath $ProfilesDir -Destination $work -Recurse -Force
+        if ($PowerShellFiles -and @($PowerShellFiles).Count -gt 0) {
+            $powerShellDest = Join-Path $work 'scripts\powershell'
+            New-Item -ItemType Directory -Path $powerShellDest -Force | Out-Null
+            foreach ($scriptName in $PowerShellFiles) {
+                $sourceScript = Join-Path $PowerShellSource $scriptName
+                if (-not (Test-Path -LiteralPath $sourceScript -PathType Leaf)) {
+                    throw "Required script was not found: $sourceScript"
+                }
+                Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $powerShellDest $scriptName) -Force
+            }
+        }
+        if ($SsasFiles -and (Test-Path -LiteralPath $SsasSource -PathType Container)) {
+            $ssasDest = Join-Path $work 'scripts\ssas'
+            $created = $false
+            foreach ($fileName in $SsasFiles) {
+                $sourceFile = Join-Path $SsasSource $fileName
+                if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) { continue }
+                if (-not $created) {
+                    New-Item -ItemType Directory -Path $ssasDest -Force | Out-Null
+                    $created = $true
+                }
+                Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $ssasDest $fileName) -Force
+            }
+        }
+        Copy-Item -LiteralPath $ServiceHelpersPath -Destination (Join-Path $work 'Observability-NssmServiceHelpers.ps1') -Force
+        Copy-Item -LiteralPath $WebConfigHelpersPath -Destination (Join-Path $work 'Observability-WebConfigHelpers.ps1') -Force
+        Compress-Archive -Path (Join-Path $work '*') -DestinationPath $zip -CompressionLevel Fastest
+    }
+    catch {
+        if (Test-Path -LiteralPath $zip) {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $work) {
+            Remove-Item -LiteralPath $work -Recurse -Force
+        }
+    }
+    $zip
+}
+
+function Copy-WindowsExporterArchiveToSession {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Runspaces.PSSession]$Session,
+        [Parameter(Mandatory)][string]$ArchivePath,
+        [Parameter(Mandatory)][string]$StageDir
+    )
+
+    $remoteZip = Join-Path $StageDir 'windows-exporter-package.zip'
+    Copy-Item -LiteralPath $ArchivePath -Destination $remoteZip -ToSession $Session -Force
+    Invoke-Command -Session $Session -ScriptBlock {
+        param($StageDirectory, $ZipPath)
+        Expand-Archive -Path $ZipPath -DestinationPath $StageDirectory -Force
+        Remove-Item -LiteralPath $ZipPath -Force
+    } -ArgumentList $StageDir, $remoteZip
 }
 
 function Read-Version([string]$Path) {
@@ -229,8 +323,40 @@ else { Write-Host 'Service account: preserve existing' -ForegroundColor Cyan }
 if ($profileFile) { Write-Host "Profile: $profileFile" -ForegroundColor Cyan }
 elseif ($AutoProfile) { Write-Host 'Profile: auto-detect per server' -ForegroundColor Cyan }
 else { Write-Host 'Profile: preserve existing --config.file' -ForegroundColor Cyan }
+Write-Host "Transfer: $TransferMode" -ForegroundColor Cyan
 
 $results = @()
+$transferArchive = $null
+$ssasBundleFiles = @(
+    'ssas-monitoring-xevents.xmla',
+    'Install-SsasMetricsTask.ps1',
+    'Collect-SsasMetrics.ps1',
+    'Collect-SsasPerformanceCounters.ps1',
+    'Ssas-CollectorPaths.ps1',
+    'Ssas-CollectorConfig.ps1',
+    'Collect-SsasXEventMetrics.ps1',
+    'Invoke-SsasCollectors.ps1',
+    'Run-SsasMetricsService.ps1',
+    'Run-SsasMetricsLoop.ps1'
+)
+try {
+if ($TransferMode -eq 'Archive' -and -not $WhatIfPreference) {
+    Write-Host 'Building one transfer archive...' -ForegroundColor Cyan
+    $archiveScriptList = Get-RequiredWindowsExporterScriptFiles -ProfileName 'ssas.yml' -IncludeAutoProfileDiscovery -HasSsasRole $true
+    $archivePowerShellFiles = @($archiveScriptList | ForEach-Object { $_ })
+    $transferArchive = New-WindowsExporterTransferArchive `
+        -PackageSources $itemSources `
+        -PackageItems $items `
+        -WebConfigPath $(if ($PreserveWebConfig) { $null } else { $deployWebConfig }) `
+        -ProfilesDir $profilesSource `
+        -PowerShellSource $scriptsPowerShellSource `
+        -PowerShellFiles $archivePowerShellFiles `
+        -SsasSource $scriptsSsasSource `
+        -SsasFiles $ssasBundleFiles `
+        -ServiceHelpersPath $serviceHelpersPath `
+        -WebConfigHelpersPath $webConfigHelpersPath
+    Write-Host ("Archive: {0:N1} MB" -f ((Get-Item -LiteralPath $transferArchive).Length / 1MB)) -ForegroundColor Cyan
+}
 foreach ($computer in $Computers) {
     $session = $null
     $stage = $null
@@ -256,60 +382,62 @@ foreach ($computer in $Computers) {
         $requiredPowerShellFiles = Get-RequiredWindowsExporterScriptFiles -ProfileName $chosenProfile -IncludeAutoProfileDiscovery:$AutoProfile -HasSsasRole:($chosenProfile -and ($chosenProfile -match '^(ssas|data-platform|data-platform-cluster)\.yml$'))
         $requiredSsasFiles = @()
         if ($requiredPowerShellFiles -contains 'Install-SsasMetricsTask.ps1') {
-            $requiredSsasFiles = @(
-                'ssas-monitoring-xevents.xmla',
-                'Install-SsasMetricsTask.ps1',
-                'Collect-SsasMetrics.ps1',
-                'Collect-SsasPerformanceCounters.ps1',
-                'Ssas-CollectorPaths.ps1',
-                'Ssas-CollectorConfig.ps1',
-                'Collect-SsasXEventMetrics.ps1',
-                'Invoke-SsasCollectors.ps1',
-                'Run-SsasMetricsService.ps1',
-                'Run-SsasMetricsLoop.ps1'
-            )
+            $requiredSsasFiles = $ssasBundleFiles
         }
-        foreach ($item in $items) {
-            if ($item -eq 'web-config.yml') { continue }
-            Copy-Item -LiteralPath $itemSources[$item] -Destination (Join-Path $stage $item) -ToSession $session -Force
-        }
-        if (-not $PreserveWebConfig) {
-            Copy-Item -LiteralPath $deployWebConfig -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
-        }
-        Copy-Item -LiteralPath $profilesSource -Destination $stage -ToSession $session -Recurse -Force
         $needPowerShell = $requiredPowerShellFiles.Count -gt 0
         $needSsas = $requiredSsasFiles.Count -gt 0 -and (Test-Path -LiteralPath $scriptsSsasSource -PathType Container)
-        Invoke-Command -Session $session -ScriptBlock {
-            param($Stage, $NeedPowerShell, $NeedSsas)
-            New-Item -Path (Join-Path $Stage 'scripts') -ItemType Directory -Force | Out-Null
-            if ($NeedPowerShell) {
-                New-Item -Path (Join-Path $Stage 'scripts\powershell') -ItemType Directory -Force | Out-Null
-            }
-            if ($NeedSsas) {
-                New-Item -Path (Join-Path $Stage 'scripts\ssas') -ItemType Directory -Force | Out-Null
-            }
-        } -ArgumentList $stage, $needPowerShell, $needSsas
         if ($needPowerShell) {
-            $stagePowerShell = Join-Path $stage 'scripts\powershell'
             foreach ($scriptName in $requiredPowerShellFiles) {
                 $sourceScript = Join-Path $scriptsPowerShellSource $scriptName
                 if (-not (Test-Path -LiteralPath $sourceScript -PathType Leaf)) {
                     throw "Required script was not found: $sourceScript"
                 }
-                Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $stagePowerShell $scriptName) -ToSession $session -Force
             }
         }
-        if ($needSsas) {
-            $stageSsas = Join-Path $stage 'scripts\ssas'
-            foreach ($fileName in $requiredSsasFiles) {
-                $sourceFile = Join-Path $scriptsSsasSource $fileName
-                if (Test-Path -LiteralPath $sourceFile -PathType Leaf) {
-                    Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $stageSsas $fileName) -ToSession $session -Force
+        if ($TransferMode -eq 'Archive') {
+            if ([string]::IsNullOrWhiteSpace($transferArchive)) {
+                throw 'Transfer archive was not created.'
+            }
+            Write-Host 'Copying one archive over WinRM...' -ForegroundColor DarkGray
+            Copy-WindowsExporterArchiveToSession -Session $session -ArchivePath $transferArchive -StageDir $stage
+        }
+        else {
+            foreach ($item in $items) {
+                if ($item -eq 'web-config.yml') { continue }
+                Copy-Item -LiteralPath $itemSources[$item] -Destination (Join-Path $stage $item) -ToSession $session -Force
+            }
+            if (-not $PreserveWebConfig) {
+                Copy-Item -LiteralPath $deployWebConfig -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
+            }
+            Copy-Item -LiteralPath $profilesSource -Destination $stage -ToSession $session -Recurse -Force
+            Invoke-Command -Session $session -ScriptBlock {
+                param($Stage, $NeedPowerShell, $NeedSsas)
+                New-Item -Path (Join-Path $Stage 'scripts') -ItemType Directory -Force | Out-Null
+                if ($NeedPowerShell) {
+                    New-Item -Path (Join-Path $Stage 'scripts\powershell') -ItemType Directory -Force | Out-Null
+                }
+                if ($NeedSsas) {
+                    New-Item -Path (Join-Path $Stage 'scripts\ssas') -ItemType Directory -Force | Out-Null
+                }
+            } -ArgumentList $stage, $needPowerShell, $needSsas
+            if ($needPowerShell) {
+                $stagePowerShell = Join-Path $stage 'scripts\powershell'
+                foreach ($scriptName in $requiredPowerShellFiles) {
+                    Copy-Item -LiteralPath (Join-Path $scriptsPowerShellSource $scriptName) -Destination (Join-Path $stagePowerShell $scriptName) -ToSession $session -Force
                 }
             }
+            if ($needSsas) {
+                $stageSsas = Join-Path $stage 'scripts\ssas'
+                foreach ($fileName in $requiredSsasFiles) {
+                    $sourceFile = Join-Path $scriptsSsasSource $fileName
+                    if (Test-Path -LiteralPath $sourceFile -PathType Leaf) {
+                        Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $stageSsas $fileName) -ToSession $session -Force
+                    }
+                }
+            }
+            Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+            Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
         }
-        Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
-        Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
         $result = Invoke-Command -Session $session -ScriptBlock {
             param($Name,$Stage,$Version,$RootOverride,$Timeout,$Limit,$Items,$ProfileName,$Account,$Password,$ApplyAccount,$ServiceMode,$ListenOverride,$PreserveWebConfig,$RequiredPowerShellFiles,$RequiredSsasFiles)
             Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'
@@ -594,8 +722,14 @@ foreach ($computer in $Computers) {
         $results += [pscustomobject]$row
     }
 }
-if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
-    [IO.File]::Delete($tempWebConfigPath)
+}
+finally {
+    if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
+        [IO.File]::Delete($tempWebConfigPath)
+    }
+    if ($transferArchive -and (Test-Path -LiteralPath $transferArchive)) {
+        Remove-Item -LiteralPath $transferArchive -Force
+    }
 }
 $results | Format-Table Computer,Method,Previous,Current,Profile,Status,Error -AutoSize
 if (@($results | Where-Object Status -eq 'Failed').Count) { exit 1 }

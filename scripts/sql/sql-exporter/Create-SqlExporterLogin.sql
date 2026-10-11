@@ -2,6 +2,9 @@
   Creates a least-privilege SQL Server login for this repository's sql_exporter.
 
   Run in SSMS as sysadmin after changing @LoginName and @Password.
+  Install-SqlExporterRemote.ps1 calls Grant-SqlExporterProfileAccess.ps1, which
+  sets these variables from the service account and the installed profile.
+  The marker comments on the DECLARE lines are required for that substitution.
   The script is idempotent and targets the current configuration: collectors: [mssql_*].
 
   Notes:
@@ -19,14 +22,14 @@ USE [master];
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
-DECLARE @LoginName sysname = N'sql_exporter';
-DECLARE @Password nvarchar(256) = N'CHANGE_ME_TO_A_LONG_RANDOM_PASSWORD';
-DECLARE @CreateSqlLogin bit = 1;
-DECLARE @GrantUserDatabaseAccess bit = 1;
-DECLARE @GrantReadErrorLog bit = 1;
-DECLARE @GrantMsdbRead bit = 1;
-DECLARE @GrantSsisdbRead bit = 1;
-DECLARE @GrantDistributionRead bit = 1;
+DECLARE @LoginName sysname = N'sql_exporter'; -- observability-sql-login:name
+DECLARE @Password nvarchar(256) = N'CHANGE_ME_TO_A_LONG_RANDOM_PASSWORD'; -- observability-sql-login:password
+DECLARE @CreateSqlLogin bit = 1; -- observability-sql-login:create-sql-login
+DECLARE @GrantUserDatabaseAccess bit = 1; -- observability-sql-login:user-db
+DECLARE @GrantReadErrorLog bit = 1; -- observability-sql-login:errorlog
+DECLARE @GrantMsdbRead bit = 1; -- observability-sql-login:msdb
+DECLARE @GrantSsisdbRead bit = 1; -- observability-sql-login:ssisdb
+DECLARE @GrantDistributionRead bit = 1; -- observability-sql-login:distribution
 
 IF @LoginName IS NULL OR LTRIM(RTRIM(@LoginName)) = N''
     THROW 50000, 'Login name cannot be empty.', 1;

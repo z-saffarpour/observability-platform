@@ -10,6 +10,8 @@
   - Copies sql_exporter.yml (and profiles\ when -Profile is set) to:
       C:\Program Files\Observability\PrometheusExporters\sql-exporter\config
   - Restarts prometheus_sql_exporter service on each server
+  - -TransferMode Archive copies one zip over the admin share instead of one
+    copy per profile file. Use it for WAN hosts. File remains the default.
 
 .EXAMPLE
   .\scripts\powershell\sql-exporter\Deploy-SqlExporterConfig.ps1 -WhatIf
@@ -24,6 +26,12 @@
   .\scripts\powershell\sql-exporter\Deploy-SqlExporterConfig.ps1 `
     -Computers (Get-Content .\scripts\powershell\sql-exporter\servers.txt) `
     -Profile dwh.yml
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Deploy-SqlExporterConfig.ps1 `
+    -Computers store-sql-01 `
+    -Profile oltp-store-lite.yml `
+    -TransferMode Archive
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -48,7 +56,11 @@ param(
     [string]$Profile,
 
     [Parameter(Mandatory = $false)]
-    [int]$ServiceTimeoutSec = 60
+    [int]$ServiceTimeoutSec = 60,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('File', 'Archive')]
+    [string]$TransferMode = 'File'
 )
 
 Set-StrictMode -Version Latest
@@ -207,6 +219,76 @@ function Resolve-SourceFile {
     }
 }
 
+function New-SqlExporterConfigArchive {
+    param(
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [string]$ProfilesDir
+    )
+
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-config-' + [guid]::NewGuid().ToString('N'))
+    $zip = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-config-' + [guid]::NewGuid().ToString('N') + '.zip')
+    try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $work 'sql_exporter.yml') -Force
+        if (-not [string]::IsNullOrWhiteSpace($ProfilesDir)) {
+            New-Item -ItemType Directory -Path (Join-Path $work 'profiles') -Force | Out-Null
+            Copy-Item -Path (Join-Path $ProfilesDir '*') -Destination (Join-Path $work 'profiles') -Force
+        }
+        Compress-Archive -Path (Join-Path $work '*') -DestinationPath $zip -CompressionLevel Fastest
+    }
+    catch {
+        if (Test-Path -LiteralPath $zip) {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $work) {
+            Remove-Item -LiteralPath $work -Recurse -Force
+        }
+    }
+    $zip
+}
+
+function Expand-SqlExporterConfigArchive {
+    param(
+        [Parameter(Mandatory)][string]$ComputerName,
+        [Parameter(Mandatory)][string]$InstallRoot,
+        [Parameter(Mandatory)][string]$RemoteZipPath
+    )
+
+    Invoke-Command -ComputerName $ComputerName -ScriptBlock {
+        param($Root, $ZipPath)
+        $extract = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-config-' + [guid]::NewGuid().ToString('N'))
+        try {
+            New-Item -ItemType Directory -Path $extract -Force | Out-Null
+            Expand-Archive -Path $ZipPath -DestinationPath $extract -Force
+            $configDir = Join-Path $Root 'config'
+            if (-not (Test-Path -LiteralPath $configDir -PathType Container)) {
+                New-Item -Path $configDir -ItemType Directory -Force | Out-Null
+            }
+            Copy-Item -LiteralPath (Join-Path $extract 'sql_exporter.yml') -Destination (Join-Path $configDir 'sql_exporter.yml') -Force
+            $stagedProfiles = Join-Path $extract 'profiles'
+            if (Test-Path -LiteralPath $stagedProfiles -PathType Container) {
+                $targetProfiles = Join-Path $Root 'profiles'
+                if (Test-Path -LiteralPath $targetProfiles) {
+                    Remove-Item -LiteralPath $targetProfiles -Recurse -Force
+                }
+                New-Item -Path $targetProfiles -ItemType Directory -Force | Out-Null
+                Copy-Item -Path (Join-Path $stagedProfiles '*') -Destination $targetProfiles -Force
+            }
+        }
+        finally {
+            if (Test-Path -LiteralPath $ZipPath) {
+                Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -LiteralPath $extract) {
+                Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } -ArgumentList $InstallRoot, $RemoteZipPath
+}
+
 function Assert-RemoteFilePresent {
     param(
         [string]$RemoteFilePath
@@ -277,12 +359,23 @@ Write-Step ("Source bytes: {0}" -f $sourceInfo.Length)
 Write-Step ("Profile     : {0}" -f ($(if ($profileLeaf) { $profileLeaf } else { '<none — deploy base sql_exporter.yml as-is>' })))
 Write-Step ("Destination: {0}" -f $DestinationRoot)
 Write-Step ("Service    : {0}" -f $ServiceName)
+Write-Step ("Transfer   : {0}" -f $TransferMode)
 Write-Step ("Hosts      : {0}" -f ($Computers -join ', '))
 Write-Host ''
 
 $results = @()
+$transferArchive = $null
 
 try {
+if ($TransferMode -eq 'Archive' -and -not $WhatIfPreference) {
+    Write-Step 'Building one transfer archive...'
+    $transferArchive = New-SqlExporterConfigArchive `
+        -ConfigPath $sourceFilePath `
+        -ProfilesDir $(if ($profileLeaf) { $profilesRoot } else { $null })
+    $archiveMb = (Get-Item -LiteralPath $transferArchive).Length / 1MB
+    Write-Step ("Archive    : {0:N1} MB" -f $archiveMb)
+}
+
 foreach ($computer in $Computers) {
     $row = [ordered]@{
         Computer = $computer
@@ -309,21 +402,44 @@ foreach ($computer in $Computers) {
         $remoteFile = Join-Path $remoteConfig 'sql_exporter.yml'
 
         if ($PSCmdlet.ShouldProcess($remoteFile, 'Copy sql_exporter.yml')) {
-            if (-not (Test-Path -LiteralPath $remoteConfig -PathType Container)) {
-                New-Item -Path $remoteConfig -ItemType Directory -Force | Out-Null
-            }
-            Copy-Item -LiteralPath $sourceFilePath -Destination $remoteFile -Force
-            Assert-RemoteFilePresent -RemoteFilePath $remoteFile
-            $row.Copy = 'OK'
-            Write-Step ("  File copied: {0}" -f $remoteFile) 'Green'
-
-            if ($profileLeaf) {
-                $remoteProfiles = Join-Path $remoteRoot 'profiles'
-                if (-not (Test-Path -LiteralPath $remoteProfiles -PathType Container)) {
-                    New-Item -Path $remoteProfiles -ItemType Directory -Force | Out-Null
+            if ($TransferMode -eq 'Archive') {
+                if ([string]::IsNullOrWhiteSpace($transferArchive)) {
+                    throw 'Transfer archive was not created.'
                 }
-                Copy-Item -Path (Join-Path $profilesRoot '*') -Destination $remoteProfiles -Force
-                Write-Step ("  Profiles synced: {0}" -f $remoteProfiles) 'DarkGray'
+                $remoteZip = Join-Path $remoteRoot 'sql-exporter-package.zip'
+                Copy-Item -LiteralPath $transferArchive -Destination $remoteZip -Force
+                try {
+                    Expand-SqlExporterConfigArchive `
+                        -ComputerName $computer `
+                        -InstallRoot $DestinationRoot `
+                        -RemoteZipPath (Join-Path $DestinationRoot 'sql-exporter-package.zip')
+                }
+                finally {
+                    if (Test-Path -LiteralPath $remoteZip) {
+                        Remove-Item -LiteralPath $remoteZip -Force -ErrorAction SilentlyContinue
+                    }
+                }
+                Assert-RemoteFilePresent -RemoteFilePath $remoteFile
+                $row.Copy = 'OK'
+                Write-Step ("  Archive applied: {0}" -f $remoteFile) 'Green'
+            }
+            else {
+                if (-not (Test-Path -LiteralPath $remoteConfig -PathType Container)) {
+                    New-Item -Path $remoteConfig -ItemType Directory -Force | Out-Null
+                }
+                Copy-Item -LiteralPath $sourceFilePath -Destination $remoteFile -Force
+                Assert-RemoteFilePresent -RemoteFilePath $remoteFile
+                $row.Copy = 'OK'
+                Write-Step ("  File copied: {0}" -f $remoteFile) 'Green'
+
+                if ($profileLeaf) {
+                    $remoteProfiles = Join-Path $remoteRoot 'profiles'
+                    if (-not (Test-Path -LiteralPath $remoteProfiles -PathType Container)) {
+                        New-Item -Path $remoteProfiles -ItemType Directory -Force | Out-Null
+                    }
+                    Copy-Item -Path (Join-Path $profilesRoot '*') -Destination $remoteProfiles -Force
+                    Write-Step ("  Profiles synced: {0}" -f $remoteProfiles) 'DarkGray'
+                }
             }
         }
 
@@ -348,6 +464,9 @@ finally {
     }
     if ($resolved.TempPath -and (Test-Path -LiteralPath $resolved.TempPath)) {
         [IO.File]::Delete($resolved.TempPath)
+    }
+    if ($transferArchive -and (Test-Path -LiteralPath $transferArchive)) {
+        Remove-Item -LiteralPath $transferArchive -Force
     }
 }
 

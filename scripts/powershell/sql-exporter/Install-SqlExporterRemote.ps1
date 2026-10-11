@@ -6,11 +6,18 @@
 .DESCRIPTION
   - Uses PowerShell Remoting (WinRM) and Copy-Item -ToSession
   - Stages files on remote host, then deploys atomically into install path
+  - -TransferMode Archive sends one zip instead of a separate copy per file.
+    Use it for WAN hosts. File remains the default for low-latency links.
   - Creates or updates Windows service using native Service Control Manager
-  - Supports LocalSystem / LocalService / NetworkService / gMSA / custom credential
+  - Supports LocalSystem / LocalService / NetworkService / gMSA / NtService / custom credential
   - Idempotent: safe to run repeatedly for update rollout
   - Optional -Profile applies profiles/<name>.yml collectors into sql_exporter.yml
     (same UX as windows_exporter -Profile sql-server.yml)
+  - After the service is running, -SqlInstance creates the Windows SQL login
+    for the service account and applies the grants required by that profile.
+    Connection matches Install-SecurityDdlEventSession.ps1: SqlClient from this
+    process, Windows authentication unless -SqlCredential is set.
+    Without -SqlInstance, SQL permissions are left unchanged. CONTROL SERVER is not granted.
 
   Files deployed from SourceRoot (the repository root):
     - exporters\sql-exporter\bin\sql_exporter.exe
@@ -47,6 +54,17 @@
     -ServiceAccount 'DOMAIN\SqlExporterAccount$'
 
 .EXAMPLE
+  # -ServiceAccount is NT SERVICE\<ServiceName>. The default service name is prometheus_sql_exporter.
+  # -SqlInstance is the SqlClient data source. SQL grants follow the profile collectors.
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -Profile oltp.yml `
+    -ServiceAccountMode NtService `
+    -SqlInstance 'sql-host-01\DYNAMICSAX' `
+    -SqlCredential (Get-Credential) `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
     -Computers sql-host-01 `
     -ListenAddress ':9399' `
@@ -73,6 +91,13 @@
   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
     -Computers sql-host-01 `
     -SqlServerServiceName 'MSSQL$INSTANCE01' `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers store-sql-01 `
+    -Profile oltp-store-lite.yml `
+    -TransferMode Archive `
     -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -145,6 +170,15 @@ param(
     [pscredential]$RemoteCredential,
 
     [Parameter(Mandatory = $false)]
+    [string[]]$SqlInstance,
+
+    [Parameter(Mandatory = $false)]
+    [pscredential]$SqlCredential,
+
+    [Parameter(Mandatory = $false)]
+    [bool]$TrustServerCertificate = $true,
+
+    [Parameter(Mandatory = $false)]
     [int]$ServiceTimeoutSec = 60,
 
     [Parameter(Mandatory = $false)]
@@ -152,7 +186,14 @@ param(
     [string]$ServiceMode = 'ServiceBase',
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipCollectors
+    [switch]$SkipCollectors,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipSqlGrants,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('File', 'Archive')]
+    [string]$TransferMode = 'File'
 )
 
 Set-StrictMode -Version Latest
@@ -165,6 +206,10 @@ if (-not (Test-Path -LiteralPath $serviceHelpersPath -PathType Leaf)) {
 }
 if (-not (Test-Path -LiteralPath $webConfigHelpersPath -PathType Leaf)) {
     throw "Required helper script was not found: $webConfigHelpersPath"
+}
+$sqlGrantScript = Join-Path $PSScriptRoot 'Grant-SqlExporterProfileAccess.ps1'
+if (-not (Test-Path -LiteralPath $sqlGrantScript -PathType Leaf)) {
+    throw "Required helper script was not found: $sqlGrantScript"
 }
 . $webConfigHelpersPath
 
@@ -370,10 +415,75 @@ function New-RemoteSession {
     return New-PSSession -ComputerName $ComputerName -ErrorAction Stop
 }
 
+function New-SqlExporterTransferArchive {
+    param(
+        [Parameter(Mandatory)][string]$ExePath,
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [Parameter(Mandatory)][string]$WebConfigPath,
+        [Parameter(Mandatory)][string]$VersionPath,
+        [Parameter(Mandatory)][string]$ProfilesDir,
+        [string]$CollectorDir,
+        [bool]$IncludeCollectors,
+        [string]$NssmPath,
+        [Parameter(Mandatory)][string]$ServiceHelpersPath,
+        [Parameter(Mandatory)][string]$WebConfigHelpersPath
+    )
+
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-stage-' + [guid]::NewGuid().ToString('N'))
+    $zip = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-stage-' + [guid]::NewGuid().ToString('N') + '.zip')
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $work 'profiles') -Force | Out-Null
+        Copy-Item -LiteralPath $ExePath -Destination (Join-Path $work 'sql_exporter.exe') -Force
+        Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $work 'sql_exporter.yml') -Force
+        Copy-Item -LiteralPath $WebConfigPath -Destination (Join-Path $work 'web-config.yml') -Force
+        Copy-Item -LiteralPath $VersionPath -Destination (Join-Path $work 'sql_exporter_version.ini') -Force
+        Copy-Item -Path (Join-Path $ProfilesDir '*') -Destination (Join-Path $work 'profiles') -Force
+        if ($IncludeCollectors) {
+            New-Item -ItemType Directory -Path (Join-Path $work 'collector') -Force | Out-Null
+            Copy-Item -Path (Join-Path $CollectorDir '*') -Destination (Join-Path $work 'collector') -Recurse -Force
+        }
+        if (-not [string]::IsNullOrWhiteSpace($NssmPath)) {
+            Copy-Item -LiteralPath $NssmPath -Destination (Join-Path $work 'nssm.exe') -Force
+        }
+        Copy-Item -LiteralPath $ServiceHelpersPath -Destination (Join-Path $work 'Observability-NssmServiceHelpers.ps1') -Force
+        Copy-Item -LiteralPath $WebConfigHelpersPath -Destination (Join-Path $work 'Observability-WebConfigHelpers.ps1') -Force
+        Compress-Archive -Path (Join-Path $work '*') -DestinationPath $zip -CompressionLevel Fastest
+    }
+    catch {
+        if (Test-Path -LiteralPath $zip) {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $work) {
+            Remove-Item -LiteralPath $work -Recurse -Force
+        }
+    }
+    $zip
+}
+
+function Copy-SqlExporterArchiveToSession {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Runspaces.PSSession]$Session,
+        [Parameter(Mandatory)][string]$ArchivePath,
+        [Parameter(Mandatory)][string]$StageDir
+    )
+
+    $remoteZip = Join-Path $StageDir 'sql-exporter-package.zip'
+    Copy-Item -LiteralPath $ArchivePath -Destination $remoteZip -ToSession $Session -Force
+    Invoke-Command -Session $Session -ScriptBlock {
+        param($StageDirectory, $ZipPath)
+        Expand-Archive -Path $ZipPath -DestinationPath $StageDirectory -Force
+        Remove-Item -LiteralPath $ZipPath -Force
+    } -ArgumentList $StageDir, $remoteZip
+}
+
 function Get-ServiceAccountContext {
     param(
         [string]$Mode,
         [string]$Account,
+        [string]$ServiceName,
         [pscredential]$Credential
     )
 
@@ -417,14 +527,12 @@ function Get-ServiceAccountContext {
             }
         }
         'NtService' {
-            if ([string]::IsNullOrWhiteSpace($Account)) {
-                throw 'ServiceAccount is required when ServiceAccountMode is NtService.'
+            # Virtual account name is fixed to the Windows service name.
+            $virtualAccount = 'NT SERVICE\{0}' -f $ServiceName
+            if (-not [string]::IsNullOrWhiteSpace($Account) -and ($Account -notmatch ('(?i)^{0}$' -f [regex]::Escape($virtualAccount)))) {
+                throw "NtService mode uses '$virtualAccount'. Omit -ServiceAccount."
             }
-            if ($Account -notmatch '^NT SERVICE\\') {
-                throw "NtService account must start with 'NT SERVICE\\': $Account"
-            }
-            # Virtual service accounts use no password
-            $result.Account = $Account
+            $result.Account = $virtualAccount
             $result.Password = ''
         }
         default {
@@ -487,7 +595,7 @@ $webConfigToDeploy = Resolve-ObservabilityWebConfigDeployment `
     -BasicAuthHash $BasicAuthHash
 $tempWebConfigPath = if ($webConfigToDeploy -ne $layout.WebConfig) { $webConfigToDeploy } else { $null }
 
-$svcContext = Get-ServiceAccountContext -Mode $ServiceAccountMode -Account $ServiceAccount -Credential $ServiceCredential
+$svcContext = Get-ServiceAccountContext -Mode $ServiceAccountMode -Account $ServiceAccount -ServiceName $ServiceName -Credential $ServiceCredential
 
 Write-Step ("Source root     : {0}" -f $layout.Root)
 Write-Step ("Install root    : {0}" -f $InstallRoot)
@@ -499,14 +607,42 @@ Write-Step ("Target name     : {0}" -f $(if ($TargetName) { $TargetName } else {
 Write-Step ("Data source     : {0}" -f $(if ($DataSourceName) { $DataSourceName } else { '<package default>' }))
 Write-Step ("SQL dependency  : {0}" -f $(if ($SqlServerServiceName) { $SqlServerServiceName } else { $SqlServerServiceDependency }))
 Write-Step ("Service account : {0} ({1})" -f $svcContext.Account, $svcContext.Mode)
+Write-Step ("SQL instance    : {0}" -f $(if ($SqlInstance) { ($SqlInstance -join ', ') } else { '<skipped>' }))
 Write-Step ("Profile         : {0}" -f ($(if ($profileLeaf) { $profileLeaf } else { '<default sql_exporter.yml collectors>' })))
 Write-Step ("Collectors      : {0}" -f ($(if ($SkipCollectors) { 'Skip' } else { 'Deploy' })))
+Write-Step ("Transfer        : {0}" -f $TransferMode)
 Write-Step ("Hosts           : {0}" -f ($Computers -join ', '))
 Write-Host ''
 
 $results = @()
+$transferArchive = $null
+$sqlGrantError = $null
 
 try {
+if ($TransferMode -eq 'Archive' -and -not $WhatIfPreference) {
+    $nssmForArchive = $null
+    if ($ServiceMode -eq 'NSSM') {
+        if (-not (Test-Path -LiteralPath $layout.NssmPath -PathType Leaf)) {
+            throw "NSSM requested but not found: $($layout.NssmPath)"
+        }
+        $nssmForArchive = $layout.NssmPath
+    }
+    Write-Step 'Building one transfer archive...'
+    $transferArchive = New-SqlExporterTransferArchive `
+        -ExePath $layout.ExePath `
+        -ConfigPath $configToDeploy `
+        -WebConfigPath $webConfigToDeploy `
+        -VersionPath $layout.VersionPath `
+        -ProfilesDir $layout.ProfilesDir `
+        -CollectorDir $layout.CollectorDir `
+        -IncludeCollectors (-not $SkipCollectors) `
+        -NssmPath $nssmForArchive `
+        -ServiceHelpersPath $serviceHelpersPath `
+        -WebConfigHelpersPath $webConfigHelpersPath
+    $archiveMb = (Get-Item -LiteralPath $transferArchive).Length / 1MB
+    Write-Step ("Archive         : {0:N1} MB" -f $archiveMb)
+}
+
 foreach ($computer in $Computers) {
     $row = [ordered]@{
         Computer  = $computer
@@ -514,6 +650,7 @@ foreach ($computer in $Computers) {
         Session   = 'Skipped'
         Deploy    = 'Skipped'
         Service   = 'Skipped'
+        SqlGrant  = 'Skipped'
         Error     = $null
     }
 
@@ -546,24 +683,33 @@ foreach ($computer in $Computers) {
 
         Write-Step ("  Staging path: {0}" -f $stage) 'DarkGray'
 
-        if ($ServiceMode -eq 'NSSM') {
-            if (-not (Test-Path -LiteralPath $layout.NssmPath -PathType Leaf)) {
-                throw "NSSM requested but not found: $($layout.NssmPath)"
+        if ($TransferMode -eq 'Archive') {
+            if ([string]::IsNullOrWhiteSpace($transferArchive)) {
+                throw "Transfer archive was not created."
             }
-            Copy-Item -Path $layout.NssmPath -Destination (Join-Path $stage 'nssm.exe') -ToSession $session -Force
-            Write-Step ("  NSSM staged from: {0}" -f $layout.NssmPath) 'DarkGray'
+            Write-Step '  Copying one archive over WinRM...'
+            Copy-SqlExporterArchiveToSession -Session $session -ArchivePath $transferArchive -StageDir $stage
         }
+        else {
+            if ($ServiceMode -eq 'NSSM') {
+                if (-not (Test-Path -LiteralPath $layout.NssmPath -PathType Leaf)) {
+                    throw "NSSM requested but not found: $($layout.NssmPath)"
+                }
+                Copy-Item -Path $layout.NssmPath -Destination (Join-Path $stage 'nssm.exe') -ToSession $session -Force
+                Write-Step ("  NSSM staged from: {0}" -f $layout.NssmPath) 'DarkGray'
+            }
 
-        Copy-Item -Path $layout.ExePath -Destination (Join-Path $stage 'sql_exporter.exe') -ToSession $session -Force
-        Copy-Item -Path $configToDeploy -Destination (Join-Path $stage 'sql_exporter.yml') -ToSession $session -Force
-        Copy-Item -Path $webConfigToDeploy -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
-        Copy-Item -Path $layout.VersionPath -Destination (Join-Path $stage 'sql_exporter_version.ini') -ToSession $session -Force
-        Copy-Item -Path (Join-Path $layout.ProfilesDir '*') -Destination (Join-Path $stage 'profiles') -ToSession $session -Force
-        if (-not $SkipCollectors) {
-            Copy-Item -Path (Join-Path $layout.CollectorDir '*') -Destination (Join-Path $stage 'collector') -ToSession $session -Force -Recurse
+            Copy-Item -Path $layout.ExePath -Destination (Join-Path $stage 'sql_exporter.exe') -ToSession $session -Force
+            Copy-Item -Path $configToDeploy -Destination (Join-Path $stage 'sql_exporter.yml') -ToSession $session -Force
+            Copy-Item -Path $webConfigToDeploy -Destination (Join-Path $stage 'web-config.yml') -ToSession $session -Force
+            Copy-Item -Path $layout.VersionPath -Destination (Join-Path $stage 'sql_exporter_version.ini') -ToSession $session -Force
+            Copy-Item -Path (Join-Path $layout.ProfilesDir '*') -Destination (Join-Path $stage 'profiles') -ToSession $session -Force
+            if (-not $SkipCollectors) {
+                Copy-Item -Path (Join-Path $layout.CollectorDir '*') -Destination (Join-Path $stage 'collector') -ToSession $session -Force -Recurse
+            }
+            Copy-Item -Path $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+            Copy-Item -Path $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
         }
-        Copy-Item -Path $serviceHelpersPath -Destination (Join-Path $stage 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
-        Copy-Item -Path $webConfigHelpersPath -Destination (Join-Path $stage 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
 
         $deployResult = Invoke-Command -Session $session -ScriptBlock {
             param(
@@ -671,9 +817,6 @@ foreach ($computer in $Computers) {
             $binaryPath = ('"{0}" {1}' -f $exePath, $appParameters)
             $stdoutLog = Join-Path $logDir "$SvcName.out.log"
             $stderrLog = Join-Path $logDir "$SvcName.err.log"
-            if ($SvcAccount) {
-                Grant-ObservabilityServiceLogAccess -Path $logDir -Account $SvcAccount
-            }
 
             $svc = Get-Service -Name $SvcName -ErrorAction SilentlyContinue
             if ($ServiceMode -eq 'NSSM') {
@@ -711,7 +854,11 @@ foreach ($computer in $Computers) {
                 Register-ObservabilityNssmEventSource -NssmExe $nssmExe
 
                 if ($SvcAccount) {
-                    if ($SvcPassword -ne '') {
+                    if ($SvcAccount -match '(?i)^NT SERVICE\\') {
+                        # nssm set ObjectName rejects "NT SERVICE\<name>" with "Invalid account name!".
+                        Invoke-ObservabilitySc -Arguments @('config', $SvcName, ('obj= ' + $SvcAccount))
+                    }
+                    elseif ($SvcPassword -ne '') {
                         Invoke-Nssm -Executable $nssmExe -Arguments @('set', $SvcName, 'ObjectName', $SvcAccount, $SvcPassword)
                     }
                     else {
@@ -731,6 +878,11 @@ foreach ($computer in $Computers) {
                 if ($SvcPassword -ne '') { $scArgs2 += ('password= ' + $SvcPassword) }
                 Invoke-ObservabilitySc -Arguments $scArgs2
                 Invoke-ObservabilitySc -Arguments @('description', $SvcName, $Description)
+            }
+
+            # NT SERVICE\<name> cannot be translated until the service is registered.
+            if ($SvcAccount) {
+                Grant-ObservabilityServiceLogAccess -Path $logDir -Account $SvcAccount
             }
 
             $dependencyMode = if ($SqlDependencyServiceName) { $SqlDependencyServiceName } else { $SqlDependencyMode }
@@ -820,6 +972,40 @@ foreach ($computer in $Computers) {
     $results += [pscustomobject]$row
     Write-Host ''
 }
+
+$sqlInstances = @($SqlInstance | ForEach-Object { if ($_) { $_.Trim() } } | Where-Object { $_ })
+if (-not $SkipSqlGrants -and $sqlInstances.Count -gt 0) {
+    $sqlLogin = $svcContext.Account
+    if ($sqlLogin -match '^(?i)(LocalSystem|\.\\LocalSystem)$') {
+        $sqlLogin = 'NT AUTHORITY\SYSTEM'
+    }
+    $collectorSource = if ($profileLeaf) { Join-Path $layout.ProfilesDir $profileLeaf } else { $configToDeploy }
+    Write-Step '===== SQL login =====' 'Yellow'
+    Write-Step ("  SQL login    : {0}" -f $sqlLogin) 'DarkGray'
+    try {
+        $grantRows = @(
+            & $sqlGrantScript `
+                -SqlInstance $sqlInstances `
+                -SqlCredential $SqlCredential `
+                -LoginName $sqlLogin `
+                -CollectorSourcePath $collectorSource `
+                -TrustServerCertificate $TrustServerCertificate
+        )
+        foreach ($grantRow in $grantRows) {
+            Write-Step ("  SQL login OK : {0} on {1} ({2})" -f $grantRow.LoginName, $grantRow.SqlInstance, $grantRow.Grants) 'Green'
+        }
+        foreach ($resultRow in $results) {
+            if ($resultRow.Deploy -eq 'OK') { $resultRow.SqlGrant = 'OK' }
+        }
+    }
+    catch {
+        $sqlGrantError = $_.Exception.Message
+        foreach ($resultRow in $results) {
+            if ($resultRow.Deploy -eq 'OK') { $resultRow.SqlGrant = 'Failed'; $resultRow.Error = $sqlGrantError }
+        }
+        Write-Step ("  ERROR: {0}" -f $sqlGrantError) 'Red'
+    }
+}
 }
 finally {
     if ($tempConfigPath -and (Test-Path -LiteralPath $tempConfigPath)) {
@@ -828,13 +1014,16 @@ finally {
     if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
         [IO.File]::Delete($tempWebConfigPath)
     }
+    if ($transferArchive -and (Test-Path -LiteralPath $transferArchive)) {
+        Remove-Item -LiteralPath $transferArchive -Force
+    }
 }
 
 Write-Step '===== Summary =====' 'Yellow'
 $results | Format-Table -AutoSize | Out-String | Write-Host
 
 $failed = @($results | Where-Object { $_.Error })
-if ($failed.Count -gt 0) {
+if ($failed.Count -gt 0 -or $sqlGrantError) {
     exit 1
 }
 

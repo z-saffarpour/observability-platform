@@ -20,6 +20,9 @@
   profiles/<name>.yml is applied into the remote sql_exporter.yml (DSN and other
   settings are preserved), matching windows_exporter -Profile sql-server.yml UX.
 
+  -TransferMode Archive sends one zip instead of a separate copy per file.
+  Use it for WAN hosts. File remains the default for low-latency links.
+
 .EXAMPLE
   .\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 -Computers sql-host-01,sql-host-02 -WhatIf
 
@@ -52,6 +55,13 @@
     -Computers sql-host-01 `
     -BasicAuthUsername 'scrape_user' `
     -BasicAuthPassword (Read-Host -AsSecureString 'Password') `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  .\scripts\powershell\sql-exporter\Upgrade-SqlExporterRemote.ps1 `
+    -Computers store-sql-01 `
+    -Profile oltp-store-lite.yml `
+    -TransferMode Archive `
     -RemoteCredential (Get-Credential)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
@@ -117,7 +127,11 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateRange(1, 100)]
-    [int]$KeepBackups = 5
+    [int]$KeepBackups = 5,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('File', 'Archive')]
+    [string]$TransferMode = 'File'
 )
 
 Set-StrictMode -Version Latest
@@ -165,6 +179,64 @@ function New-RemoteSession {
         return New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
     }
     New-PSSession -ComputerName $ComputerName -ErrorAction Stop
+}
+
+function New-SqlExporterUpgradeArchive {
+    param(
+        [Parameter(Mandatory)][string]$ExePath,
+        [Parameter(Mandatory)][string]$VersionPath,
+        [Parameter(Mandatory)][string]$NssmPath,
+        [Parameter(Mandatory)][string]$CollectorsDir,
+        [Parameter(Mandatory)][string]$ProfilesDir,
+        [Parameter(Mandatory)][string]$ServiceHelpersPath,
+        [Parameter(Mandatory)][string]$WebConfigHelpersPath,
+        [string]$WebConfigPath
+    )
+
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-upgrade-' + [guid]::NewGuid().ToString('N'))
+    $zip = Join-Path ([IO.Path]::GetTempPath()) ('sql-exporter-upgrade-' + [guid]::NewGuid().ToString('N') + '.zip')
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $work 'collector'), (Join-Path $work 'profiles') -Force | Out-Null
+        Copy-Item -LiteralPath $ExePath -Destination (Join-Path $work 'sql_exporter.exe') -Force
+        Copy-Item -LiteralPath $VersionPath -Destination (Join-Path $work 'sql_exporter_version.ini') -Force
+        Copy-Item -LiteralPath $NssmPath -Destination (Join-Path $work 'nssm.exe') -Force
+        Copy-Item -Path (Join-Path $CollectorsDir '*') -Destination (Join-Path $work 'collector') -Recurse -Force
+        Copy-Item -Path (Join-Path $ProfilesDir '*') -Destination (Join-Path $work 'profiles') -Force
+        Copy-Item -LiteralPath $ServiceHelpersPath -Destination (Join-Path $work 'Observability-NssmServiceHelpers.ps1') -Force
+        Copy-Item -LiteralPath $WebConfigHelpersPath -Destination (Join-Path $work 'Observability-WebConfigHelpers.ps1') -Force
+        if (-not [string]::IsNullOrWhiteSpace($WebConfigPath)) {
+            Copy-Item -LiteralPath $WebConfigPath -Destination (Join-Path $work 'web-config.yml') -Force
+        }
+        Compress-Archive -Path (Join-Path $work '*') -DestinationPath $zip -CompressionLevel Fastest
+    }
+    catch {
+        if (Test-Path -LiteralPath $zip) {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $work) {
+            Remove-Item -LiteralPath $work -Recurse -Force
+        }
+    }
+    $zip
+}
+
+function Copy-SqlExporterArchiveToSession {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.Runspaces.PSSession]$Session,
+        [Parameter(Mandatory)][string]$ArchivePath,
+        [Parameter(Mandatory)][string]$StageDir
+    )
+
+    $remoteZip = Join-Path $StageDir 'sql-exporter-package.zip'
+    Copy-Item -LiteralPath $ArchivePath -Destination $remoteZip -ToSession $Session -Force
+    Invoke-Command -Session $Session -ScriptBlock {
+        param($StageDirectory, $ZipPath)
+        Expand-Archive -Path $ZipPath -DestinationPath $StageDirectory -Force
+        Remove-Item -LiteralPath $ZipPath -Force
+    } -ArgumentList $StageDir, $remoteZip
 }
 
 function Resolve-ProfileLeaf {
@@ -254,10 +326,28 @@ Write-Step ("Listen address   : {0}" -f $(if ($ListenAddress) { $ListenAddress }
 Write-Step ("Web config       : {0}" -f $(if ($PreserveWebConfig) { '<preserve remote>' } elseif ($WebConfigPath) { $WebConfigPath } elseif ($BasicAuthUsername) { "Basic Auth user=$BasicAuthUsername" } else { '<package default>' }))
 Write-Step ("Profile          : {0}" -f $(if ($profileLeaf) { $profileLeaf } else { '<preserve remote sql_exporter.yml>' }))
 Write-Step ("SQL dependency   : {0}" -f $(if ($SqlServerServiceName) { $SqlServerServiceName } else { $SqlServerServiceDependency }))
+Write-Step "Transfer         : $TransferMode"
 Write-Step "Hosts            : $($Computers -join ', ')"
 Write-Host ''
 
 $results = @()
+$transferArchive = $null
+try {
+if ($TransferMode -eq 'Archive' -and -not $WhatIfPreference) {
+    Write-Step 'Building one transfer archive...'
+    $transferArchive = New-SqlExporterUpgradeArchive `
+        -ExePath $SourceExe `
+        -VersionPath $sourceVersionFile `
+        -NssmPath $sourceNssm `
+        -CollectorsDir $sourceCollectors `
+        -ProfilesDir $sourceProfiles `
+        -ServiceHelpersPath $serviceHelpersPath `
+        -WebConfigHelpersPath $webConfigHelpersPath `
+        -WebConfigPath $(if ($PreserveWebConfig) { $null } else { $deployWebConfig })
+    $archiveMb = (Get-Item -LiteralPath $transferArchive).Length / 1MB
+    Write-Step ("Archive          : {0:N1} MB" -f $archiveMb)
+}
+
 foreach ($computer in $Computers) {
     $row = [ordered]@{
         Computer     = $computer
@@ -287,16 +377,25 @@ foreach ($computer in $Computers) {
             New-Item -Path (Join-Path $path 'profiles') -ItemType Directory -Force | Out-Null
             $path
         }
-        Copy-Item -LiteralPath $SourceExe -Destination (Join-Path $stageDir 'sql_exporter.exe') -ToSession $session -Force
-        if (-not $PreserveWebConfig) {
-            Copy-Item -LiteralPath $deployWebConfig -Destination (Join-Path $stageDir 'web-config.yml') -ToSession $session -Force
+        if ($TransferMode -eq 'Archive') {
+            if ([string]::IsNullOrWhiteSpace($transferArchive)) {
+                throw 'Transfer archive was not created.'
+            }
+            Write-Step '  Copying one archive over WinRM...'
+            Copy-SqlExporterArchiveToSession -Session $session -ArchivePath $transferArchive -StageDir $stageDir
         }
-        Copy-Item -LiteralPath $sourceVersionFile -Destination (Join-Path $stageDir 'sql_exporter_version.ini') -ToSession $session -Force
-        Copy-Item -LiteralPath $sourceNssm -Destination (Join-Path $stageDir 'nssm.exe') -ToSession $session -Force
-        Copy-Item -Path (Join-Path $sourceCollectors '*') -Destination (Join-Path $stageDir 'collector') -ToSession $session -Recurse -Force
-        Copy-Item -Path (Join-Path $sourceProfiles '*') -Destination (Join-Path $stageDir 'profiles') -ToSession $session -Force
-        Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stageDir 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
-        Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stageDir 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
+        else {
+            Copy-Item -LiteralPath $SourceExe -Destination (Join-Path $stageDir 'sql_exporter.exe') -ToSession $session -Force
+            if (-not $PreserveWebConfig) {
+                Copy-Item -LiteralPath $deployWebConfig -Destination (Join-Path $stageDir 'web-config.yml') -ToSession $session -Force
+            }
+            Copy-Item -LiteralPath $sourceVersionFile -Destination (Join-Path $stageDir 'sql_exporter_version.ini') -ToSession $session -Force
+            Copy-Item -LiteralPath $sourceNssm -Destination (Join-Path $stageDir 'nssm.exe') -ToSession $session -Force
+            Copy-Item -Path (Join-Path $sourceCollectors '*') -Destination (Join-Path $stageDir 'collector') -ToSession $session -Recurse -Force
+            Copy-Item -Path (Join-Path $sourceProfiles '*') -Destination (Join-Path $stageDir 'profiles') -ToSession $session -Force
+            Copy-Item -LiteralPath $serviceHelpersPath -Destination (Join-Path $stageDir 'Observability-NssmServiceHelpers.ps1') -ToSession $session -Force
+            Copy-Item -LiteralPath $webConfigHelpersPath -Destination (Join-Path $stageDir 'Observability-WebConfigHelpers.ps1') -ToSession $session -Force
+        }
 
         $upgrade = Invoke-Command -Session $session -ScriptBlock {
             param($SvcName, $StageDir, $Version, $RootOverride, $TimeoutSec, $BackupLimit, $ProfileName, $ServiceMode, $ListenOverride, $PreserveWebConfig, $SqlDependencyMode, $SqlDependencyServiceName)
@@ -625,9 +724,14 @@ foreach ($computer in $Computers) {
         Write-Host ''
     }
 }
-
-if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
-    [IO.File]::Delete($tempWebConfigPath)
+}
+finally {
+    if ($tempWebConfigPath -and (Test-Path -LiteralPath $tempWebConfigPath)) {
+        [IO.File]::Delete($tempWebConfigPath)
+    }
+    if ($transferArchive -and (Test-Path -LiteralPath $transferArchive)) {
+        Remove-Item -LiteralPath $transferArchive -Force
+    }
 }
 
 Write-Step '===== Summary =====' Yellow
