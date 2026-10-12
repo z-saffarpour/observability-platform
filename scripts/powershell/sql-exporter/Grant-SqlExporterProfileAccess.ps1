@@ -7,7 +7,10 @@
   Runs scripts/sql/sql-exporter/Create-SqlExporterLogin.sql as a Windows login
   (@CreateSqlLogin = 0). Base server grants are always applied. msdb, user
   database, error log, SSISDB, and distribution grants follow the collector
-  list. CONTROL SERVER is not granted.
+  list. Server grants include ALTER TRACE and CONTROL SERVER, required by the
+  default-trace and SQL Audit collectors. -GrantSysadmin also adds the login to
+  the sysadmin role so DBCC DBINFO and DBCC TRACESTATUS return data. Without
+  that switch the role is left unchanged.
 
   The script does not run unless -SqlInstance is supplied. Connects with
   System.Data.SqlClient from this process. Windows authentication is the
@@ -47,6 +50,8 @@ param(
 
     [ValidateRange(30, 3600)]
     [int]$CommandTimeoutSec = 300,
+
+    [switch]$GrantSysadmin,
 
     [bool]$TrustServerCertificate = $true
 )
@@ -168,6 +173,10 @@ function Get-SqlExporterLoginBatch {
             Pattern = '(?m)^DECLARE @GrantDistributionRead bit = [01]; -- observability-sql-login:distribution\s*$'
             Value   = ('DECLARE @GrantDistributionRead bit = {0}; -- observability-sql-login:distribution' -f [int]$Flags.Distribution)
         }
+        @{
+            Pattern = '(?m)^DECLARE @GrantSysadmin bit = [01]; -- observability-sql-login:sysadmin\s*$'
+            Value   = ('DECLARE @GrantSysadmin bit = {0}; -- observability-sql-login:sysadmin' -f [int]$Flags.Sysadmin)
+        }
     )
 
     foreach ($item in $replacements) {
@@ -195,7 +204,8 @@ if ($collectors.Count -eq 0) {
 }
 
 $flags = Get-SqlExporterGrantFlags -Collectors $collectors
-$grantNames = @('server')
+$flags | Add-Member -NotePropertyName Sysadmin -NotePropertyValue ([bool]$GrantSysadmin)
+$grantNames = @('server', $(if ($GrantSysadmin) { 'sysadmin' } else { 'limited' }))
 if ($flags.Msdb) { $grantNames += 'msdb' }
 if ($flags.UserDatabase) { $grantNames += 'user-db' }
 if ($flags.ErrorLog) { $grantNames += 'errorlog' }

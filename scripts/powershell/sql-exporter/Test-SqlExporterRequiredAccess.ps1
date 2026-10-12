@@ -58,7 +58,7 @@ begin {
             [pscustomobject]@{ Role = 'Install/Upgrade operator'; Access = 'Local Administrators on target'; Why = 'Create/update service, copy files under Program Files, manage firewall/ACL' }
             [pscustomobject]@{ Role = 'Install/Upgrade client'; Access = 'WinRM / PowerShell Remoting to target'; Why = 'Install-SqlExporterRemote.ps1, Upgrade-SqlExporterRemote.ps1, Deploy-*' }
             [pscustomobject]@{ Role = 'sql_exporter Windows service'; Access = 'Read install root + web-config.yml; Log on as a service (custom accounts)'; Why = 'Start service and load config' }
-            [pscustomobject]@{ Role = 'sql_exporter to SQL Server'; Access = 'VIEW SERVER STATE + VIEW ANY DEFINITION (plus optional msdb/SSISDB/user DBs)'; Why = 'Collector queries; use Create-SqlExporterLogin.sql' }
+            [pscustomobject]@{ Role = 'sql_exporter to SQL Server'; Access = 'VIEW SERVER STATE + VIEW ANY DEFINITION + ALTER TRACE + CONTROL SERVER (plus optional msdb/SSISDB/user DBs)'; Why = 'Collector queries; use Create-SqlExporterLogin.sql' }
             [pscustomobject]@{ Role = 'Prometheus scraper'; Access = ("TCP/{0} to target; optional Basic Auth credentials" -f $ListenPort); Why = 'Scrape /metrics' }
             [pscustomobject]@{ Role = 'Config hardening'; Access = 'web-config.yml ACL limited to SYSTEM, Administrators, service account'; Why = 'Protect Basic Auth hashes / TLS material' }
         )
@@ -244,7 +244,7 @@ begin {
             }
         }
 
-        Add-Row 'SQL' 'Login grants' 'INFO' 'Not audited by this script' 'Run Create-SqlExporterLogin.sql as sysadmin for VIEW SERVER STATE / VIEW ANY DEFINITION / optional msdb|SSISDB|user DB grants'
+        Add-Row 'SQL' 'Login grants' 'INFO' 'Not audited by this script' 'Run Create-SqlExporterLogin.sql as sysadmin. Default is limited grants. Set @GrantSysadmin = 1 or pass -GrantSysadmin for DBCC DBINFO / TRACESTATUS.'
 
         if ($DoApply) {
             if (-not $isAdmin) {

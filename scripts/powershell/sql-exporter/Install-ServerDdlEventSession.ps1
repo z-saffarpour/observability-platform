@@ -24,8 +24,10 @@
   default; pass -TrustServerCertificate:$false when the instance certificate
   is issued by a trusted CA.
 
-  The caller needs ALTER ANY EVENT SESSION. This script is not part of
-  Deploy-Collectors.ps1 and does not restart sql_exporter.
+  The caller needs ALTER ANY EVENT SESSION. Install-SqlExporterRemote.ps1
+  calls this script when mssql_server_ddl is in the selected profile.
+  It does not install the archive job or table, and it does not restart
+  sql_exporter.
 
 .EXAMPLE
   .\scripts\powershell\sql-exporter\Install-ServerDdlEventSession.ps1 `
