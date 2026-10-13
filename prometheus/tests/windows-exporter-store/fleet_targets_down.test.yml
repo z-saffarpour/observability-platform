@@ -1,0 +1,135 @@
+rule_files:
+  - ../../recording-rules/prometheus-store/prometheus_store-availability.rules.yml
+  - ../../alert-rules/prometheus-store/prometheus_store-p0-availability.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Any job name counts. 3 of 10 targets down = 30%.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="job_a",instance="h1:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_a",instance="h2:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_b",instance="h3:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_b",instance="h4:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h5:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h6:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_c",instance="h7:9100",source="source_b"}'
+        values: '1x20'
+      - series: 'up{job="job_c",instance="h8:9100",source="source_b"}'
+        values: '1x20'
+      - series: 'up{job="job_c",instance="h9:9100",source="source_b"}'
+        values: '1x20'
+      - series: 'up{job="job_c",instance="h10:9100",source="source_b"}'
+        values: '1x20'
+    promql_expr_test:
+      - expr: fleet:scrape_targets:count
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="fleet:scrape_targets:count"}'
+            value: 10
+      - expr: fleet:scrape_targets_down:count
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="fleet:scrape_targets_down:count"}'
+            value: 3
+      - expr: fleet:scrape_targets_down:ratio
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="fleet:scrape_targets_down:ratio"}'
+            value: 0.3
+      - expr: source_job:scrape_targets:count
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="source_job:scrape_targets:count",job="job_a",source="source_a"}'
+            value: 2
+          - labels: '{__name__="source_job:scrape_targets:count",job="job_b",source="source_a"}'
+            value: 4
+          - labels: '{__name__="source_job:scrape_targets:count",job="job_c",source="source_b"}'
+            value: 4
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PrometheusFleetTargetsDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: PrometheusFleetTargetsDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              priority: P0
+              alert_profile: availability
+            exp_annotations:
+              summary: "30% of Prometheus scrape targets are down"
+              summary_fa: "30% از تارگت‌های Prometheus در دسترس نیستند"
+              description: "Down ratio stayed above 20% for five minutes. Compare fleet:scrape_targets_down:count with fleet:scrape_targets:count."
+              runbook: "Check source:scrape_targets_down:ratio and source_job:scrape_targets_down:ratio, then up == 0. A scraper that stops sending series does not increase this ratio."
+
+  # Exactly 20% stays below the threshold.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="job_a",instance="h1:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_a",instance="h2:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_b",instance="h3:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h4:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h5:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h6:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h7:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h8:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h9:9100",source="source_a"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h10:9100",source="source_a"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PrometheusFleetTargetsDown
+        exp_alerts: []
+
+  # Same job and instance up on one source and down on another counts as up.
+  # A different job on that instance remains its own target.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="job_a",instance="h1:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_a",instance="h1:9100",source="source_b"}'
+        values: '1x20'
+      - series: 'up{job="job_b",instance="h1:9100",source="source_a"}'
+        values: '0x20'
+      - series: 'up{job="job_a",instance="h2:9100",source="source_a"}'
+        values: '0x20'
+    promql_expr_test:
+      - expr: fleet:scrape_targets:count
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="fleet:scrape_targets:count"}'
+            value: 3
+      - expr: fleet:scrape_targets_down:count
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="fleet:scrape_targets_down:count"}'
+            value: 2
+      - expr: fleet:scrape_targets_down:ratio
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="fleet:scrape_targets_down:ratio"}'
+            value: 0.6666666666666666
+      - expr: source:scrape_targets_down:count
+        eval_time: 2m
+        exp_samples:
+          - labels: '{__name__="source:scrape_targets_down:count",source="source_a"}'
+            value: 3
+          - labels: '{__name__="source:scrape_targets_down:count",source="source_b"}'
+            value: 0

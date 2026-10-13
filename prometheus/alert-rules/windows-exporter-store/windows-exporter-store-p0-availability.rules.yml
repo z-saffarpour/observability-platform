@@ -1,0 +1,17 @@
+# P0 — more than 20% of scrape targets known to Prometheus are down.
+# priority=P0 with no owner label routes to receiver sms-email-p0 (SMS webhook + email).
+groups:
+  - name: prometheus_store.p0.availability
+    rules:
+      - alert: PrometheusFleetTargetsDown
+        expr: fleet:scrape_targets_down:ratio > 0.20
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of Prometheus scrape targets are down"
+          summary_fa: "{{ $value | humanizePercentage }} از تارگت‌های Prometheus در دسترس نیستند"
+          description: "Down ratio stayed above 20% for five minutes. Compare fleet:scrape_targets_down:count with fleet:scrape_targets:count."
+          runbook: "Check source:scrape_targets_down:ratio and source_job:scrape_targets_down:ratio, then up == 0. A scraper that stops sending series does not increase this ratio."

@@ -1,0 +1,53 @@
+# Fleet availability for every scrape target in Prometheus.
+# Job and source names are labels, not selectors, so a new job or source is included
+# without editing these rules.
+#
+# A target is (job, instance). max() keeps one sample when several sources scrape it.
+# The target is down only when every current sample is up=0.
+# Per-source and per-job series stay aggregated; do not record one series per instance.
+groups:
+  - name: prometheus_store.recording.availability
+    rules:
+      - record: source_job:scrape_targets:count
+        expr: count by (source, job) (up)
+
+      - record: source_job:scrape_targets_down:count
+        expr: |
+          count by (source, job) (up == 0)
+          or (count by (source, job) (up) * 0)
+
+      - record: source_job:scrape_targets_down:ratio
+        expr: |
+          source_job:scrape_targets_down:count
+          / clamp_min(source_job:scrape_targets:count, 1)
+
+      - record: source:scrape_targets:count
+        expr: count by (source) (up)
+
+      - record: source:scrape_targets_down:count
+        expr: |
+          count by (source) (up == 0)
+          or (count by (source) (up) * 0)
+
+      - record: source:scrape_targets_down:ratio
+        expr: |
+          source:scrape_targets_down:count
+          / clamp_min(source:scrape_targets:count, 1)
+
+      - record: fleet:scrape_targets:count
+        expr: count(max by (job, instance) (up))
+
+      - record: fleet:scrape_targets_up:count
+        expr: |
+          count((max by (job, instance) (up)) == 1)
+          or vector(0)
+
+      - record: fleet:scrape_targets_down:count
+        expr: |
+          count((max by (job, instance) (up)) == 0)
+          or vector(0)
+
+      - record: fleet:scrape_targets_down:ratio
+        expr: |
+          fleet:scrape_targets_down:count
+          / clamp_min(fleet:scrape_targets:count, 1)
