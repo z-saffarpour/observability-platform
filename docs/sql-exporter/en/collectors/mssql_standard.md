@@ -42,7 +42,7 @@
 | `mssql_database_recovery_model` | `gauge` | `db`, `recovery_model_desc` | `recovery_model` | query | Databases recovery_model: 1=FULL 2=BULK_LOGGED 3=SIMPLE |
 | `mssql_transactions` | `counter` | `db` | `cntr_value` | query | Transactions/sec per database (raw cntr_value; use rate()). |
 | `mssql_log_growths` | `counter` | `db` | `cntr_value` | query | Number of times the transaction log has been expanded, per database. |
-| `mssql_deadlocks` | `counter` | - | `cntr_value` | query | Number of lock requests that resulted in a deadlock (raw cntr_value; use rate()). |
+| `mssql_deadlocks` | `counter` | - | `cntr_value` | query | Number of lock requests that resulted in a deadlock (raw cntr_value; use rate()). Pair with `mssql_deadlock_details` for recent victim/other pairs. |
 | `mssql_user_errors` | `counter` | - | `cntr_value` | query | Number of user errors (raw cntr_value; use rate()). |
 | `mssql_kill_connection_errors` | `counter` | - | `cntr_value` | query | Severe errors that caused SQL Server to kill the connection (raw cntr_value; use rate()). |
 | `mssql_batch_requests` | `counter` | - | `cntr_value` | query | Number of command batches received (raw cntr_value; use rate()). |

@@ -20,6 +20,7 @@
 | `mssql_database_configuration.md` | `300s` | `17` | تنظیمات دیتابیس و تشخیص Configuration Drift |
 | `mssql_database_size_growth.md` | `300s` | `3` | اندازه data/log دیتابیس و فضای مصرف‌شده — ردیابی رشد با Prometheus |
 | `mssql_database_space.md` | `300s` | `10` | ظرفیت فایل‌های دیتابیس، فضای آزاد، autogrowth و تعداد VLF |
+| `mssql_deadlock_details.md` | `60s` | `2` | جفت‌های اخیر Deadlock از system_health (`pair_info` + age؛ labelی `process_count`). |
 | `mssql_errorlog_signals.md` | `300s` | `1` | شمارنده‌های سیگنال ERRORLOG برای خطاهای منتخب SQL |
 | `mssql_file_io.md` | `180s` | `16` | متریک‌های تأخیر I/O به‌ازای هر فایل برای Microsoft SQL Server |
 | `mssql_hadr_cluster.md` | `30s` | `11` | AG Listener، quorum/اعضای WSFC و مالکیت نود FCI |

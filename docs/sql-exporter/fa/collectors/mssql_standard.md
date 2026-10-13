@@ -43,7 +43,7 @@ collectorهایی که label زیاد تولید می‌کنند برای سنا
 | `mssql_database_recovery_model` | `gauge` | `db`, `recovery_model_desc` | `recovery_model` | query | recovery_model دیتابیس‌ها: 1=FULL 2=BULK_LOGGED 3=SIMPLE |
 | `mssql_transactions` | `gauge` | `db` | `cntr_value` | query | تراکنش/ثانیه برای هر دیتابیس (cntr_value خام؛ در صورت نیاز از rate() استفاده کنید). |
 | `mssql_log_growths` | `counter` | `db` | `cntr_value` | query | تعداد دفعاتی که transaction log برای هر دیتابیس expand شده است. |
-| `mssql_deadlocks` | `counter` | — | `cntr_value` | query | تعداد درخواست‌های lock که به deadlock منجر شده‌اند (cntr_value خام؛ در صورت نیاز از rate() استفاده کنید). |
+| `mssql_deadlocks` | `counter` | — | `cntr_value` | query | تعداد درخواست‌های lock که به deadlock منجر شده‌اند (cntr_value خام؛ در صورت نیاز از rate() استفاده کنید). برای جفت‌های اخیر قربانی/طرف مقابل به `mssql_deadlock_details` مراجعه کنید. |
 | `mssql_user_errors` | `counter` | — | `cntr_value` | query | تعداد خطاهای کاربر (cntr_value خام؛ در صورت نیاز از rate() استفاده کنید). |
 | `mssql_kill_connection_errors` | `counter` | — | `cntr_value` | query | خطاهای شدیدی که باعث شد SQL Server connection را قطع کند (cntr_value خام؛ در صورت نیاز از rate() استفاده کنید). |
 | `mssql_batch_requests` | `counter` | — | `cntr_value` | query | تعداد batchهای دستوری دریافت‌شده (cntr_value خام؛ در صورت نیاز از rate() استفاده کنید). |

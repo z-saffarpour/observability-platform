@@ -5,9 +5,8 @@
 #
 # Portal / refresh-data scrape mssql_deadlock_pair_info from Prometheus only (no direct SQL).
 #
-# Permissions: GRANT VIEW SERVER STATE TO
-# Loaded via collector_files + explicit collectors list on HQ exporters.
-
+#   GRANT VIEW SERVER STATE TO
+#
 collector_name: mssql_deadlock_details
 
 min_interval: 60s
@@ -23,15 +22,36 @@ metrics:
       - victim_host
       - victim_program
       - victim_db
-      - victim_sql
+      - victim_statement_snip
       - other_spid
       - other_login
       - other_host
       - other_program
       - other_db
-      - other_sql
+      - other_statement_snip
       - process_count
     static_value: 1
+    query_ref: mssql_deadlock_pairs
+
+  - metric_name: mssql_deadlock_pair_age_seconds
+    type: gauge
+    help: 'Seconds since the xml_deadlock_report timestamp (UTC) for a recent victim/other pair.'
+    key_labels:
+      - event_time
+      - victim_spid
+      - victim_login
+      - victim_host
+      - victim_program
+      - victim_db
+      - victim_statement_snip
+      - other_spid
+      - other_login
+      - other_host
+      - other_program
+      - other_db
+      - other_statement_snip
+      - process_count
+    values: [age_seconds]
     query_ref: mssql_deadlock_pairs
 
 queries:
@@ -48,8 +68,8 @@ queries:
       DECLARE @hits TABLE (pos int NOT NULL PRIMARY KEY);
 
       SELECT @raw = t.target_data
-      FROM sys.dm_xe_session_targets AS t
-      INNER JOIN sys.dm_xe_sessions AS s
+      FROM sys.dm_xe_session_targets AS t WITH (NOLOCK)
+      INNER JOIN sys.dm_xe_sessions AS s WITH (NOLOCK)
           ON s.address = t.event_session_address
       WHERE s.name = N'system_health'
         AND t.target_name = N'ring_buffer';
@@ -106,7 +126,10 @@ queries:
               p.value(N'@hostname', N'nvarchar(128)') AS host_name,
               p.value(N'@clientapp', N'nvarchar(256)') AS program_name,
               p.value(N'@currentdbname', N'nvarchar(128)') AS db_name,
-              LEFT(REPLACE(REPLACE(ISNULL(p.value(N'(inputbuf/text())[1]', N'nvarchar(max)'), N''), CHAR(13), N' '), CHAR(10), N' '), 120) AS sql_text,
+              LEFT(
+                REPLACE(REPLACE(ISNULL(p.value(N'(inputbuf/text())[1]', N'nvarchar(max)'), N''), CHAR(13), N' '), CHAR(10), N' '),
+                120
+              ) AS statement_snip,
               CASE WHEN EXISTS (
                   SELECT 1
                   FROM e.dl.nodes(N'/deadlock/victim-list/victimProcess') vl(v2)
@@ -122,14 +145,20 @@ queries:
           ISNULL(MAX(CASE WHEN is_victim = 1 THEN host_name END), N'') AS victim_host,
           ISNULL(MAX(CASE WHEN is_victim = 1 THEN LEFT(program_name, 64) END), N'') AS victim_program,
           ISNULL(MAX(CASE WHEN is_victim = 1 THEN db_name END), N'') AS victim_db,
-          ISNULL(MAX(CASE WHEN is_victim = 1 THEN sql_text END), N'') AS victim_sql,
+          ISNULL(MAX(CASE WHEN is_victim = 1 THEN statement_snip END), N'') AS victim_statement_snip,
           CAST(MAX(CASE WHEN is_victim = 0 THEN spid END) AS varchar(16)) AS other_spid,
           ISNULL(MAX(CASE WHEN is_victim = 0 THEN login_name END), N'') AS other_login,
           ISNULL(MAX(CASE WHEN is_victim = 0 THEN host_name END), N'') AS other_host,
           ISNULL(MAX(CASE WHEN is_victim = 0 THEN LEFT(program_name, 64) END), N'') AS other_program,
           ISNULL(MAX(CASE WHEN is_victim = 0 THEN db_name END), N'') AS other_db,
-          ISNULL(MAX(CASE WHEN is_victim = 0 THEN sql_text END), N'') AS other_sql,
-          CAST(COUNT(*) AS varchar(16)) AS process_count
+          ISNULL(MAX(CASE WHEN is_victim = 0 THEN statement_snip END), N'') AS other_statement_snip,
+          CAST(COUNT(*) AS varchar(16)) AS process_count,
+          CAST(
+            CASE
+              WHEN event_time IS NULL THEN -1.0
+              ELSE DATEDIFF(SECOND, SWITCHOFFSET(event_time, '+00:00'), SYSUTCDATETIME())
+            END AS float
+          ) AS age_seconds
       FROM procs
       GROUP BY event_time
       ORDER BY event_time DESC;

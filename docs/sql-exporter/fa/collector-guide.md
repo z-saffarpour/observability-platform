@@ -77,7 +77,7 @@ metrics:
 ### 4) برای metricهای زمان‌محور از `counter` یا نرخ مشتق‌شده استفاده کن
 
 مثال:
-- تعداد deadlock
+- تعداد deadlock (`mssql_deadlocks` در `mssql_standard`؛ جفت‌های تشخیصی در `mssql_deadlock_details`)
 - job fail
 - log growth
 

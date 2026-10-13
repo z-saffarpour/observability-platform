@@ -20,6 +20,7 @@ This folder contains a dedicated guide for each collector.
 | `mssql_database_configuration.md` | `300s` | `17` | Database settings and configuration-drift signals. |
 | `mssql_database_size_growth.md` | `300s` | `3` | Database data/log size and used space — growth tracking via Prometheus. |
 | `mssql_database_space.md` | `300s` | `10` | Database file capacity, free space, autogrowth, and VLF count. |
+| `mssql_deadlock_details.md` | `60s` | `2` | Recent deadlock victim↔other pairs from system_health (`pair_info` + age; `process_count` label). |
 | `mssql_errorlog_signals.md` | `300s` | `1` | ERRORLOG signal counters for selected SQL errors (last N hours). |
 | `mssql_file_io.md` | `180s` | `16` | Per-file I/O latency metrics for Microsoft SQL Server. |
 | `mssql_hadr_cluster.md` | `30s` | `11` | AG listeners, WSFC quorum/members, and FCI node ownership. |

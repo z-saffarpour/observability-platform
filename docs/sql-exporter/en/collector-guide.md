@@ -77,7 +77,7 @@ This pattern is used in `mssql_alwayson`, where several metrics come from the sh
 ### 4) Use `counter` or derived rates for time-based signals
 
 Examples:
-- deadlocks
+- deadlocks (`mssql_deadlocks` in `mssql_standard`; forensic pairs in `mssql_deadlock_details`)
 - job failures
 - log growth
 
