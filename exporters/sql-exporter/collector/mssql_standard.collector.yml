@@ -107,9 +107,13 @@ metrics:
       - db
     values: [cntr_value]
     query: |
-      SELECT rtrim(instance_name) AS db, cntr_value
-      FROM sys.dm_os_performance_counters
-      WHERE counter_name = 'Transactions/sec' AND instance_name <> '_Total'
+      SELECT RTRIM(pc.instance_name) AS db, pc.cntr_value
+      FROM sys.dm_os_performance_counters AS pc WITH (NOLOCK)
+      INNER JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.name = RTRIM(pc.instance_name)
+         AND d.is_read_only = 0
+      WHERE pc.counter_name = N'Transactions/sec'
+        AND pc.instance_name <> N'_Total'
 
   - metric_name: mssql_log_growths
     type: counter
@@ -118,9 +122,13 @@ metrics:
       - db
     values: [cntr_value]
     query: |
-      SELECT rtrim(instance_name) AS db, cntr_value
-      FROM sys.dm_os_performance_counters WITH (NOLOCK)
-      WHERE counter_name = 'Log Growths' AND instance_name <> '_Total'
+      SELECT RTRIM(pc.instance_name) AS db, pc.cntr_value
+      FROM sys.dm_os_performance_counters AS pc WITH (NOLOCK)
+      INNER JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.name = RTRIM(pc.instance_name)
+         AND d.is_read_only = 0
+      WHERE pc.counter_name = N'Log Growths'
+        AND pc.instance_name <> N'_Total'
 
   - metric_name: mssql_deadlocks
     type: counter
@@ -285,6 +293,7 @@ queries:
       FROM sys.databases WITH (NOLOCK)
       WHERE state = 0
         AND source_database_id IS NULL
+        AND is_read_only = 0
         AND name <> N'tempdb';
 
   - query_name: mssql_process_memory

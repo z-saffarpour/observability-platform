@@ -161,7 +161,8 @@ queries:
       LEFT JOIN sys.change_tracking_databases AS ct WITH (NOLOCK)
         ON ct.database_id = d.database_id
       WHERE d.state = 0
-        AND d.source_database_id IS NULL;
+        AND d.source_database_id IS NULL
+        AND d.is_read_only = 0;
 
   - query_name: mssql_cdc_database_state
     query: |
@@ -183,6 +184,7 @@ queries:
           WHERE state = 0
             AND is_cdc_enabled = 1
             AND source_database_id IS NULL
+            AND is_read_only = 0
             AND HAS_DBACCESS(name) = 1;
 
       OPEN dbs;
@@ -312,6 +314,7 @@ queries:
             ON ct.database_id = d.database_id
           WHERE d.state = 0
             AND d.source_database_id IS NULL
+            AND d.is_read_only = 0
             AND HAS_DBACCESS(d.name) = 1;
 
       OPEN dbs;

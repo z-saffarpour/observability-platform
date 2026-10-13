@@ -45,6 +45,21 @@ groups:
           description: "Database {{ $labels.db }} has no recent full backup; age={{ $value | humanizeDuration }}."
           runbook: "Verify backup jobs, disk/space targets, and msdb backup history. Threshold sample: 25h."
 
+      # Read-only DBs: monthly Full only (Diff/Log not expected). 35d = ~1 month + grace.
+      - alert: SqlBackupFullTooOldReadOnly
+        expr: mssql_backup_age_seconds{backup_type="D",is_read_only="1"} > 3024000 or mssql_backup_age_seconds{backup_type="D",is_read_only="1"} == -1
+        for: 1h
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: availability
+          collector: mssql_backup
+        annotations:
+          summary: "Monthly Full backup for read-only database {{ $labels.db }} is missing or too old"
+          summary_fa: "بکاپ Full ماهانه دیتابیس ReadOnly {{ $labels.db }} موجود نیست یا خیلی قدیمی است"
+          description: "Read-only database {{ $labels.db }} expects Full backup ~monthly; age={{ $value | humanizeDuration }}."
+          runbook: "Confirm monthly Full job for read-only DBs. Diff/Log are not required. Threshold sample: 35d."
+
       - alert: SqlDatabaseIntegrityAtRisk
         expr: mssql_suspect_pages_total > 0 or mssql_checkdb_age_seconds > 604800
         for: 5m
@@ -56,7 +71,7 @@ groups:
         annotations:
           summary: "Database {{ $labels.db }} integrity signal requires attention"
           summary_fa: "سیگنال یکپارچگی دیتابیس {{ $labels.db }} نیاز به توجه دارد"
-          description: "Suspect pages exist or CHECKDB is older than seven days for {{ $labels.db }}."
+          description: "Suspect pages exist or CHECKDB is older than seven days for {{ $labels.db }}. Read-only DBs are excluded from CHECKDB metrics."
           runbook: "If suspect pages > 0, treat as critical corruption signal. Otherwise schedule/verify CHECKDB."
 
       - alert: SqlRestoreSecondaryBehindRpo

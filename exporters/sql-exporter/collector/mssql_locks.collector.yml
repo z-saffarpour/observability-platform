@@ -155,16 +155,19 @@ queries:
           ) AS tail
       )
       SELECT TOP (50)
-          resource_type,
-          request_mode,
+          p.resource_type,
+          p.request_mode,
           N'WAIT' AS request_status,
-          ISNULL(DB_NAME(database_id), N'') AS db,
+          ISNULL(DB_NAME(p.database_id), N'') AS db,
           CAST(COUNT_BIG(*) AS float) AS lock_count
-      FROM parsed
+      FROM parsed AS p
+      LEFT JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.database_id = p.database_id
+      WHERE ISNULL(d.is_read_only, 0) = 0
       GROUP BY
-          resource_type,
-          request_mode,
-          ISNULL(DB_NAME(database_id), N'')
+          p.resource_type,
+          p.request_mode,
+          ISNULL(DB_NAME(p.database_id), N'')
       ORDER BY lock_count DESC;
 
   - query_name: mssql_locks_waiting_count
@@ -249,21 +252,24 @@ queries:
           ) AS tail
       )
       SELECT TOP (40)
-          CAST(session_id AS nvarchar(20)) AS session_id,
-          ISNULL(DB_NAME(database_id), N'') AS db,
-          resource_type,
-          request_mode,
-          wait_type,
-          login_name,
-          CAST(MAX(wait_duration_ms) AS float) AS wait_time_ms
-      FROM parsed
+          CAST(p.session_id AS nvarchar(20)) AS session_id,
+          ISNULL(DB_NAME(p.database_id), N'') AS db,
+          p.resource_type,
+          p.request_mode,
+          p.wait_type,
+          p.login_name,
+          CAST(MAX(p.wait_duration_ms) AS float) AS wait_time_ms
+      FROM parsed AS p
+      LEFT JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.database_id = p.database_id
+      WHERE ISNULL(d.is_read_only, 0) = 0
       GROUP BY
-          session_id,
-          ISNULL(DB_NAME(database_id), N''),
-          resource_type,
-          request_mode,
-          wait_type,
-          login_name
+          p.session_id,
+          ISNULL(DB_NAME(p.database_id), N''),
+          p.resource_type,
+          p.request_mode,
+          p.wait_type,
+          p.login_name
       ORDER BY wait_time_ms DESC;
 
   - query_name: mssql_latch_stats
@@ -322,11 +328,14 @@ queries:
           FROM sys.dm_exec_requests AS r WITH (NOLOCK)
           INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
               ON r.session_id = s.session_id
+          LEFT JOIN sys.databases AS d WITH (NOLOCK)
+              ON d.database_id = r.database_id
           OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
           WHERE r.session_id <> @@SPID
             AND r.exec_context_id = 0
             AND s.is_user_process = 1
             AND ISNULL(s.program_name, N'') NOT LIKE N'%sql_exporter%'
+            AND ISNULL(d.is_read_only, 0) = 0
             AND (
               r.total_elapsed_time >= 3000
               OR r.blocking_session_id <> 0

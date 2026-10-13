@@ -120,8 +120,11 @@ queries:
               CAST(MAX(CAST(ISNULL(t.Duration, 0) AS float) / 1000.0) AS float) AS max_duration_ms,
               CAST(DATEDIFF(SECOND, MAX(t.StartTime), GETDATE()) AS float) AS age_seconds
           FROM sys.fn_trace_gettable(@path, DEFAULT) AS t
+          LEFT JOIN sys.databases AS d WITH (NOLOCK)
+              ON d.name = t.DatabaseName
           WHERE t.EventClass IN (92, 93, 94, 95)
             AND t.StartTime >= DATEADD(HOUR, -24, GETDATE())
+            AND ISNULL(d.is_read_only, 0) = 0
           GROUP BY
               t.DatabaseName,
               t.FileName,
@@ -150,6 +153,9 @@ queries:
               CAST(SUM(CASE WHEN t.EventClass IN (94, 95) THEN 1 ELSE 0 END) AS float) AS shrink_count,
               CAST(SUM(CASE WHEN t.EventClass IN (92, 93) THEN ISNULL(t.IntegerData, 0) ELSE 0 END) * 8.0 / 1024.0 AS float) AS growth_mb
           FROM sys.fn_trace_gettable(@path, DEFAULT) AS t
+          LEFT JOIN sys.databases AS d WITH (NOLOCK)
+              ON d.name = t.DatabaseName
           WHERE t.EventClass IN (92, 93, 94, 95)
-            AND t.StartTime >= DATEADD(HOUR, -24, GETDATE());
+            AND t.StartTime >= DATEADD(HOUR, -24, GETDATE())
+            AND ISNULL(d.is_read_only, 0) = 0;
       END

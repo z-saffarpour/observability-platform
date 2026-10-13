@@ -130,8 +130,11 @@ queries:
       FROM sys.dm_exec_requests AS r WITH (NOLOCK)
       INNER JOIN sys.dm_exec_sessions AS s WITH (NOLOCK)
           ON r.session_id = s.session_id
+      LEFT JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.database_id = r.database_id
       OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
       WHERE r.blocking_session_id <> 0
+        AND ISNULL(d.is_read_only, 0) = 0
       ORDER BY r.wait_time DESC;
 
   - query_name: mssql_head_blockers
@@ -177,6 +180,8 @@ queries:
           ON b.session_id = s.session_id
       LEFT JOIN sys.dm_exec_requests AS r WITH (NOLOCK)
           ON b.session_id = r.session_id
+      LEFT JOIN sys.databases AS d WITH (NOLOCK)
+          ON d.database_id = COALESCE(r.database_id, s.database_id)
       OUTER APPLY (
           SELECT TOP (1) c.most_recent_sql_handle
           FROM sys.dm_exec_connections AS c WITH (NOLOCK)
@@ -184,4 +189,5 @@ queries:
           ORDER BY c.connect_time DESC
       ) AS c
       OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) AS t
+      WHERE ISNULL(d.is_read_only, 0) = 0
       ORDER BY b.blocked_count DESC, elapsed_ms DESC;

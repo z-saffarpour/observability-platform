@@ -153,6 +153,9 @@ queries:
           ON s.group_handle = g.index_group_handle
       INNER JOIN sys.dm_db_missing_index_details AS d WITH (NOLOCK)
           ON g.index_handle = d.index_handle
+      INNER JOIN sys.databases AS db WITH (NOLOCK)
+          ON db.database_id = d.database_id
+         AND db.is_read_only = 0
       WHERE d.database_id > 4
         AND ISNULL(OBJECT_NAME(d.object_id, d.database_id), N'') <> N''
       ORDER BY s.avg_user_impact * (s.user_seeks + s.user_scans) DESC;
@@ -169,6 +172,9 @@ queries:
               ON s.group_handle = g.index_group_handle
           INNER JOIN sys.dm_db_missing_index_details AS d WITH (NOLOCK)
               ON g.index_handle = d.index_handle
+          INNER JOIN sys.databases AS db WITH (NOLOCK)
+              ON db.database_id = d.database_id
+             AND db.is_read_only = 0
           WHERE d.database_id > 4
             AND ISNULL(OBJECT_NAME(d.object_id, d.database_id), N'') <> N''
           ORDER BY s.avg_user_impact * (s.user_seeks + s.user_scans) DESC

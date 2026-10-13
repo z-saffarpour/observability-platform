@@ -141,7 +141,7 @@ metrics:
 
   - metric_name: mssql_orphaned_users
     type: gauge
-    help: 'Orphaned users per online user database (INSTANCE-authenticated principals without matching server login SID).'
+    help: 'Orphaned users per online writable user database (INSTANCE/WINDOWS principals without matching server login SID). Read-only databases are excluded.'
     key_labels:
       - db
     values: [orphan_count]
@@ -611,10 +611,12 @@ queries:
           WHERE state = 0
             AND database_id > 4
             AND source_database_id IS NULL
+            AND is_read_only = 0
             AND is_in_standby = 0
             AND HAS_DBACCESS(name) = 1
             -- Orphan checks are meaningful on writable primary only.
             -- AG/log-shipping secondaries often lack matching instance logins → false positives.
+            -- Read-only DBs are out of operational remediation scope (monthly Full backup only).
             AND ISNULL(sys.fn_hadr_is_primary_replica(name), 1) = 1;
 
       OPEN c;
