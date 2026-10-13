@@ -38,8 +38,49 @@ groups:
       - record: mssql:replication_pending_commands:max
         expr: max without(subscriber_db, agent_name, subscription_type) (mssql_replication_pending_commands)
 
+      # Free percent at three grains. Divide summed free MB by summed size
+      # (free + used). Do not average per-file percents.
+      # Data files only on the database series: log free space is a separate
+      # resource and stays on the file and filegroup="LOG" series.
+      # mssql:filegroup_free_percent remains the filtered ROWS runway series.
       - record: mssql:database_free_space_percent
-        expr: 100 - mssql_database_space_used_percent
+        expr: |
+          100 * sum without (file_id, logical_name, filegroup, type_desc, is_read_only) (
+            mssql_database_space_free_mb{type_desc="ROWS",filegroup!=""}
+          )
+          / clamp_min(
+              sum without (file_id, logical_name, filegroup, type_desc, is_read_only) (
+                mssql_database_space_free_mb{type_desc="ROWS",filegroup!=""}
+              )
+              + sum without (file_id, logical_name, filegroup, type_desc, is_read_only) (
+                mssql_database_space_used_mb{type_desc="ROWS",filegroup!=""}
+              ),
+              1e-9
+            )
+
+      - record: mssql:filegroup_free_space_percent
+        expr: |
+          100 * sum without (file_id, logical_name) (
+            mssql_database_space_free_mb{filegroup!=""}
+          )
+          / clamp_min(
+              sum without (file_id, logical_name) (
+                mssql_database_space_free_mb{filegroup!=""}
+              )
+              + sum without (file_id, logical_name) (
+                mssql_database_space_used_mb{filegroup!=""}
+              ),
+              1e-9
+            )
+
+      - record: mssql:file_free_space_percent
+        expr: |
+          100 * mssql_database_space_free_mb{filegroup!=""}
+          / clamp_min(
+              mssql_database_space_free_mb{filegroup!=""}
+              + mssql_database_space_used_mb{filegroup!=""},
+              1e-9
+            )
 
       - record: mssql:tempdb_total_used_mb
         expr: sum without(file_id, logical_name, physical_name) (mssql_tempdb_file_used_mb)
