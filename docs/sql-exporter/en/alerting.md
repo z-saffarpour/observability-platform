@@ -67,6 +67,7 @@ Every alert carries these labels:
 | `SqlLongRunningRequest` | p1-performance | request > 5m | 5m |
 | `SqlDatabaseFileSpaceHigh` | p1-space | file used > 85% | 15m |
 | `SqlFilegroupFreeSpaceLow` | p1-space | filegroup free runway < 14 days of its own 7-day growth | 1h |
+| `SqlFilegroupGrowthBlocked` | p1-space | filegroup used >= 98% and no data file can autogrow onto its volume | 15m |
 | `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
 | `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
 | `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |

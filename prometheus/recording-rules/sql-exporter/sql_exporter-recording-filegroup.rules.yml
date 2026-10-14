@@ -10,6 +10,9 @@
 # Database-level read-only DBs are removed (collector also skips them; this is
 # defense in depth until scrapes refresh). Label is_read_only on the raw series
 # is the filegroup flag, not sys.databases.is_read_only.
+# mssql:filegroup_capacity_state is the UI contract once used space reaches 98%.
+# state="Growing" means a data file can still autogrow onto its own volume.
+# state="Blocked" is the only state that pages (SqlFilegroupGrowthBlocked).
 groups:
   - name: sql_exporter.recording.filegroup_space
     interval: 1m
@@ -48,6 +51,9 @@ groups:
       - record: mssql:filegroup_free_percent
         expr: 100 * mssql:filegroup_free_mb / clamp_min(mssql:filegroup_size_mb, 1e-9)
 
+      - record: mssql:filegroup_used_percent
+        expr: 100 * mssql:filegroup_used_mb / clamp_min(mssql:filegroup_size_mb, 1e-9)
+
       - record: mssql:filegroup_growth_mb_per_day
         expr: deriv(mssql:filegroup_used_mb[7d]) * 86400
 
@@ -63,3 +69,134 @@ groups:
 
       - record: mssql:filegroup_free_mb:threshold_critical
         expr: 3 * (mssql:filegroup_growth_mb_per_day > 64)
+
+      # Next autogrowth step in MB. Fixed growth and percent growth are mutually
+      # exclusive in the collector (the unused one is 0). Absent when autogrowth
+      # is off. One series per ROWS file that can still request growth.
+      - record: mssql:datafile_autogrowth_step_mb
+        expr: |
+          (
+            mssql_database_space_growth_mb{type_desc="ROWS"}
+            + on(instance, db, file_id, logical_name, type_desc, physical_name) (
+              mssql_database_space_size_mb{type_desc="ROWS"}
+              * on(instance, db, file_id, logical_name, type_desc, physical_name) (
+                mssql_database_space_growth_percent{type_desc="ROWS"} / 100
+              )
+            )
+          ) > 0
+
+      # MB still available under max_size. Absent when size is already at max_size.
+      # Unlimited max_size (-1) is not headroom; it is handled in the required-MB rule.
+      - record: mssql:datafile_max_headroom_mb
+        expr: |
+          (
+            mssql_database_space_max_size_mb{type_desc="ROWS"}
+            - on(instance, db, file_id, logical_name, type_desc, physical_name)
+            mssql_database_space_size_mb{type_desc="ROWS"}
+          ) > 0
+
+      # MB the volume must have for the next growth of a writable ROWS file.
+      # Value is min(autogrowth step, max_size headroom), or the step when max_size
+      # is unlimited. Local AG secondaries and read-only databases are removed.
+      # Read-only filegroups are removed by the used-space join.
+      - record: mssql:datafile_growth_required_mb
+        expr: |
+          (
+            (
+              (
+                (
+                  mssql:datafile_autogrowth_step_mb
+                  <= on(instance, db, file_id, logical_name, type_desc, physical_name)
+                  mssql:datafile_max_headroom_mb
+                )
+                or on(instance, db, file_id, logical_name, type_desc, physical_name) (
+                  mssql:datafile_max_headroom_mb
+                  < on(instance, db, file_id, logical_name, type_desc, physical_name)
+                  mssql:datafile_autogrowth_step_mb
+                )
+                or on(instance, db, file_id, logical_name, type_desc, physical_name) (
+                  mssql:datafile_autogrowth_step_mb
+                  and on(instance, db, file_id, logical_name, type_desc, physical_name) (
+                    mssql_database_space_max_size_mb{type_desc="ROWS"} < 0
+                  )
+                )
+              )
+              + on(instance, db, file_id, logical_name, type_desc) group_left(filegroup, is_read_only) (
+                0 * mssql_database_space_used_mb{type_desc="ROWS", filegroup!="", is_read_only="0"}
+              )
+            )
+            unless on(instance, db) (
+              max by (instance, db) (
+                mssql_alwayson_synchronization_state{is_local="1", role_desc="SECONDARY"}
+              )
+            )
+            unless on(instance, db) (
+              mssql_database_is_read_only == 1
+            )
+          )
+
+      # Filegroups with at least one data file whose next autogrowth step fits on
+      # the volume that holds that file. Mount points such as E:\Data01 win.
+      # The drive letter is used only when that mount point is not scraped.
+      # Free space on a different volume does not count.
+      - record: mssql:filegroup_growable_files
+        expr: |
+          count by (instance, db, filegroup, is_read_only) (
+            (
+              label_replace(
+                mssql:datafile_growth_required_mb,
+                "volume", "$1", "physical_name", "([A-Za-z]:\\\\[^\\\\]+).*"
+              )
+              <= on(instance, volume) group_left() (
+                max by (instance, volume) (windows_logical_disk_free_bytes) / 1024 / 1024
+              )
+            )
+            or
+            (
+              label_replace(
+                (
+                  label_replace(
+                    mssql:datafile_growth_required_mb,
+                    "volume", "$1", "physical_name", "([A-Za-z]:\\\\[^\\\\]+).*"
+                  )
+                  unless on(instance, volume) (
+                    max by (instance, volume) (windows_logical_disk_free_bytes)
+                  )
+                ),
+                "volume", "$1", "physical_name", "([A-Za-z]:).*"
+              )
+              <= on(instance, volume) group_left() (
+                max by (instance, volume) (windows_logical_disk_free_bytes) / 1024 / 1024
+              )
+            )
+          )
+
+      # Filegroup fill has reached the allowed maximum (98% used).
+      # state="Growing": at least one data file is below max_size, autogrowth is
+      # on, and its volume can take that step. UIs show Growing and the sentence
+      # "filegroup <db>/<filegroup> has reached its allowed maximum and will grow;
+      # no DBA action". Do not alert on this state.
+      # state="Blocked": the filegroup cannot grow. SqlFilegroupGrowthBlocked warns.
+      # Read-only filegroups are excluded. System databases stay in scope.
+      # Value is used percent.
+      - record: mssql:filegroup_capacity_state
+        expr: |
+          label_replace(
+            (
+              mssql:filegroup_used_percent{is_read_only="0"} >= 98
+              and on(instance, db, filegroup, is_read_only) (
+                mssql:filegroup_growable_files > 0
+              )
+            ),
+            "state", "Growing", "instance", ".+"
+          )
+          or
+          label_replace(
+            (
+              mssql:filegroup_used_percent{is_read_only="0"} >= 98
+              unless on(instance, db, filegroup, is_read_only) (
+                mssql:filegroup_growable_files > 0
+              )
+            ),
+            "state", "Blocked", "instance", ".+"
+          )

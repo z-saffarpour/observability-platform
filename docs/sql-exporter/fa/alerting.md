@@ -67,6 +67,7 @@
 | `SqlLongRunningRequest` | p1-performance | request > ۵m | 5m |
 | `SqlDatabaseFileSpaceHigh` | p1-space | file used > ۸۵٪ | 15m |
 | `SqlFilegroupFreeSpaceLow` | p1-space | فضای خالی filegroup کمتر از ۱۴ روز رشد خودش | 1h |
+| `SqlFilegroupGrowthBlocked` | p1-space | مصرف filegroup حداقل ۹۸٪ و هیچ دیتافایلی روی ولوم خودش رشد نمی‌کند | 15m |
 | `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
 | `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
 | `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |
