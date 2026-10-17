@@ -27,8 +27,10 @@ groups:
           description: "Available memory has remained below 10% for ten minutes."
           runbook: "Check SQL memory target, working sets, and external consumers."
 
+      # U: backup volumes are WindowsBackupDiskFreeCritical / Warning.
+      # Leaving them here would page the owner twice at the same 10% threshold.
       - alert: WindowsDiskSpaceLow
-        expr: instance_volume:windows_disk_free_ratio < 0.10
+        expr: instance_volume:windows_disk_free_ratio{volume!~"U:.*"} < 0.10
         for: 15m
         labels:
           severity: warning
@@ -37,8 +39,26 @@ groups:
         annotations:
           summary: "Low disk space on {{ $labels.instance }} volume {{ $labels.volume }}"
           summary_fa: "فضای دیسک کم روی {{ $labels.instance }} volume {{ $labels.volume }}"
-          description: "Free space has remained below 10% for 15 minutes."
+          description: "Free space has remained below 10% for 15 minutes. Backup volumes on U: use WindowsBackupDiskFreeCritical."
           runbook: "Plan growth or cleanup before the critical 5% threshold."
+
+      # Dashboard red band. priority P1 routes email and SMS to the server owner.
+      # Volumes already below 5% also match WindowsDiskSpaceCritical (P0);
+      # Alertmanager inhibits this alert for that case.
+      - alert: WindowsBackupDiskFreeCritical
+        expr: instance_volume:windows_backup_disk_capacity_state{state="Critical"}
+        for: 10m
+        labels:
+          severity: critical
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "Backup volume free space below 10% on {{ $labels.instance }} {{ $labels.volume }}"
+          summary_fa: "فضای آزاد مسیر بکاپ روی {{ $labels.instance }} volume {{ $labels.volume }} کمتر از ۱۰٪ است"
+          description: "Free space is {{ $value | printf \"%.2f\" }}% on backup volume {{ $labels.volume }}. The Backup Disk Free panel turns red below 10%. Email and SMS go to owner {{ $labels.owner }}."
+          impact: "Database backups can fail when this path fills."
+          runbook: "Free space on the backup volume before the next full backup. Check retention and failed backup files on U:\\Databases\\Backup*."
+          dashboard: "/d/winexp-00-dba-overview"
 
       - alert: WindowsDiskReadLatencyHigh
         expr: |

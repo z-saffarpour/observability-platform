@@ -36,3 +36,43 @@ groups:
         expr: |
           rate(windows_mssql_bufman_buffer_cache_hits[5m])
           / clamp_min(rate(windows_mssql_bufman_buffer_cache_lookups[5m]), 1)
+
+  # Backup path free space. Same selector as the Backup Disk Free panel
+  # (volume=~"U:.*"): the U: drive and mount points such as
+  # U:\Databases\Backup01. U:\Databases\Audit is included because it is on U:.
+  # Evaluated every 1m so the series stays inside Prometheus staleness (5m).
+  # owner is kept for Alertmanager email/SMS routing.
+  # A volume whose size is 0 is dropped.
+  # States match the panel's absolute thresholds:
+  #   Critical  free < 10   (red)    email + SMS
+  #   Warning   10 <= free < 15 (orange) email only
+  #   Healthy   free >= 15  (green)  no alert
+  # Value of the state series is free percent.
+  - name: windows_exporter.recording.backup_disk
+    interval: 1m
+    rules:
+      - record: instance_volume:windows_backup_disk_free_percent
+        expr: |
+          max by (instance, job, owner, volume) (
+            100 * windows_logical_disk_free_bytes{job="windows_exporter", volume=~"U:.*"}
+            / (windows_logical_disk_size_bytes{job="windows_exporter", volume=~"U:.*"} > 0)
+          )
+
+      - record: instance_volume:windows_backup_disk_capacity_state
+        expr: |
+          label_replace(
+            instance_volume:windows_backup_disk_free_percent < 10,
+            "state", "Critical", "instance", ".+"
+          )
+          or label_replace(
+            (
+              instance_volume:windows_backup_disk_free_percent >= 10
+            ) and (
+              instance_volume:windows_backup_disk_free_percent < 15
+            ),
+            "state", "Warning", "instance", ".+"
+          )
+          or label_replace(
+            instance_volume:windows_backup_disk_free_percent >= 15,
+            "state", "Healthy", "instance", ".+"
+          )

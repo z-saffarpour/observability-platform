@@ -44,6 +44,22 @@ groups:
           description: "Pagefile free ratio is below 10% for 20 minutes."
           runbook: "Review commit charge and pagefile configuration."
 
+      # Dashboard orange band: 10% <= free < 15%. Email only (P2). No SMS.
+      - alert: WindowsBackupDiskFreeWarning
+        expr: instance_volume:windows_backup_disk_capacity_state{state="Warning"}
+        for: 30m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: host
+        annotations:
+          summary: "Backup volume free space below 15% on {{ $labels.instance }} {{ $labels.volume }}"
+          summary_fa: "فضای آزاد مسیر بکاپ روی {{ $labels.instance }} volume {{ $labels.volume }} کمتر از ۱۵٪ است"
+          description: "Free space is {{ $value | printf \"%.2f\" }}% on backup volume {{ $labels.volume }}. The Backup Disk Free panel turns orange from 10% until 15%. Email only to owner {{ $labels.owner }}."
+          impact: "The backup path is approaching the 10% page threshold."
+          runbook: "Plan cleanup or capacity before free space drops below 10%."
+          dashboard: "/d/winexp-00-dba-overview"
+
       - alert: WindowsLicenseNotGenuine
         expr: windows_license_status{state="genuine"} == 0
         for: 1h

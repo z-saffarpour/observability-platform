@@ -171,6 +171,14 @@ inhibit_rules:
       - severity = "warning"
     equal: [alertname, instance]
 
+  # U: below 5% already pages as WindowsDiskSpaceCritical (P0 email + SMS).
+  # Suppress the backup P1 so the owner is not paged twice for the same volume.
+  - source_matchers:
+      - alertname = "WindowsDiskSpaceCritical"
+    target_matchers:
+      - alertname = "WindowsBackupDiskFreeCritical"
+    equal: [instance, volume]
+
 receivers:
   - name: sms-email-p0-fmr-dba
     email_configs:

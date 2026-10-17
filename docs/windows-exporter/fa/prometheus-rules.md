@@ -17,13 +17,13 @@
 
 | فایل | اولویت / نقش | محتوا |
 |---|---|---|
-| `windows_exporter-recording.rules.yml` | — | CPU، memory، disk free/latency، pagefile، RDS sessions، buffer cache |
+| `windows_exporter-recording.rules.yml` | — | CPU، memory، disk free/latency، state مسیر بکاپ `U:`، pagefile، RDS sessions، buffer cache |
 | `windows_exporter-p0-availability.rules.yml` | P0 | Target down، collector fail، سرویس Data Platform، time skew، MSSQL collector |
 | `windows_exporter-p0-host.rules.yml` | P0 | Disk < ۵٪، commit charge بحرانی |
 | `windows_exporter-p0-mssql.rules.yml` | P0 | Log used بحرانی، AG send/redo/delay |
-| `windows_exporter-p1-host.rules.yml` | P1 | CPU، memory، disk ۱۰٪، latency، commit |
+| `windows_exporter-p1-host.rules.yml` | P1 | CPU، memory، disk ۱۰٪ به‌جز `U:`، بکاپ `U:` زیر ۱۰٪، latency، commit |
 | `windows_exporter-p1-mssql.rules.yml` | P1 | Buffer cache، PLE، deadlock، blocking، memory grant، log ۸۵٪ |
-| `windows_exporter-p2-host.rules.yml` | P2 | Processor queue، network errors، pagefile، license |
+| `windows_exporter-p2-host.rules.yml` | P2 | Processor queue، network errors، pagefile، بکاپ `U:` بین ۱۰٪ و ۱۵٪، license |
 | `windows_exporter-p2-mssql.rules.yml` | P2 | Long tran، SQL errors، latch/lock waits، tempdb، connections |
 | `windows_exporter-role-cluster.rules.yml` | نقش | Failover Cluster node/network/resource |
 | `windows_exporter-role-terminal.rules.yml` | نقش | TermService و sessionهای RDS |

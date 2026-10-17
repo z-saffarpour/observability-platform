@@ -31,7 +31,7 @@
 | `DataPlatformServiceNotRunning` | p0-availability | سرویس SQL/SSAS/PBIRS/ClusSvc running نیست | 3m |
 | `MssqlCollectorFailed` | p0-availability | `windows_mssql_collector_success == 0` | 10m |
 | `WindowsTimeSkewCritical` | p0-availability | \|time offset\| > 5s | 5m |
-| `WindowsDiskSpaceCritical` | p0-host | free disk < 5% | 10m |
+| `WindowsDiskSpaceCritical` | p0-host | free disk < ۵٪ (شامل U:) | 10m |
 | `WindowsCommitChargeCritical` | p0-host | commit ratio > 95% | 10m |
 | `MssqlLogUsedCritical` | p0-mssql | log used > 90% | 5m |
 | `MssqlAgSendQueueGrowing` | p0-mssql | log send queue > 100MB | 10m |
@@ -44,7 +44,8 @@
 |---|---|---|---|
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
-| `WindowsDiskSpaceLow` | p1-host | free disk < 10% | 15m |
+| `WindowsDiskSpaceLow` | p1-host | free disk < ۱۰٪، به‌جز مسیر بکاپ `U:` | 15m |
+| `WindowsBackupDiskFreeCritical` | p1-host | فضای آزاد `U:` کمتر از ۱۰٪ (ایمیل + SMS به Owner) | 10m |
 | `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms | 15m |
 | `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms | 15m |
 | `WindowsCommitChargeHigh` | p1-host | commit ratio > 90% | 15m |
@@ -64,6 +65,7 @@
 | `WindowsNetworkErrors` | p2-host | NIC errors/discards | 15m |
 | `WindowsPagefileLow` | p2-host | pagefile free < 10% | 20m |
 | `WindowsLicenseNotGenuine` | p2-host | genuine == 0 | 1h |
+| `WindowsBackupDiskFreeWarning` | p2-host | فضای آزاد `U:` بین ۱۰٪ و ۱۵٪ (فقط ایمیل) | 30m |
 | `MssqlLongRunningTransaction` | p2-mssql | longest tran > 1h | 15m |
 | `MssqlSqlErrors` | p2-mssql | SQL errors > 5 / 15m | — |
 | `MssqlPageIoLatchWaitsHigh` | p2-mssql | PAGEIOLATCH افزایش زیاد | 15m |
@@ -115,6 +117,8 @@
 | `instance:windows_memory_available_ratio` | `WindowsLowAvailableMemory` |
 | `instance:windows_memory_commit_ratio` | commit charge alerts |
 | `instance_volume:windows_disk_free_ratio` | disk space alerts |
+| `instance_volume:windows_backup_disk_free_percent` | درصد آزاد مسیر بکاپ |
+| `instance_volume:windows_backup_disk_capacity_state` | `WindowsBackupDiskFreeCritical`، `WindowsBackupDiskFreeWarning` |
 | `instance_volume:windows_logical_disk_*_latency_seconds:rate5m` | disk latency alerts |
 | `instance:windows_pagefile_free_ratio` | `WindowsPagefileLow` |
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |
