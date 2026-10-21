@@ -78,6 +78,8 @@ metrics:
 
   # -------------------------------------------------------------------------
   # Distribution Agent (Push runs at Distributor; Pull runs at Subscriber)
+  # subscriber is distribution.dbo.MSreplservers.srvname (srvid = subscriber_id).
+  # master.sys.servers.server_id collides with unrelated linked servers.
   # -------------------------------------------------------------------------
   - metric_name: mssql_replication_distributor_latency_seconds
     type: gauge
@@ -299,6 +301,7 @@ queries:
 
   - query_name: mssql_repl_subscriptions
     query: |
+      SET NOCOUNT ON;
       IF DB_ID(N'distribution') IS NULL
          OR OBJECT_ID(N'distribution.dbo.MSsubscriptions') IS NULL
          OR OBJECT_ID(N'distribution.dbo.MSpublications') IS NULL
@@ -314,6 +317,45 @@ queries:
       END
       ELSE
       BEGIN
+          DECLARE @mssql_repl_srv TABLE (
+              srvid smallint NOT NULL PRIMARY KEY,
+              srvname nvarchar(128) NOT NULL
+          );
+
+          IF OBJECT_ID(N'distribution.dbo.MSreplservers') IS NOT NULL
+          BEGIN
+              INSERT INTO @mssql_repl_srv (srvid, srvname)
+              SELECT rs.srvid,
+                     CAST(
+                         CASE
+                             WHEN MIN(rs.srvname) IN (N'repl_distributor')
+                             THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                             ELSE MIN(rs.srvname)
+                         END
+                     AS nvarchar(128))
+              FROM distribution.dbo.MSreplservers AS rs WITH (NOLOCK)
+              WHERE rs.srvid IS NOT NULL
+                AND rs.srvname IS NOT NULL
+                AND rs.srvname <> N''
+              GROUP BY rs.srvid;
+          END;
+
+          IF NOT EXISTS (SELECT 1 FROM @mssql_repl_srv)
+          BEGIN
+              INSERT INTO @mssql_repl_srv (srvid, srvname)
+              SELECT CAST(srv.server_id AS smallint),
+                     CAST(
+                         CASE
+                             WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                             THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                             ELSE srv.name
+                         END
+                     AS nvarchar(128))
+              FROM master.sys.servers AS srv WITH (NOLOCK)
+              WHERE srv.server_id BETWEEN 0 AND 32767
+                AND srv.name IS NOT NULL;
+          END;
+
           SELECT TOP (200)
               CASE
                   WHEN pub_srv.name IS NULL OR pub_srv.name IN (N'', N'repl_distributor')
@@ -322,7 +364,7 @@ queries:
               END AS publisher,
               ISNULL(p.publisher_db, N'') AS publisher_db,
               ISNULL(p.publication, N'') AS publication,
-              ISNULL(sub_srv.name, N'') AS subscriber,
+              ISNULL(sub_rs.srvname, N'') AS subscriber,
               ISNULL(s.subscriber_db, N'') AS subscriber_db,
               CASE s.subscription_type
                   WHEN 0 THEN N'Push'
@@ -337,14 +379,15 @@ queries:
              AND s.publisher_database_id = p.publisher_database_id
           LEFT JOIN master.sys.servers AS pub_srv WITH (NOLOCK)
               ON pub_srv.server_id = p.publisher_id
-          LEFT JOIN master.sys.servers AS sub_srv WITH (NOLOCK)
-              ON sub_srv.server_id = s.subscriber_id
+          LEFT JOIN @mssql_repl_srv AS sub_rs
+              ON sub_rs.srvid = s.subscriber_id
           WHERE s.subscriber_id >= 0
-          ORDER BY pub_srv.name, p.publisher_db, p.publication, sub_srv.name;
+          ORDER BY pub_srv.name, p.publisher_db, p.publication, sub_rs.srvname;
       END
 
   - query_name: mssql_repl_distributor_latency
     query: |
+      SET NOCOUNT ON;
       IF DB_ID(N'distribution') IS NULL
          OR OBJECT_ID(N'distribution.dbo.MSdistribution_history') IS NULL
          OR OBJECT_ID(N'distribution.dbo.MSdistribution_agents') IS NULL
@@ -365,6 +408,45 @@ queries:
       END
       ELSE
       BEGIN
+          DECLARE @mssql_repl_srv TABLE (
+              srvid smallint NOT NULL PRIMARY KEY,
+              srvname nvarchar(128) NOT NULL
+          );
+
+          IF OBJECT_ID(N'distribution.dbo.MSreplservers') IS NOT NULL
+          BEGIN
+              INSERT INTO @mssql_repl_srv (srvid, srvname)
+              SELECT rs.srvid,
+                     CAST(
+                         CASE
+                             WHEN MIN(rs.srvname) IN (N'repl_distributor')
+                             THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                             ELSE MIN(rs.srvname)
+                         END
+                     AS nvarchar(128))
+              FROM distribution.dbo.MSreplservers AS rs WITH (NOLOCK)
+              WHERE rs.srvid IS NOT NULL
+                AND rs.srvname IS NOT NULL
+                AND rs.srvname <> N''
+              GROUP BY rs.srvid;
+          END;
+
+          IF NOT EXISTS (SELECT 1 FROM @mssql_repl_srv)
+          BEGIN
+              INSERT INTO @mssql_repl_srv (srvid, srvname)
+              SELECT CAST(srv.server_id AS smallint),
+                     CAST(
+                         CASE
+                             WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                             THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                             ELSE srv.name
+                         END
+                     AS nvarchar(128))
+              FROM master.sys.servers AS srv WITH (NOLOCK)
+              WHERE srv.server_id BETWEEN 0 AND 32767
+                AND srv.name IS NOT NULL;
+          END;
+
           ;WITH latest AS (
               SELECT
                   a.publisher_db,
@@ -383,10 +465,11 @@ queries:
                        WHERE srv.server_id = a.publisher_id),
                       CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
                   ) AS publisher,
-                  ISNULL(
-                      (SELECT TOP (1) srv.name
-                       FROM master.sys.servers AS srv WITH (NOLOCK)
-                       WHERE srv.server_id = a.subscriber_id),
+                  COALESCE(
+                      (SELECT TOP (1) rs.srvname
+                       FROM @mssql_repl_srv AS rs
+                       WHERE rs.srvid = a.subscriber_id),
+                      NULLIF(a.subscriber_name, N''),
                       N''
                   ) AS subscriber,
                   h.delivery_latency,
@@ -430,6 +513,7 @@ queries:
 
   - query_name: mssql_repl_pending
     query: |
+      SET NOCOUNT ON;
       IF DB_ID(N'distribution') IS NULL
          OR OBJECT_ID(N'distribution.dbo.MSdistribution_status') IS NULL
          OR OBJECT_ID(N'distribution.dbo.MSdistribution_agents') IS NULL
@@ -445,6 +529,45 @@ queries:
       END
       ELSE
       BEGIN
+          DECLARE @mssql_repl_srv TABLE (
+              srvid smallint NOT NULL PRIMARY KEY,
+              srvname nvarchar(128) NOT NULL
+          );
+
+          IF OBJECT_ID(N'distribution.dbo.MSreplservers') IS NOT NULL
+          BEGIN
+              INSERT INTO @mssql_repl_srv (srvid, srvname)
+              SELECT rs.srvid,
+                     CAST(
+                         CASE
+                             WHEN MIN(rs.srvname) IN (N'repl_distributor')
+                             THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                             ELSE MIN(rs.srvname)
+                         END
+                     AS nvarchar(128))
+              FROM distribution.dbo.MSreplservers AS rs WITH (NOLOCK)
+              WHERE rs.srvid IS NOT NULL
+                AND rs.srvname IS NOT NULL
+                AND rs.srvname <> N''
+              GROUP BY rs.srvid;
+          END;
+
+          IF NOT EXISTS (SELECT 1 FROM @mssql_repl_srv)
+          BEGIN
+              INSERT INTO @mssql_repl_srv (srvid, srvname)
+              SELECT CAST(srv.server_id AS smallint),
+                     CAST(
+                         CASE
+                             WHEN srv.name IS NULL OR srv.name IN (N'', N'repl_distributor')
+                             THEN CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
+                             ELSE srv.name
+                         END
+                     AS nvarchar(128))
+              FROM master.sys.servers AS srv WITH (NOLOCK)
+              WHERE srv.server_id BETWEEN 0 AND 32767
+                AND srv.name IS NOT NULL;
+          END;
+
           SELECT TOP (80)
               ISNULL(
                   (SELECT TOP (1)
@@ -458,10 +581,11 @@ queries:
                   CAST(SERVERPROPERTY(N'ServerName') AS nvarchar(128))
               ) AS publisher,
               ISNULL(a.publisher_db, N'') AS publisher_db,
-              ISNULL(
-                  (SELECT TOP (1) srv.name
-                   FROM master.sys.servers AS srv WITH (NOLOCK)
-                   WHERE srv.server_id = a.subscriber_id),
+              COALESCE(
+                  (SELECT TOP (1) rs.srvname
+                   FROM @mssql_repl_srv AS rs
+                   WHERE rs.srvid = a.subscriber_id),
+                  NULLIF(MIN(a.subscriber_name), N''),
                   N''
               ) AS subscriber,
               ISNULL(a.subscriber_db, N'') AS subscriber_db,
