@@ -32,6 +32,7 @@ Every alert carries these labels:
 | `MssqlCollectorFailed` | p0-availability | `windows_mssql_collector_success == 0` | 10m |
 | `WindowsTimeSkewCritical` | p0-availability | \|time offset\| > 5s | 5m |
 | `WindowsDiskSpaceCritical` | p0-host | free disk < 5% | 10m |
+| `WindowsOlapDiskFreeSpaceCritical` | p0-host | OLAP volume free runway < 3 days of its own 7-day growth | 30m |
 | `WindowsCommitChargeCritical` | p0-host | commit ratio > 95% | 10m |
 | `MssqlLogUsedCritical` | p0-mssql | log used > 90% | 5m |
 | `MssqlAgSendQueueGrowing` | p0-mssql | log send queue > 100MB | 10m |
@@ -45,6 +46,7 @@ Every alert carries these labels:
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
 | `WindowsDiskSpaceLow` | p1-host | free disk < 10% | 15m |
+| `WindowsOlapDiskFreeSpaceLow` | p1-host | OLAP volume free runway < 14 days of its own 7-day growth | 1h |
 | `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms | 15m |
 | `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms | 15m |
 | `WindowsCommitChargeHigh` | p1-host | commit ratio > 90% | 15m |
@@ -115,6 +117,7 @@ SSAS metric details: [SSAS monitoring](ssas-monitoring.md).
 | `instance:windows_memory_available_ratio` | `WindowsLowAvailableMemory` |
 | `instance:windows_memory_commit_ratio` | commit charge alerts |
 | `instance_volume:windows_disk_free_ratio` | disk space alerts |
+| `instance_volume:windows_olap_disk_free_days` | OLAP volume runway alerts |
 | `instance_volume:windows_logical_disk_*_latency_seconds:rate5m` | disk latency alerts |
 | `instance:windows_pagefile_free_ratio` | `WindowsPagefileLow` |
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |

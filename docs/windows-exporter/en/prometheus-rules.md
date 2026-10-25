@@ -17,7 +17,7 @@ Folder and profiles: [prometheus/](prometheus.md) · SMS/Email routing: [Alertma
 
 | File | Priority / role | Contents |
 |---|---|---|
-| `windows_exporter-recording.rules.yml` | — | CPU, memory, disk free/latency, pagefile, RDS sessions, buffer cache |
+| `windows_exporter-recording.rules.yml` | — | CPU, memory, disk free/latency, OLAP volume runway, pagefile, RDS sessions, buffer cache |
 | `windows_exporter-p0-availability.rules.yml` | P0 | Target down, collector fail, data-platform services, time skew, MSSQL collector |
 | `windows_exporter-p0-host.rules.yml` | P0 | Disk < 5%, critical commit charge |
 | `windows_exporter-p0-mssql.rules.yml` | P0 | Critical log used, AG send/redo/delay |

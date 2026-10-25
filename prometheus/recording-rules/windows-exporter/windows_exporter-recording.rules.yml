@@ -36,3 +36,65 @@ groups:
         expr: |
           rate(windows_mssql_bufman_buffer_cache_hits[5m])
           / clamp_min(rate(windows_mssql_bufman_buffer_cache_lookups[5m]), 1)
+
+  # OLAP volume runway. volume_name is only on windows_logical_disk_info.
+  # The selector is case-insensitive "olap", so OLAP Data, OLAP Cache,
+  # "SQL Olap Data 01", and a volume named "Olap" are included.
+  # Parent mounts such as E: ("SQL Disk Host") and backup U: are not.
+  # Evaluated every 1m so samples stay inside Prometheus staleness (5m).
+  # Growth uses the raw 7-day window, so runway does not wait for this
+  # recorded series to age. deriv needs two samples; a full 7-day slope
+  # appears once logical-disk history covers the window.
+  # free_days is free bytes divided by this volume's own growth.
+  # Growth at or below 64 MiB/day is treated as noise and produces no runway.
+  # Negative growth (space being freed) produces no runway and no alert.
+  - name: windows_exporter.recording.olap_disk
+    interval: 1m
+    rules:
+      - record: instance_volume:windows_olap_disk_free_bytes
+        expr: |
+          windows_logical_disk_free_bytes
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+
+      - record: instance_volume:windows_olap_disk_size_bytes
+        expr: |
+          windows_logical_disk_size_bytes
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+
+      - record: instance_volume:windows_olap_disk_used_bytes
+        expr: |
+          (
+            windows_logical_disk_size_bytes
+            - windows_logical_disk_free_bytes
+          )
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+
+      - record: instance_volume:windows_olap_disk_growth_bytes_per_day
+        expr: |
+          deriv(
+            (
+              (
+                windows_logical_disk_size_bytes
+                - windows_logical_disk_free_bytes
+              )
+              * on(instance, volume) group_left(volume_name)
+              windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+            )[7d:5m]
+          ) * 86400
+
+      - record: instance_volume:windows_olap_disk_free_days
+        expr: |
+          instance_volume:windows_olap_disk_free_bytes
+          / clamp_min(
+              instance_volume:windows_olap_disk_growth_bytes_per_day > (64 * 1024 * 1024),
+              1e-9
+            )
+
+      - record: instance_volume:windows_olap_disk_free_bytes:threshold_warning
+        expr: 14 * (instance_volume:windows_olap_disk_growth_bytes_per_day > (64 * 1024 * 1024))
+
+      - record: instance_volume:windows_olap_disk_free_bytes:threshold_critical
+        expr: 3 * (instance_volume:windows_olap_disk_growth_bytes_per_day > (64 * 1024 * 1024))

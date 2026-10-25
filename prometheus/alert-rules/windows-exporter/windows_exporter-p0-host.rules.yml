@@ -26,3 +26,19 @@ groups:
           summary_fa: "commit charge روی {{ $labels.instance }} بحرانی است"
           description: "Committed memory is above 95% of the commit limit."
           runbook: "Identify top consumers, pagefile sizing, and SQL max server memory."
+
+      - alert: WindowsOlapDiskFreeSpaceCritical
+        expr: |
+          instance_volume:windows_olap_disk_free_days < 3
+          and
+          instance_volume:windows_olap_disk_growth_bytes_per_day > (64 * 1024 * 1024)
+        for: 30m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: ssas
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }}d left)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
+          description: "OLAP volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. Processing or cache writes can fail when this volume fills."
+          runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_critical. Extend the OLAP data or cache volume, or remove unused partitions, before the volume reaches zero. SMS follows priority P0."

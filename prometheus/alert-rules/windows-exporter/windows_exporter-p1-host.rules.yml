@@ -40,6 +40,22 @@ groups:
           description: "Free space has remained below 10% for 15 minutes."
           runbook: "Plan growth or cleanup before the critical 5% threshold."
 
+      - alert: WindowsOlapDiskFreeSpaceLow
+        expr: |
+          instance_volume:windows_olap_disk_free_days < 14
+          and
+          instance_volume:windows_olap_disk_growth_bytes_per_day > (64 * 1024 * 1024)
+        for: 1h
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: ssas
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }}d left)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
+          description: "OLAP volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
+          runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Extend the OLAP data or cache volume, or free space, before processing fills it. SMS follows priority P1."
+
       - alert: WindowsDiskReadLatencyHigh
         expr: |
           instance_volume:windows_logical_disk_read_latency_seconds:rate5m > 0.05

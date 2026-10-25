@@ -17,7 +17,7 @@
 
 | فایل | اولویت / نقش | محتوا |
 |---|---|---|
-| `windows_exporter-recording.rules.yml` | — | CPU، memory، disk free/latency، pagefile، RDS sessions، buffer cache |
+| `windows_exporter-recording.rules.yml` | — | CPU، memory، disk free/latency، باند پر شدن دیسک OLAP، pagefile، RDS sessions، buffer cache |
 | `windows_exporter-p0-availability.rules.yml` | P0 | Target down، collector fail، سرویس Data Platform، time skew، MSSQL collector |
 | `windows_exporter-p0-host.rules.yml` | P0 | Disk < ۵٪، commit charge بحرانی |
 | `windows_exporter-p0-mssql.rules.yml` | P0 | Log used بحرانی، AG send/redo/delay |
