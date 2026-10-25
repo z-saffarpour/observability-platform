@@ -1,0 +1,26 @@
+# P0 — scrape down for jobs without their own down alert.
+# The same alert also fires when windows_exporter and sql_exporter are both
+# down for one instance label. One exporter alone stays on its own alert.
+# Both targets must use the same instance label; host:port is not compared.
+groups:
+  - name: platform.p0.availability
+    rules:
+      - alert: InstanceDown
+        expr: |
+          (up{job!~"windows.*|sql.*"} == 0)
+          or
+          (
+            (max by (instance, owner) (up{job=~"windows.*"}) == 0)
+            and on (instance)
+            (max by (instance) (up{job=~"sql.*"}) == 0)
+          )
+        for: 45s
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+        annotations:
+          summary: "Instance {{ $labels.instance }} down"
+          summary_fa: "instance {{ $labels.instance }} در دسترس نیست"
+          description: "{{ if $labels.job }}{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 45 seconds.{{ else }}Both windows_exporter and sql_exporter on {{ $labels.instance }} have been down for more than 45 seconds.{{ end }}"
+          runbook: "Check the target process, listen port, firewall, and the Prometheus scrape error. Both exporters down on the same instance label is treated as the host down. One exporter down keeps WindowsExporterDown or SqlExporterDown. Email and SMS follow priority P0."

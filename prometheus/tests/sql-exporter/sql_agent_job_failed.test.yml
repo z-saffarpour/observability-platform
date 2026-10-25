@@ -1,0 +1,86 @@
+# SqlAgentJobFailed pages only the SMS allowlist.
+# update_site is exact. MasterData_V02_ and ERPTransfer_MasterData_ are prefixes.
+# The for window is 2m. Samples cover that pending window at a 30s interval.
+rule_files:
+  - ../../alert-rules/sql-exporter/sql_exporter-p0-jobs.rules.yml
+
+evaluation_interval: 30s
+
+tests:
+  - interval: 30s
+    input_series:
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="update_site",category_name="Uncategorized",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="MasterData_V02_Customers",category_name="Data",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="ERPTransfer_MasterData_Items",category_name="Data",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="update_site_extra",category_name="Uncategorized",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="MasterData_V01_Customers",category_name="Data",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="ERPTransfer_MasterData",category_name="Data",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="nightly_index",category_name="Maintenance",enabled="1",run_date="2026-10-25",run_time="08:00:00"}'
+        values: '1+0x8'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",job_name="update_site",category_name="Uncategorized",enabled="1",run_date="2026-10-25",run_time="09:00:00"}'
+        values: '0+0x8'
+
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: SqlAgentJobFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlAgentJobFailed
+              severity: critical
+              priority: P0
+              alert_profile: jobs
+              collector: mssql_job_failed
+              instance: sql01
+              job: sql_exporter
+              job_name: update_site
+              category_name: Uncategorized
+              enabled: "1"
+              run_date: "2026-10-25"
+              run_time: "08:00:00"
+            exp_annotations:
+              summary: "SQL Agent job update_site failed"
+              summary_fa: "job update_site در SQL Agent خطا دارد"
+              description: "Job update_site is currently reported as failed."
+              runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+          - exp_labels:
+              alertname: SqlAgentJobFailed
+              severity: critical
+              priority: P0
+              alert_profile: jobs
+              collector: mssql_job_failed
+              instance: sql01
+              job: sql_exporter
+              job_name: MasterData_V02_Customers
+              category_name: Data
+              enabled: "1"
+              run_date: "2026-10-25"
+              run_time: "08:00:00"
+            exp_annotations:
+              summary: "SQL Agent job MasterData_V02_Customers failed"
+              summary_fa: "job MasterData_V02_Customers در SQL Agent خطا دارد"
+              description: "Job MasterData_V02_Customers is currently reported as failed."
+              runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+          - exp_labels:
+              alertname: SqlAgentJobFailed
+              severity: critical
+              priority: P0
+              alert_profile: jobs
+              collector: mssql_job_failed
+              instance: sql01
+              job: sql_exporter
+              job_name: ERPTransfer_MasterData_Items
+              category_name: Data
+              enabled: "1"
+              run_date: "2026-10-25"
+              run_time: "08:00:00"
+            exp_annotations:
+              summary: "SQL Agent job ERPTransfer_MasterData_Items failed"
+              summary_fa: "job ERPTransfer_MasterData_Items در SQL Agent خطا دارد"
+              description: "Job ERPTransfer_MasterData_Items is currently reported as failed."
+              runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."

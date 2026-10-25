@@ -10,37 +10,6 @@ groups:
   - name: sql_exporter.p1.space
     interval: 60s
     rules:
-      - alert: SqlDatabaseFileSpaceHigh
-        expr: mssql_database_space_used_percent > 85
-        for: 15m
-        labels:
-          severity: warning
-          priority: P1
-          alert_profile: space
-          collector: mssql_database_space
-        annotations:
-          summary: "File usage is high for database {{ $labels.db }}"
-          summary_fa: "مصرف فایل دیتابیس {{ $labels.db }} بالا است"
-          description: "File {{ $labels.logical_name }} in {{ $labels.db }} is {{ $value | humanize }}% used."
-          runbook: "Plan growth, purge/archive, or expand max size / disk. Tune threshold per database."
-
-      - alert: SqlFilegroupFreeSpaceLow
-        expr: |
-          mssql:filegroup_free_days{is_read_only="0",db!~"master|model|msdb|tempdb"} < 14
-          and
-          mssql:filegroup_growth_mb_per_day{is_read_only="0",db!~"master|model|msdb|tempdb"} > 64
-        for: 1h
-        labels:
-          severity: warning
-          priority: P1
-          alert_profile: space
-          collector: mssql_database_space
-        annotations:
-          summary: '{{ $labels.db }} {{ $labels.filegroup }}: {{ with printf "max(mssql:filegroup_free_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q})" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ $free := . | first | value }}{{ if ge $free 1048576.0 }}{{ with printf "max(mssql:filegroup_free_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024 / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f TiB" }}{{ end }}{{ else if ge $free 1024.0 }}{{ with printf "max(mssql:filegroup_free_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f GiB" }}{{ end }}{{ else }}{{ printf "%.0f MiB" $free }}{{ end }}{{ end }} free of {{ with printf "max(mssql:filegroup_size_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q})" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ $size := . | first | value }}{{ if ge $size 1048576.0 }}{{ with printf "max(mssql:filegroup_size_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024 / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f TiB" }}{{ end }}{{ else if ge $size 1024.0 }}{{ with printf "max(mssql:filegroup_size_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f GiB" }}{{ end }}{{ else }}{{ printf "%.0f MiB" $size }}{{ end }}{{ end }} ({{ $value | printf "%.1f" }}d left)'
-          summary_fa: '{{ $labels.db }} {{ $labels.filegroup }}: {{ with printf "max(mssql:filegroup_free_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q})" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ $free := . | first | value }}{{ if ge $free 1048576.0 }}{{ with printf "max(mssql:filegroup_free_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024 / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f TiB" }}{{ end }}{{ else if ge $free 1024.0 }}{{ with printf "max(mssql:filegroup_free_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f GiB" }}{{ end }}{{ else }}{{ printf "%.0f MiB" $free }}{{ end }}{{ end }} آزاد از {{ with printf "max(mssql:filegroup_size_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q})" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ $size := . | first | value }}{{ if ge $size 1048576.0 }}{{ with printf "max(mssql:filegroup_size_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024 / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f TiB" }}{{ end }}{{ else if ge $size 1024.0 }}{{ with printf "max(mssql:filegroup_size_mb{instance=%q,db=%q,filegroup=%q,is_read_only=%q}) / 1024" $labels.instance $labels.db $labels.filegroup $labels.is_read_only | query }}{{ . | first | value | printf "%.2f GiB" }}{{ end }}{{ else }}{{ printf "%.0f MiB" $size }}{{ end }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
-          description: "Filegroup {{ $labels.filegroup }} in {{ $labels.db }} on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. The free-MB threshold is 14 times that filegroup's own daily growth, not a fixed size."
-          runbook: "Compare mssql:filegroup_free_mb with mssql:filegroup_free_mb:threshold_warning. Extend the filegroup, add a file, or free space before autogrowth or error 1105. Confirm volume free space and max_size. SMS follows priority P1."
-
       - alert: SqlFilegroupFreeSpaceCritical
         expr: |
           mssql:filegroup_free_days{is_read_only="0",db!~"master|model|msdb|tempdb"} < 3

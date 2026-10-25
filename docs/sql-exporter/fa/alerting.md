@@ -17,7 +17,7 @@
 | Label | مقادیر |
 |---|---|
 | `severity` | `critical` / `warning` / `info` |
-| `priority` | `P0` (فوری)، `P1` (بالا)، `P2` (متوسط) |
+| `priority` | `P0` (فوری)، `P1` (بالا)، `P2` (متوسط)، `P3` (فقط فهرست) |
 | `alert_profile` | `availability` / `hadr` / `jobs` / `performance` / `space` / `signals` / `maintenance` / `config` / `replication` / `ssis` / `security` / `cdc` |
 | `collector` | نام collector مربوطه |
 
@@ -37,15 +37,13 @@
 |---|---|---|---|
 | `SqlExporterDown` | p0-availability | `up{job=~"sql.*"} == 0` | 5m |
 | `SqlDatabaseNotOnline` | p0-availability | `mssql_database_state != 0` | 5m |
-| `SqlBackupFullTooOld` | p0-availability | Full backup > ۲۵h یا missing | 15m |
-| `SqlDatabaseIntegrityAtRisk` | p0-availability | suspect pages یا CHECKDB > ۷ روز | 5m |
 | `SqlRestoreSecondaryBehindRpo` | p0-availability | restore gap > ۳۰m | 10m |
 | `SqlAlwaysOnReplicaUnhealthy` | p0-hadr | sync health == 0 | 2m |
 | `SqlHadrClusterQuorumNotNormal` | p0-hadr | quorum_state != 1 | 2m |
 | `SqlHadrClusterMemberDown` | p0-hadr | member_state != 1 | 2m |
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
-| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` | 2m |
+| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` فقط برای `update_site`، `MasterData_V02_*` یا `ERPTransfer_MasterData_*` | 2m |
 | `SqlFilegroupFreeSpaceCritical` | p1-space | فضای خالی filegroup کمتر از ۳ روز رشد خودش | 30m |
 | `SqlDatabaseLogGrowthCritical` | p1-performance | رشد ۲۴ساعته لاگ بیش از ۲۵٪ لاگ همان دیتابیس و بیش از ۶۴ مگابایت | 15m |
 
@@ -70,6 +68,8 @@
 | `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
 | `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
 | `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |
+| `SqlBackupFullTooOld` | p1-availability | Full backup > ۲۵h یا missing؛ اولویت P3، بدون SMS و Email | 15m |
+| `SqlDatabaseIntegrityAtRisk` | p1-availability | suspect pages یا CHECKDB > ۷ روز؛ اولویت P3، بدون SMS و Email | 5m |
 
 ## P2 — Medium
 

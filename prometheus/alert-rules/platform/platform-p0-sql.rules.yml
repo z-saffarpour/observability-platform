@@ -1,0 +1,63 @@
+# P0 — SQL Server engine service, SQL Server Agent service, and SQL query up.
+# Service names are matched case-insensitively. windows_exporter publishes `name`.
+# DataPlatformServiceNotRunning still covers SSAS, PBIRS, and the cluster service.
+groups:
+  - name: platform.p0.sql
+    rules:
+      - alert: SqlServerDown
+        expr: |
+          (
+            windows_service_state{state="running", name=~"(?i)^mssql.+"} == 0
+            unless
+            windows_service_state{state="running", name=~"(?i).*fdlaunch.*"}
+            unless
+            windows_service_state{state="running", name=~"(?i).*olap.*"}
+          )
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "SQL Server service {{ $labels.name }} down on {{ $labels.instance }} for 3m"
+          summary_fa: "سرویس SQL Server {{ $labels.name }} روی {{ $labels.instance }} برای 3 دقیقه قطع است"
+          description: "Service {{ $labels.name }} on {{ $labels.instance }} has not been running for 3 minutes."
+          runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+
+      - alert: SqlServerAgentDown
+        expr: |
+          windows_service_state{
+            state="running",
+            name=~"(?i)^sql(serveragent|agent\\x24.+)"
+          } == 0
+        for: 3m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "SQL Server Agent service {{ $labels.name }} down on {{ $labels.instance }} for 3m"
+          summary_fa: "سرویس SQL Server Agent {{ $labels.name }} روی {{ $labels.instance }} برای 3 دقیقه قطع است"
+          description: "Service {{ $labels.name }} on {{ $labels.instance }} has not been running for 3 minutes."
+          runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
+
+      # mssql_up is 1 when SELECT 1 succeeds. A failed SQL connection usually
+      # omits the series instead of publishing 0, so a live sql_exporter scrape
+      # without mssql_up == 1 is the same outage.
+      - alert: SqlServerUnavailable
+        expr: |
+          (
+            up{job=~"sql.*"} == 1
+            unless on (instance, job, owner)
+            (mssql_up == 1)
+          )
+        for: 1m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "SQL Server {{ $labels.instance }} unavailable for 1m"
+          summary_fa: "SQL Server روی {{ $labels.instance }} برای 1 دقیقه در دسترس نیست"
+          description: "SQL Server on {{ $labels.instance }} has been unavailable for more than 1 minute."
+          runbook: "Check the SQL error log and the sql_exporter query. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0."

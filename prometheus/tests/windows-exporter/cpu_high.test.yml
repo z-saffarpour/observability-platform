@@ -1,0 +1,33 @@
+# Idle +6 per minute is 10% idle, so utilisation is 90%.
+# Idle +30 per minute is 50% idle, so utilisation is 50% and must stay silent.
+# for is 15m. 90% CPU fires by 20m. 50% CPU stays absent from the result.
+rule_files:
+  - ../../recording-rules/windows-exporter/windows_exporter-recording.rules.yml
+  - ../../alert-rules/windows-exporter/windows_exporter-p1-host.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'windows_cpu_time_total{instance="cpu-hot",job="windows_exporter",owner="OK-DBA",cpu="0",mode="idle"}'
+        values: '0+6x30'
+      - series: 'windows_cpu_time_total{instance="cpu-ok",job="windows_exporter",owner="OK-DBA",cpu="0",mode="idle"}'
+        values: '0+30x30'
+
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: WindowsHighCPU
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsHighCPU
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: cpu-hot
+              job: windows_exporter
+            exp_annotations:
+              summary: "CPU 90% on cpu-hot, above 85% for 15m"
+              summary_fa: "CPU روی cpu-hot برابر 90% است، بالای 85% برای 15 دقیقه"
+              description: "Average CPU utilization has exceeded 85% for 15 minutes."
+              runbook: "Correlate with windows_process_cpu_time_total and SQL batch requests."

@@ -1,0 +1,192 @@
+# P3 stays in the alert list. Alertmanager sends it to the empty receiver.
+groups:
+  - name: sql_exporter.p3.performance
+    interval: 30s
+    rules:
+      - alert: SqlFileIoLatencyHigh
+        expr: mssql_file_io_avg_read_latency_ms > 20 or mssql_file_io_avg_write_latency_ms > 20
+        for: 10m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_file_io
+        annotations:
+          summary: "File I/O latency is high for database {{ $labels.db }}"
+          summary_fa: "تأخیر I/O فایل دیتابیس {{ $labels.db }} بالا است"
+          description: "File {{ $labels.logical_name }} in {{ $labels.db }} exceeds 20 ms average latency."
+          runbook: "Inspect storage latency, pending I/O, and file placement. Exclude idle/archive DBs if noisy."
+
+      - alert: SqlDatabaseLogGrowthHigh
+        expr: |
+          (
+            mssql:log_growth_mb:24h{db!~"master|model|msdb|tempdb"}
+            > mssql:log_growth_mb:threshold_warning{db!~"master|model|msdb|tempdb"}
+          )
+          and
+          mssql:log_growth_mb:24h{db!~"master|model|msdb|tempdb"} > 64
+        for: 30m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_database_size_growth
+        annotations:
+          summary: "Transaction log for database {{ $labels.db }} grew beyond its threshold"
+          summary_fa: "لاگ تراکنش دیتابیس {{ $labels.db }} از آستانه خودش فراتر رفته است"
+          description: "Log for {{ $labels.db }} on {{ $labels.instance }} grew {{ $value | printf \"%.0f\" }} MB in 24h. Warning starts at 10% of this database's current log size, and only above 64 MB."
+          runbook: "Check log_reuse_wait, log backups, long transactions, AG or replication, and index maintenance. SMS follows priority P3. A planned log expand matches this alert too."
+
+      - alert: SqlBlockingPersistent
+        expr: mssql_blocking_count > 0
+        for: 5m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_blocking
+        annotations:
+          summary: "Persistent SQL Server blocking"
+          summary_fa: "blocking پایدار در SQL Server"
+          description: "{{ $value }} blocked requests have persisted for five minutes."
+          runbook: "Identify head blocker, wait type, and blocking chain. Kill only when safe and approved."
+
+      - alert: SqlMemoryGrantPressure
+        expr: mssql_memory_grants_pending > 0 or mssql_resource_semaphore_waiter_count > 0
+        for: 5m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_memory
+        annotations:
+          summary: "SQL Server memory grant pressure"
+          summary_fa: "فشار memory grant در SQL Server"
+          description: "Queries have waited for memory grants for at least five minutes."
+          runbook: "Review large sorts/hashes, max server memory, Resource Governor, and concurrent grants."
+
+      - alert: SqlTempdbPressure
+        expr: mssql_tempdb_waiting_tasks_count > 0 or mssql_tempdb_version_store_mb > 10240
+        for: 10m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_tempdb
+        annotations:
+          summary: "tempdb pressure detected"
+          summary_fa: "فشار روی tempdb شناسایی شد"
+          description: "tempdb has waiting tasks or version store exceeds 10 GiB."
+          runbook: "Check version-store consumers, spill queries, and tempdb file layout/contention."
+
+      - alert: SqlBufferPoolLifeExpectancyLow
+        expr: mssql_buffer_pool_page_life_expectancy > 0 and mssql_buffer_pool_page_life_expectancy < 300
+        for: 10m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_buffer_pool
+        annotations:
+          summary: "Buffer pool page life expectancy is low"
+          summary_fa: "page life expectancy در buffer pool پایین است"
+          description: "PLE for {{ $labels.instance }} is {{ $value }} seconds."
+          runbook: "Review memory pressure, large scans, and max server memory."
+
+      - alert: SqlSchedulerPressure
+        expr: mssql_scheduler_total_runnable > 4 or mssql_scheduler_total_work_queue > 0
+        for: 10m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_scheduler
+        annotations:
+          summary: "SQL Server scheduler pressure"
+          summary_fa: "فشار scheduler در SQL Server"
+          description: "Runnable tasks or work queue remained elevated for ten minutes."
+          runbook: "Correlate with CPU, CXPACKET/SOS_SCHEDULER_YIELD waits, and heavy queries."
+
+      - alert: SqlLockWaitPersistent
+        expr: mssql_locks_waiting > 0
+        for: 5m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_locks
+        annotations:
+          summary: "Persistent lock wait detected"
+          summary_fa: "انتظار قفل پایدار شناسایی شد"
+          description: "Session {{ $labels.session_id }} is waiting on a lock."
+          runbook: "Inspect blocking chain and lock mode; relate to SqlBlockingPersistent."
+
+      - alert: SqlLongRunningRequest
+        expr: mssql_requests_elapsed_ms > 300000
+        for: 5m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_heavy_queries
+        annotations:
+          summary: "A SQL request in database {{ $labels.db }} has run for more than five minutes"
+          summary_fa: "یک درخواست SQL در دیتابیس {{ $labels.db }} بیش از پنج دقیقه در حال اجراست"
+          description: "Session {{ $labels.session_id }} in {{ $labels.db }} has elapsed {{ $value | humanize }} ms."
+          runbook: "Review query text/plan, waits, and whether the request is expected batch work."
+
+      - alert: SqlLongTransaction
+        expr: mssql_long_transaction_seconds > 900
+        for: 5m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_transactions_long
+        annotations:
+          summary: "Long-running SQL transaction in database {{ $labels.db }}"
+          summary_fa: "تراکنش طولانی SQL در دیتابیس {{ $labels.db }}"
+          description: "Transaction in {{ $labels.db }} has been open for {{ $value | humanizeDuration }}."
+          runbook: "Find open tran sessions; check impact on log reuse and blocking."
+
+      - alert: SqlPlanCacheSingleUseRatioHigh
+        expr: mssql_plan_cache_single_use_ratio > 0.5
+        for: 15m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_plan_cache
+        annotations:
+          summary: "Plan cache single-use ratio is high"
+          summary_fa: "نسبت planهای تک‌استفاده در plan cache بالا است"
+          description: "Single-use plan ratio is {{ $value | humanizePercentage }}."
+          runbook: "Check ad-hoc workloads, optimize for ad hoc workloads, and parameterization."
+          
+      - alert: SqlConnectionCountHigh
+        expr: sum without(status) (mssql_sessions_by_status) > 500
+        for: 10m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_connections_detail
+        annotations:
+          summary: "SQL Server session count is high"
+          summary_fa: "تعداد session در SQL Server بالا است"
+          description: "Session count is {{ $value }}; tune the sample threshold for this instance."
+          runbook: "Review idle sessions, connection pooling, and application leaks."
+
+      - alert: SqlParallelismQueueHigh
+        expr: mssql_parallelism_waiting_tasks > 10
+        for: 10m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: performance
+          collector: mssql_parallelism
+        annotations:
+          summary: "Parallelism-related waiting tasks are high"
+          summary_fa: "تعداد taskهای منتظر مرتبط با parallelism بالا است"
+          description: "Wait {{ $labels.wait_type }} has {{ $value }} waiting tasks."
+          runbook: "Review MAXDOP, Cost Threshold for Parallelism, and CX* waits."          

@@ -1,0 +1,185 @@
+# Fixed-drive disk space. Constant samples cover the 15m Low and 10m Critical
+# pending windows.
+# disk-large: 2TiB with 160GiB free (~7.8%). Low percent, still above 100GiB. Silent.
+# disk-low: 500GiB with 40GiB free (8%). Low only.
+# disk-critical: 200GiB with 8GiB free (4%). Critical only; Low must not fire.
+# disk-mount: E:\Data01, 500GiB with 40GiB free (8%). Low, same as a drive letter.
+# disk-nested: U:\Databases\Backup01, 2TiB with 160GiB free. Recorded, silent.
+# disk-harddisk / disk-small / disk-removable: excluded before the threshold.
+rule_files:
+  - ../../recording-rules/windows-exporter/windows_exporter-recording.rules.yml
+  - ../../alert-rules/windows-exporter/windows_exporter-p0-host.rules.yml
+  - ../../alert-rules/windows-exporter/windows_exporter-p1-host.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'windows_logical_disk_size_bytes{instance="disk-large",job="windows_exporter",owner="OK-DBA",volume="D:"}'
+        values: '2199023255552+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-large",job="windows_exporter",owner="OK-DBA",volume="D:"}'
+        values: '171798691840+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-large",job="windows_exporter",owner="OK-DBA",volume="D:",volume_name="Data",type="fixed",disk="1",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:",volume_name="SQL Data",type="fixed",disk="2",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:",volume_name="SQL Log",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-harddisk",job="windows_exporter",owner="OK-DBA",volume="HarddiskVolume2"}'
+        values: '107374182400+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-harddisk",job="windows_exporter",owner="OK-DBA",volume="HarddiskVolume2"}'
+        values: '1073741824+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-harddisk",job="windows_exporter",owner="OK-DBA",volume="HarddiskVolume2",volume_name="Recovery",type="fixed",disk="0",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-small",job="windows_exporter",owner="OK-DBA",volume="S:"}'
+        values: '5368709120+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-small",job="windows_exporter",owner="OK-DBA",volume="S:"}'
+        values: '209715200+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-small",job="windows_exporter",owner="OK-DBA",volume="S:",volume_name="EFI",type="fixed",disk="0",filesystem="FAT32"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-removable",job="windows_exporter",owner="OK-DBA",volume="G:"}'
+        values: '107374182400+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-removable",job="windows_exporter",owner="OK-DBA",volume="G:"}'
+        values: '1073741824+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-removable",job="windows_exporter",owner="OK-DBA",volume="G:",volume_name="USB",type="removable",disk="4",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-mount",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-mount",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-mount",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01",volume_name="Data01",type="fixed",disk="5",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-nested",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01"}'
+        values: '2199023255552+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-nested",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01"}'
+        values: '171798691840+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-nested",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01",volume_name="Backup01",type="fixed",disk="6",filesystem="NTFS"}'
+        values: '1+0x20'
+
+    promql_expr_test:
+      - expr: instance_volume:windows_disk_free_ratio{instance="disk-low"}
+        eval_time: 0m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:",volume_name="SQL Data"}'
+            value: 0.08
+      - expr: instance_volume:windows_disk_free_bytes{instance="disk-low"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_bytes{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:",volume_name="SQL Data"}'
+            value: 42949672960
+      - expr: instance_volume:windows_disk_size_bytes{instance="disk-low"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_size_bytes{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:",volume_name="SQL Data"}'
+            value: 536870912000
+      - expr: instance_volume:windows_disk_free_ratio{instance="disk-low"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-low",job="windows_exporter",owner="OK-DBA",volume="E:",volume_name="SQL Data"}'
+            value: 0.08
+      - expr: instance_volume:windows_disk_free_ratio{instance="disk-critical"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:",volume_name="SQL Log"}'
+            value: 0.04
+      - expr: instance_volume:windows_disk_free_ratio{instance="disk-large"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-large",job="windows_exporter",owner="OK-DBA",volume="D:",volume_name="Data"}'
+            value: 0.078125
+      - expr: absent(instance_volume:windows_disk_free_ratio{instance="disk-harddisk"})
+        eval_time: 15m
+        exp_samples:
+          - labels: '{instance="disk-harddisk"}'
+            value: 1
+      - expr: absent(instance_volume:windows_disk_free_ratio{instance="disk-small"})
+        eval_time: 15m
+        exp_samples:
+          - labels: '{instance="disk-small"}'
+            value: 1
+      - expr: absent(instance_volume:windows_disk_free_ratio{instance="disk-removable"})
+        eval_time: 15m
+        exp_samples:
+          - labels: '{instance="disk-removable"}'
+            value: 1
+      - expr: instance_volume:windows_disk_free_ratio{instance="disk-mount"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-mount",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01",volume_name="Data01"}'
+            value: 0.08
+      - expr: instance_volume:windows_disk_free_ratio{instance="disk-nested"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-nested",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01",volume_name="Backup01"}'
+            value: 0.078125
+
+    alert_rule_test:
+      # The alert group observes the recording rule on the next evaluation,
+      # so the 15m pending window elapses at 16m.
+      - eval_time: 16m
+        alertname: WindowsDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-low
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "E:"
+              volume_name: SQL Data
+            exp_annotations:
+              summary: "SQL Data E: on disk-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "SQL Data E: روی disk-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "Volume E: (SQL Data) on disk-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend the volume before free space drops under 5% and 30GiB. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+          - exp_labels:
+              alertname: WindowsDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-mount
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "E:\\Data01"
+              volume_name: Data01
+            exp_annotations:
+              summary: "Data01 E:\\Data01 on disk-mount: 40Gi free of 500Gi (8% free)"
+              summary_fa: "Data01 E:\\Data01 روی disk-mount: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "Volume E:\\Data01 (Data01) on disk-mount has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend the volume before free space drops under 5% and 30GiB. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 15m
+        alertname: WindowsDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-critical
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "F:"
+              volume_name: SQL Log
+            exp_annotations:
+              summary: "SQL Log F: on disk-critical: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Log F: روی disk-critical: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "Volume F: (SQL Log) on disk-critical has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this volume now. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."

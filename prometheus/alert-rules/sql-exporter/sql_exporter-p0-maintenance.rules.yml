@@ -1,0 +1,18 @@
+# P0 — Medium maintenance / DBA review
+groups:
+  - name: sql_exporter.p0.maintenance
+    interval: 60s
+    rules:
+      - alert: SqlAgentJobRunningTooLong
+        expr: mssql_job_running_seconds > 7200
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: maintenance
+          collector: mssql_job_running
+        annotations:
+          summary: "SQL Agent job has been running for more than two hours"
+          summary_fa: "job در SQL Agent بیش از دو ساعت در حال اجراست"
+          description: "Job {{ $labels.job_name }} has run for {{ $value | humanizeDuration }}."
+          runbook: "Compare with baseline duration; check blocking and step progress."

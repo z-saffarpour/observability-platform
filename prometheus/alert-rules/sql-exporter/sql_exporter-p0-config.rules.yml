@@ -1,0 +1,76 @@
+# P0 — Medium configuration / growth signals
+groups:
+  - name: sql_exporter.p0.config
+    interval: 60s
+    rules:
+      - alert: SqlTriggerDisabled
+        expr: mssql_schema_ddl_age_seconds{event="disabled", object_type="trigger"} < 1800
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Trigger disabled"
+          summary_fa: "trigger غیرفعال شد"
+          description: "Trigger {{ $labels.schema_name }}.{{ $labels.object_name }} was disabled in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the DISABLE TRIGGER was planned. A disabled trigger changes DML behavior until it is enabled. Dashboard: sqlx-schema-change."
+
+      - alert: SqlTriggerEnabled
+        expr: mssql_schema_ddl_age_seconds{event="enabled", object_type="trigger"} < 1800
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Trigger enabled"
+          summary_fa: "trigger فعال شد"
+          description: "Trigger {{ $labels.schema_name }}.{{ $labels.object_name }} was enabled in {{ $labels.db }} by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
+          runbook: "Confirm the ENABLE TRIGGER was planned. Dashboard: sqlx-schema-change."
+
+      - alert: SqlSchemaDdlTraceDisabled
+        expr: mssql_schema_ddl_trace_enabled == 0
+        for: 30m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: config
+          collector: mssql_schema_ddl
+        annotations:
+          summary: "Default trace is off; schema create/drop events are not collected"
+          summary_fa: "Default trace خاموش است؛ رویدادهای ایجاد و حذف schema جمع‌آوری نمی‌شوند"
+          description: "SQL Server default trace has no path, so database, table, view, and procedure CREATE/ALTER/DROP events are invisible on this instance."
+          runbook: "Enable the default trace (sp_configure 'default trace enabled', 1) or accept that only catalog counts remain."
+
+      - alert: SqlServerConfigurationChanged
+        expr: mssql_server_ddl_age_seconds{object_class="configuration"} < 1800
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: config
+          collector: mssql_server_ddl
+        annotations:
+          summary: "SQL Server configuration option changed"
+          summary_fa: "گزینه پیکربندی SQL Server تغییر کرد"
+          description: "Option {{ $labels.object_name }} changed from {{ $labels.value_before }} to {{ $labels.value_after }} by {{ $labels.login_name }} from {{ $labels.client_host }} at {{ $labels.event_time }} (SQL Server local time)."
+          runbook: "Confirm the sp_configure change was planned and that RECONFIGURE completed. Dashboard: sqlx-server-ddl. Actor and client host require observability_server_ddl; English default-trace rows can still name the option."
+
+      - alert: SqlServerEventSessionChanged
+        expr: mssql_server_ddl_age_seconds{object_class="event_session"} < 1800
+        for: 5m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: config
+          collector: mssql_server_ddl
+        annotations:
+          summary: "Extended Events session {{ $labels.event }}"
+          summary_fa: "session در Extended Events: {{ $labels.event }}"
+          description: "Event session {{ $labels.object_name }} was {{ $labels.event }} by {{ $labels.login_name }} from {{ $labels.client_host }} at {{ $labels.event_time }} (SQL Server local time)."
+          runbook: "Confirm the event session create, alter, start, or stop was planned. STATE = START/STOP is started or stopped only when observability_server_ddl is running. Dashboard: sqlx-server-ddl."
+
+

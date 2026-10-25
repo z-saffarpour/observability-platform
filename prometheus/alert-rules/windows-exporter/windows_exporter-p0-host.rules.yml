@@ -2,17 +2,20 @@ groups:
   - name: windows_exporter.p0.host
     rules:
       - alert: WindowsDiskSpaceCritical
-        expr: instance_volume:windows_disk_free_ratio < 0.05
+        expr: |
+          instance_volume:windows_disk_free_ratio < 0.05
+          and
+          instance_volume:windows_disk_free_bytes < (30 * 1024 * 1024 * 1024)
         for: 10m
         labels:
           severity: critical
           priority: P0
           alert_profile: host
         annotations:
-          summary: "Critical disk space on {{ $labels.instance }} volume {{ $labels.volume }}"
-          summary_fa: "فضای دیسک بحرانی روی {{ $labels.instance }} volume {{ $labels.volume }}"
-          description: "Free space is below 5% for ten minutes."
-          runbook: "Free space on the volume; prioritize SQL data/log and OS drives."
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "Volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+          runbook: "Free space on this volume now. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
 
       - alert: WindowsCommitChargeCritical
         expr: instance:windows_memory_commit_ratio > 0.95
@@ -42,3 +45,19 @@ groups:
           summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
           description: "OLAP volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. Processing or cache writes can fail when this volume fills."
           runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_critical. Extend the OLAP data or cache volume, or remove unused partitions, before the volume reaches zero. SMS follows priority P0."
+
+      - alert: WindowsBackupDiskFreeSpaceCritical
+        expr: |
+          instance_volume:windows_backup_disk_free_days < 3
+          and
+          instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024)
+        for: 30m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_backup_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_backup_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }}d left)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_backup_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_backup_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
+          description: "Backup volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. Backup writes can fail when this volume fills."
+          runbook: "Compare instance_volume:windows_backup_disk_free_bytes with instance_volume:windows_backup_disk_free_bytes:threshold_critical. Extend the backup volume or remove expired backups before the volume reaches zero. SMS follows priority P0."

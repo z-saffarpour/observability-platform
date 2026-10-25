@@ -35,6 +35,13 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   routes:
+    # P3 stays in the alert list and sends no SMS or email.
+    # This route is first so an owner route cannot send it.
+    - matchers:
+        - priority = "P3"
+      receiver: none
+      continue: false
+
     - matchers:
         - owner = "FMR-DBA"
       receiver: email-p2-fmr-dba
@@ -213,12 +220,33 @@ route:
       continue: false
 
 inhibit_rules:
+  # Zero free physical memory already pages as MemoryExhausted.
+  - source_matchers:
+      - alertname = "MemoryExhausted"
+    target_matchers:
+      - alertname = "MemoryLow"
+    equal: [instance]
+
+  # SQL engine and Agent pages use SqlServerDown / SqlServerAgentDown.
+  - source_matchers:
+      - alertname =~ "SqlServerDown|SqlServerAgentDown"
+    target_matchers:
+      - alertname = "DataPlatformServiceNotRunning"
+    equal: [instance, name]
+
+  # Both exporters down is already paged as InstanceDown.
+  - source_matchers:
+      - alertname = "InstanceDown"
+    target_matchers:
+      - alertname =~ "WindowsExporterDown|SqlExporterDown"
+    equal: [instance]
+
   # P0 suppresses the same alertname at lower priority for the same server and database.
   # Server-level alerts have an empty db label and still inhibit each other.
   - source_matchers:
       - priority = "P0"
     target_matchers:
-      - priority =~ "P1|P2"
+      - priority =~ "P1|P2|P3"
     equal: [alertname, instance, db]
 
   # Critical severity suppresses warning for the same alert, server, and database.
@@ -415,3 +443,6 @@ receivers:
         headers:
           Subject: "[P2][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
         html: '{{ template "email.sql_exporter.html" . }}'
+
+  # Keeps the alert in Alertmanager and sends no SMS or email.
+  - name: none

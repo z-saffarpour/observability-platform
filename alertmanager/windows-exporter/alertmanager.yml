@@ -157,6 +157,27 @@ route:
       continue: false
 
 inhibit_rules:
+  # Zero free physical memory already pages as MemoryExhausted.
+  - source_matchers:
+      - alertname = "MemoryExhausted"
+    target_matchers:
+      - alertname = "MemoryLow"
+    equal: [instance]
+
+  # SQL engine and Agent pages use SqlServerDown / SqlServerAgentDown.
+  - source_matchers:
+      - alertname =~ "SqlServerDown|SqlServerAgentDown"
+    target_matchers:
+      - alertname = "DataPlatformServiceNotRunning"
+    equal: [instance, name]
+
+  # Both exporters down is already paged as InstanceDown.
+  - source_matchers:
+      - alertname = "InstanceDown"
+    target_matchers:
+      - alertname =~ "WindowsExporterDown|SqlExporterDown"
+    equal: [instance]
+
   # Critical P0 suppresses same alertname at lower priority on the same instance
   - source_matchers:
       - priority = "P0"
@@ -176,6 +197,14 @@ inhibit_rules:
       - alertname = "WindowsOlapDiskFreeSpaceCritical"
     target_matchers:
       - alertname = "WindowsOlapDiskFreeSpaceLow"
+    equal: [instance, volume]
+
+  # Disk P0 suppresses the 10% warning for the same volume.
+  # The generic inhibit matches alertname, so Low and Critical would both notify.
+  - source_matchers:
+      - alertname = "WindowsDiskSpaceCritical"
+    target_matchers:
+      - alertname = "WindowsDiskSpaceLow"
     equal: [instance, volume]
 
 receivers:

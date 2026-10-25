@@ -1,0 +1,72 @@
+# Host down: up==0 for 5m fires WindowsExporterDown.
+# Host restart: windows_system_system_up_time is the Unix boot timestamp.
+# A jump of more than 120s while uptime is still under 30m fires WindowsHostRestarted.
+# A 30s jitter must stay silent. A stable boot timestamp must stay silent.
+rule_files:
+  - ../../alert-rules/windows-exporter/windows_exporter-p0-availability.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="host-down",job="windows_exporter",owner="OK-DBA"}'
+        values: '0+0x40'
+
+      - series: 'up{instance="host-stable",job="windows_exporter",owner="OK-DBA"}'
+        values: '1+0x40'
+      - series: 'windows_system_system_up_time{instance="host-stable",job="windows_exporter",owner="OK-DBA"}'
+        values: '100+0x40'
+
+      - series: 'up{instance="host-reboot",job="windows_exporter",owner="FMR-DBA"}'
+        values: '1+0x40'
+      - series: 'windows_system_system_up_time{instance="host-reboot",job="windows_exporter",owner="FMR-DBA"}'
+        values: '100+0x16 900+0x24'
+
+      - series: 'up{instance="host-jitter",job="windows_exporter",owner="OK-DBA"}'
+        values: '1+0x40'
+      - series: 'windows_system_system_up_time{instance="host-jitter",job="windows_exporter",owner="OK-DBA"}'
+        values: '100+0x16 130+0x24'
+
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: WindowsExporterDown
+        exp_alerts: []
+
+      - eval_time: 5m
+        alertname: WindowsExporterDown
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsExporterDown
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              instance: host-down
+              job: windows_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Windows host host-down is down"
+              summary_fa: "سرور Windows host-down در دسترس نیست"
+              description: "Prometheus has not scraped this Windows host for five minutes. The host may be shut down, crashed, or unreachable. A stopped windows_exporter produces the same signal."
+              runbook: "Confirm whether the host was shut down. Check power, network, firewall, port 9182, and the windows_exporter service. Email and SMS follow priority P0."
+
+      - eval_time: 18m
+        alertname: WindowsHostRestarted
+        exp_alerts: []
+
+      - eval_time: 19m
+        alertname: WindowsHostRestarted
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsHostRestarted
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              instance: host-reboot
+              job: windows_exporter
+              owner: FMR-DBA
+            exp_annotations:
+              summary: "Windows host host-reboot restarted"
+              summary_fa: "سرور Windows host-reboot restart شده است"
+              description: "Boot time on host-reboot moved forward 800s within 15 minutes, and uptime is still under 30 minutes."
+              runbook: "Confirm the reboot was planned. Check System event IDs 1074, 6006, 6008, and 41. Verify SQL Server, Agent, and cluster services are running. Email and SMS follow priority P0."

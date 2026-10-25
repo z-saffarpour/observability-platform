@@ -10,8 +10,35 @@ groups:
       - record: instance:windows_memory_commit_ratio
         expr: windows_memory_committed_bytes / windows_memory_commit_limit
 
+      # Fixed volumes at a drive letter or a mount path under it, such as C:
+      # and E:\Data01. HarddiskVolume*, CD, and removable disks are excluded.
+      # Volumes under 10GiB (EFI/Recovery) are excluded. volume_name
+      # comes from windows_logical_disk_info, same join as the OLAP rules.
+      # These three series feed only WindowsDiskSpaceLow and
+      # WindowsDiskSpaceCritical. OLAP volumes remain included; their runway
+      # alerts are separate and fire from growth, not from this ratio.
+      - record: instance_volume:windows_disk_free_bytes
+        expr: |
+          (
+            windows_logical_disk_free_bytes{volume=~"[A-Za-z]:.*"}
+            and on(instance, volume)
+            (windows_logical_disk_size_bytes{volume=~"[A-Za-z]:.*"} >= (10 * 1024 * 1024 * 1024))
+          )
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume=~"[A-Za-z]:.*",type="fixed"}
+
+      - record: instance_volume:windows_disk_size_bytes
+        expr: |
+          (
+            windows_logical_disk_size_bytes{volume=~"[A-Za-z]:.*"} >= (10 * 1024 * 1024 * 1024)
+          )
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume=~"[A-Za-z]:.*",type="fixed"}
+
       - record: instance_volume:windows_disk_free_ratio
-        expr: windows_logical_disk_free_bytes / windows_logical_disk_size_bytes
+        expr: |
+          instance_volume:windows_disk_free_bytes
+          / instance_volume:windows_disk_size_bytes
 
       - record: instance_volume:windows_logical_disk_read_latency_seconds:rate5m
         expr: |
@@ -98,3 +125,57 @@ groups:
 
       - record: instance_volume:windows_olap_disk_free_bytes:threshold_critical
         expr: 3 * (instance_volume:windows_olap_disk_growth_bytes_per_day > (64 * 1024 * 1024))
+
+  # Backup drive U:, including U: and mount paths such as U:\Databases\Backup01.
+  # The drive letter is the selector; volume_name is not. SQL Audit on U: is
+  # included because it sits on this drive. Other drives are not.
+  # Same runway contract as the OLAP group: 1m evaluation, raw 7-day growth,
+  # free_days = free bytes / this volume's own growth. Growth at or below
+  # 64 MiB/day, and negative growth, produce no runway and no alert.
+  - name: windows_exporter.recording.backup_disk
+    interval: 1m
+    rules:
+      - record: instance_volume:windows_backup_disk_free_bytes
+        expr: |
+          windows_logical_disk_free_bytes
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume=~"U:.*",type="fixed"}
+
+      - record: instance_volume:windows_backup_disk_size_bytes
+        expr: |
+          windows_logical_disk_size_bytes
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume=~"U:.*",type="fixed"}
+
+      - record: instance_volume:windows_backup_disk_used_bytes
+        expr: |
+          (
+            windows_logical_disk_size_bytes
+            - windows_logical_disk_free_bytes
+          )
+          * on(instance, volume) group_left(volume_name)
+          windows_logical_disk_info{volume=~"U:.*",type="fixed"}
+
+      - record: instance_volume:windows_backup_disk_growth_bytes_per_day
+        expr: |
+          deriv(
+            (
+              (
+                windows_logical_disk_size_bytes
+                - windows_logical_disk_free_bytes
+              )
+              * on(instance, volume) group_left(volume_name)
+              windows_logical_disk_info{volume=~"U:.*",type="fixed"}
+            )[7d:5m]
+          ) * 86400
+
+      - record: instance_volume:windows_backup_disk_free_days
+        expr: |
+          instance_volume:windows_backup_disk_free_bytes
+          / clamp_min(
+              instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024),
+              1e-9
+            )
+
+      - record: instance_volume:windows_backup_disk_free_bytes:threshold_critical
+        expr: 3 * (instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024))

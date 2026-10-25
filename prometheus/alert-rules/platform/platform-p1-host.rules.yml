@@ -1,0 +1,61 @@
+# P1 — Windows CPU. irate over 2m, pending 10m, threshold 80%.
+# owner and job stay on the series so Alertmanager can route the page.
+groups:
+  - name: platform.p1.host
+    rules:
+      - alert: CpuUsage
+        expr: |
+          100 - (
+            avg by (instance, job, owner) (
+              irate(windows_cpu_time_total{mode="idle"}[2m])
+            ) * 100
+          ) > 80
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "CPU {{ $value | printf \"%.0f\" }}% on {{ $labels.instance }}, above 80% for 10m"
+          summary_fa: "CPU روی {{ $labels.instance }} برابر {{ $value | printf \"%.0f\" }}% است، بالای 80% برای 10 دقیقه"
+          description: "CPU Usage is more than 80%. VALUE = {{ $value | printf \"%.1f\" }}. LABELS: instance={{ $labels.instance }} job={{ $labels.job }} owner={{ $labels.owner }}."
+          runbook: "Correlate with windows_process_cpu_time_total and SQL batch requests. Email and SMS follow priority P1. WindowsHighCPU remains the 85% / 15m alert."
+
+      # FreePhysicalMemory / visible physical memory. windows_exporter 0.31.8
+      # emits windows_os_visible_memory_bytes. windows_cs_physical_memory_bytes
+      # is accepted when an older exporter still publishes the cs collector.
+      - alert: MemoryLow
+        expr: |
+          (
+            100 - (
+              100 * windows_os_physical_memory_free_bytes
+              / (
+                windows_os_visible_memory_bytes
+                or windows_cs_physical_memory_bytes
+              )
+            )
+          ) > 90
+        for: 10m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "Physical memory {{ $value | printf \"%.0f\" }}% on {{ $labels.instance }}, above 90% for 10m"
+          summary_fa: "حافظه فیزیکی {{ $labels.instance }} برابر {{ $value | printf \"%.0f\" }}% است، بالای 90% برای 10 دقیقه"
+          description: "Physical memory usage on {{ $labels.instance }} is above 90%. VALUE = {{ $value | printf \"%.1f\" }}."
+          runbook: "Find the consumers. This is free physical memory, not Windows available memory. WindowsLowAvailableMemory remains the available-memory alert below 10%. Email and SMS follow priority P1."
+
+      - alert: NTPClientDelay
+        expr: windows_time_ntp_round_trip_delay_seconds > 1
+        for: 5m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: "NTP delay {{ $value | printf \"%.1f\" }}s on {{ $labels.instance }}, above 1s for 5m"
+          summary_fa: "تاخیر NTP روی {{ $labels.instance }} برابر {{ $value | printf \"%.1f\" }} ثانیه است، بالای 1 ثانیه برای 5 دقیقه"
+          description: "NTP client round-trip delay on {{ $labels.instance }} is above 1 second. VALUE = {{ $value | printf \"%.3f\" }}s."
+          runbook: "Check the NTP source and network path. WindowsTimeSkewCritical remains the clock-offset alert above 5 seconds. Email and SMS follow priority P1."
+

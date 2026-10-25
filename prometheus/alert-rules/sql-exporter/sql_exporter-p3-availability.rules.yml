@@ -1,0 +1,33 @@
+# Availability alerts with priority P3.
+# P3 stays in the alert list. Alertmanager sends it to the empty receiver.
+groups:
+  - name: sql_exporter.p3.availability
+    interval: 30s
+    rules:
+      - alert: SqlBackupFullTooOld
+        expr: mssql_backup_age_seconds{backup_type="D",is_read_only="0"} > 90000 or mssql_backup_age_seconds{backup_type="D",is_read_only="0"} == -1
+        for: 15m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: availability
+          collector: mssql_backup
+        annotations:
+          summary: "Full backup for database {{ $labels.db }} is missing or too old"
+          summary_fa: "بکاپ Full دیتابیس {{ $labels.db }} موجود نیست یا خیلی قدیمی است"
+          description: "Database {{ $labels.db }} has no recent full backup; age={{ $value | humanizeDuration }}."
+          runbook: "Verify backup jobs, disk/space targets, and msdb backup history. Threshold sample: 25h. Priority P3 is listed only and sends no SMS or email."
+
+      - alert: SqlDatabaseIntegrityAtRisk
+        expr: mssql_suspect_pages_total > 0 or mssql_checkdb_age_seconds > 604800
+        for: 5m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: availability
+          collector: mssql_database_integrity
+        annotations:
+          summary: "Database {{ $labels.db }} integrity signal requires attention"
+          summary_fa: "سیگنال یکپارچگی دیتابیس {{ $labels.db }} نیاز به توجه دارد"
+          description: "Suspect pages exist or CHECKDB is older than seven days for {{ $labels.db }}."
+          runbook: "If suspect pages > 0, treat as critical corruption signal. Otherwise schedule/verify CHECKDB. Priority P3 is listed only and sends no SMS or email."

@@ -1,0 +1,39 @@
+# 30s samples. Idle counter +3 per step is 10% idle (90% CPU).
+# +15 per step is 50% idle (50% CPU) and must stay silent.
+# irate needs two samples, so the 10m pending window ends at 10m30s.
+rule_files:
+  - ../../alert-rules/platform/platform-p1-host.rules.yml
+
+evaluation_interval: 30s
+
+tests:
+  - interval: 30s
+    input_series:
+      - series: 'windows_cpu_time_total{instance="cpu-hot",job="windows_exporter",owner="OK-DBA",cpu="0",mode="idle"}'
+        values: '0+3x40'
+      - series: 'windows_cpu_time_total{instance="cpu-hot",job="windows_exporter",owner="OK-DBA",cpu="1",mode="idle"}'
+        values: '0+3x40'
+      - series: 'windows_cpu_time_total{instance="cpu-ok",job="windows_exporter",owner="FMR-DBA",cpu="0",mode="idle"}'
+        values: '0+15x40'
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CpuUsage
+        exp_alerts: []
+
+      - eval_time: 10m30s
+        alertname: CpuUsage
+        exp_alerts:
+          - exp_labels:
+              alertname: CpuUsage
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: cpu-hot
+              job: windows_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "CPU 90% on cpu-hot, above 80% for 10m"
+              summary_fa: "CPU روی cpu-hot برابر 90% است، بالای 80% برای 10 دقیقه"
+              description: "CPU Usage is more than 80%. VALUE = 90.0. LABELS: instance=cpu-hot job=windows_exporter owner=OK-DBA."
+              runbook: "Correlate with windows_process_cpu_time_total and SQL batch requests. Email and SMS follow priority P1. WindowsHighCPU remains the 85% / 15m alert."
