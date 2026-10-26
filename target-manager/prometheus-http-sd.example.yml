@@ -1,0 +1,22 @@
+# Add these entries under scrape_configs in prometheus/config/prometheus.yml
+# Adjust host/port to a trusted, reachable Target Manager API.
+# Existing file_sd_configs should remain in place.
+- job_name: windows_exporter_managed
+  metrics_path: /metrics
+  basic_auth:
+    username: prometheus_user
+    password_file: "../secrets/windows-exporter-password"
+  http_sd_configs:
+    - url: http://127.0.0.1:8080/api/discovery/windows_exporter
+      refresh_interval: 30s
+
+- job_name: sql_exporter_managed
+  scrape_interval: 180s
+  scrape_timeout: 120s
+  metrics_path: /metrics
+  basic_auth:
+    username: prometheus_user
+    password_file: "../secrets/sql-exporter-password"
+  http_sd_configs:
+    - url: http://127.0.0.1:8080/api/discovery/sql_exporter
+      refresh_interval: 30s
