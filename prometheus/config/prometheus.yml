@@ -49,3 +49,25 @@ scrape_configs:
     file_sd_configs:
       - files:
           - "../targets/sql_exporter/*.json"
+
+  # Managed targets from the Target Manager; legacy file_sd remains active.
+  # Replace target-manager:8080 with an address reachable from Prometheus.
+  - job_name: windows_exporter_managed
+    metrics_path: /metrics
+    basic_auth:
+      username: prometheus_user
+      password_file: "../secrets/windows-exporter-password"
+    http_sd_configs:
+      - url: "http://target-manager:8080/api/discovery/windows_exporter"
+        refresh_interval: 30s
+
+  - job_name: sql_exporter_managed
+    scrape_interval: 180s
+    scrape_timeout: 120s
+    metrics_path: /metrics
+    basic_auth:
+      username: prometheus_user
+      password_file: "../secrets/sql-exporter-password"
+    http_sd_configs:
+      - url: "http://target-manager:8080/api/discovery/sql_exporter"
+        refresh_interval: 30s
