@@ -17,7 +17,7 @@ By default the service binds **only to localhost**. Put it behind a TLS reverse 
 
 ## Prometheus integration
 
-The existing file discovery is retained. The main Prometheus config also has new `http_sd_configs` entries for Windows and SQL exporters. **Change `target-manager:8080` to a hostname/IP reachable from the Prometheus process**; that Docker hostname only works when Prometheus joins the same Docker network. With a host-installed Prometheus, expose the discovery API over a trusted internal HTTPS endpoint or a private interface (localhost Docker binding will not be accessible remotely). Restart/reload Prometheus after changing its YAML once; subsequent target edits are discovered automatically (30-second refresh).
+The existing file discovery is retained. An optional scrape configuration snippet is provided in `prometheus-http-sd.example.yml` for Windows and SQL exporters. Copy the jobs into the main Prometheus configuration after adapting the URL and verifying connectivity. **Change `target-manager:8080` to a hostname/IP reachable from the Prometheus process**; that Docker hostname only works when Prometheus joins the same Docker network. With a host-installed Prometheus, expose the discovery API over a trusted internal HTTPS endpoint or a private interface (localhost Docker binding will not be accessible remotely). Restart/reload Prometheus after changing its YAML once; subsequent target edits are discovered automatically (30-second refresh).
 
 New exporters added here (`node_exporter`, `postgres_exporter`, `mysql_exporter`) need separate Prometheus scrape jobs before being monitored. Exporters are **not installed** on target hosts by this application.
 
