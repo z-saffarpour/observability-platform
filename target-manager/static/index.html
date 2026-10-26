@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Observability Target Manager</title>
+<style>
+body{font:15px system-ui,sans-serif;background:#f4f6f9;color:#1e293b;max-width:1100px;margin:30px auto;padding:15px}
+section{background:white;padding:22px;border-radius:12px;box-shadow:0 1px 5px #ddd;margin-bottom:20px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+label{display:block;font-weight:600;font-size:13px}input,select{box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;margin-top:5px}
+button{background:#2563eb;color:white;border:0;border-radius:6px;padding:10px 14px;cursor:pointer}button.secondary{background:#64748b}button.danger{background:#b91c1c}
+table{border-collapse:collapse;width:100%;}td,th{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left}
+.wrap{overflow:auto}.actions{display:flex;gap:6px}.actions button{padding:6px 10px}
+#message{min-height:20px} .err{color:#b91c1c}
+</style></head><body>
+<h1>Observability Target Manager</h1><p>Register, edit and disable Prometheus targets without restarting Prometheus.</p>
+<section><h2 id="formTitle">Add target</h2>
+<form id="targetForm">
+<div><label>Server name<input name="hostname" required maxlength="253" placeholder="SQL-PROD-01"></label></div>
+<div><label>IP / DNS<input name="address" required maxlength="253" placeholder="10.10.20.15"></label></div>
+<div><label>Exporter<select name="exporter" id="exporter"></select></label></div>
+<div><label>Port<input type="number" name="port" id="port" min="1" max="65535" required></label></div>
+<div><label>Environment<select name="environment"><option value="production">Production</option><option value="staging">Staging</option><option value="development">Development</option></select></label></div>
+<div><label>Datacenter<input name="datacenter" required value="DC-A"></label></div>
+<div><label>Enabled<br><input type="checkbox" name="enabled" checked style="width:auto"></label></div>
+<div><button type="submit">Save target</button> <button type="button" class="secondary" id="reset">Cancel</button></div>
+</form><p id="message" role="status"></p></section>
+<section><h2>Registered targets</h2><div class="wrap"><table><thead><tr><th>Host</th><th>Address</th><th>Exporter</th><th>Environment</th><th>Datacenter</th><th>Enabled</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<script>
+const ports={windows_exporter:9182,sql_exporter:9399,node_exporter:9100,postgres_exporter:9187,mysql_exporter:9104};
+const form=document.getElementById('targetForm'), message=document.getElementById('message');
+let editing=null, targets=[];
+const exp=document.getElementById('exporter');
+for(const name of Object.keys(ports)){const option=document.createElement('option');option.value=name;option.textContent=name;exp.append(option)}
+exp.addEventListener('change',()=>document.getElementById('port').value=ports[exp.value]);exp.dispatchEvent(new Event('change'));
+async function request(url,options={}){const response=await fetch(url,options);if(!response.ok)throw new Error((await response.text()).slice(0,300));if(response.status!==204)return response.json()}
+function reset(){form.reset();editing=null;document.getElementById('formTitle').textContent='Add target';exp.dispatchEvent(new Event('change'))}
+document.getElementById('reset').onclick=reset;
+async function load(){
+  targets=await request('/api/targets');const body=document.getElementById('rows');body.replaceChildren();
+  for(const t of targets){const tr=document.createElement('tr');
+    for(const v of [t.hostname,t.address+':'+t.port,t.exporter,t.environment,t.datacenter,t.enabled?'Yes':'No']){
+      const td=document.createElement('td');td.textContent=v;tr.append(td)}
+    const actions=document.createElement('td');actions.className='actions';
+    const edit=document.createElement('button');edit.textContent='Edit';edit.onclick=()=>{editing=t.id;for(const k of ['hostname','address','exporter','port','environment','datacenter'])form.elements[k].value=t[k];form.elements.enabled.checked=t.enabled;document.getElementById('formTitle').textContent='Edit target #'+t.id;window.scrollTo(0,0)};
+    const remove=document.createElement('button');remove.className='danger';remove.textContent='Delete';
+    remove.onclick=async()=>{if(!confirm('Delete '+t.hostname+'?'))return;try{await request('/api/targets/'+t.id,{method:'DELETE'});await load()}catch(e){show(e,true)}};
+    actions.append(edit,remove);tr.append(actions);body.append(tr)}
+}
+function show(error,isError=false){message.textContent=String(error);message.className=isError?'err':''}
+form.onsubmit=async event=>{event.preventDefault();const d=new FormData(form);const payload=Object.fromEntries(d.entries());payload.port=Number(payload.port);payload.enabled=form.elements.enabled.checked;
+try{await request(editing?'/api/targets/'+editing:'/api/targets',{method:editing?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});reset();show('Target saved');await load()}catch(e){show(e,true)}};
+load().catch(e=>show(e,true));
+</script></body></html>
