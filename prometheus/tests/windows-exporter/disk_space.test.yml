@@ -4,7 +4,7 @@
 # disk-low: 500GiB with 40GiB free (8%). Low only.
 # disk-critical: 200GiB with 8GiB free (4%). Critical only; Low must not fire.
 # disk-mount: E:\Data01, 500GiB with 40GiB free (8%). Low, same as a drive letter.
-# disk-nested: U:\Databases\Backup01, 2TiB with 160GiB free. Recorded, silent.
+# disk-nested: U:\Databases\Backup01 is excluded from the generic disk series.
 # disk-harddisk / disk-small / disk-removable: excluded before the threshold.
 rule_files:
   - ../../recording-rules/windows-exporter/windows_exporter-recording.rules.yml
@@ -123,11 +123,11 @@ tests:
         exp_samples:
           - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-mount",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01",volume_name="Data01"}'
             value: 0.08
-      - expr: instance_volume:windows_disk_free_ratio{instance="disk-nested"}
+      - expr: absent(instance_volume:windows_disk_free_ratio{instance="disk-nested"})
         eval_time: 15m
         exp_samples:
-          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-nested",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01",volume_name="Backup01"}'
-            value: 0.078125
+          - labels: '{instance="disk-nested"}'
+            value: 1
 
     alert_rule_test:
       # The alert group observes the recording rule on the next evaluation,

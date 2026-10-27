@@ -26,7 +26,7 @@ Every alert carries these labels:
 
 | Alert | File | Summary condition | for |
 |---|---|---|---|
-| `WindowsExporterDown` | p0-availability | `up{job=~"windows.*"} == 0` (shutdown, crash, or scrape loss) | 5m |
+| `WindowsExporterDown` | p0-availability | `up{job=~"windows.*"} == 0`. Exporter target only. Both exporters down is `InstanceDown` | 5m |
 | `WindowsHostRestarted` | p0-availability | boot time advanced more than 120s and uptime is still under 30 minutes | 2m |
 | `WindowsExporterCollectorFailed` | p0-availability | `windows_exporter_collector_success == 0` | 10m |
 | `DataPlatformServiceNotRunning` | p0-availability | SQL/SSAS/PBIRS/ClusSvc not running | 3m |
@@ -35,7 +35,6 @@ Every alert carries these labels:
 | `WindowsDiskSpaceCritical` | p0-host | fixed drive or mount path, size ≥ 10GiB, free < 5% and free < 30GiB | 10m |
 | `WindowsOlapDiskFreeSpaceCritical` | p0-host | OLAP volume free runway < 3 days of its own 7-day growth | 30m |
 | `WindowsBackupDiskFreeSpaceCritical` | p0-host | U: backup volume free runway < 3 days of its own 7-day growth | 30m |
-| `WindowsDiskSpaceCritical` | p0-host | free disk < 5% (includes U:) | 10m |
 | `WindowsCommitChargeCritical` | p0-host | commit ratio > 95% | 10m |
 | `MssqlLogUsedCritical` | p0-mssql | log used > 90% | 5m |
 | `MssqlAgSendQueueGrowing` | p0-mssql | log send queue > 100MB | 10m |
@@ -48,13 +47,13 @@ Every alert carries these labels:
 |---|---|---|---|
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
-| `WindowsDiskSpaceLow` | p1-host | fixed drive or mount path, size ≥ 10GiB, free < 10% and free < 100GiB, unless the critical condition holds | 15m |
+| `WindowsDiskSpaceLow` | p1-host | fixed drive or mount path except `U:`, size ≥ 10GiB, free < 10% and free < 100GiB, unless the critical condition holds | 15m |
 | `WindowsOlapDiskFreeSpaceLow` | p1-host | OLAP volume free runway < 14 days of its own 7-day growth | 1h |
-| `WindowsDiskSpaceLow` | p1-host | free disk < 10%, except backup volumes `U:` | 15m |
-| `WindowsBackupDiskFreeCritical` | p1-host | backup volume `U:` free < 10% (email + SMS to owner) | 10m |
-| `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms | 15m |
-| `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms | 15m |
-| `WindowsCommitChargeHigh` | p1-host | commit ratio > 90% | 15m |
+| `WindowsBackupDiskFreeSpaceLow` | p1-host | U: backup volume free runway < 14 days of its own 7-day growth | 1h |
+| `WindowsBackupDiskFreeCritical` | p1-host | backup volume `U:` free < 10%. Suppressed while a U: runway alert is firing | 10m |
+| `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms; priority P3, no SMS or email | 15m |
+| `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms; priority P3, no SMS or email | 15m |
+| `WindowsCommitChargeHigh` | p1-host | commit ratio > 90%; priority P3, no SMS or email | 15m |
 | `MssqlBufferCacheLow` | p1-mssql | buffer hit ratio < 95% | 15m |
 | `MssqlPageLifeExpectancyLow` | p1-mssql | PLE < 300s | 15m |
 | `MssqlDeadlocks` | p1-mssql | deadlock increase > 0 / 15m | — |
@@ -135,13 +134,13 @@ SSAS metric details: [SSAS monitoring](ssas-monitoring.md).
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |
 | `instance_mssql:buffer_cache_hit_ratio:rate5m` | `MssqlBufferCacheLow` |
 
-`instance_volume:windows_disk_free_*` keeps fixed drives and mount paths (`volume=~"[A-Za-z]:.*"`, `type="fixed"`) of at least 10GiB, including `C:` and `E:\Data01`, and adds `volume_name`. `HarddiskVolume*`, CD, and removable disks are omitted. `instance_volume:windows_backup_disk_*` keeps fixed `U:` volumes, including `U:\Databases\Backup01`. Growth at or below 64 MiB/day does not alert. A 2TiB volume with 160GiB free stays silent; a volume already under 5% and 30GiB does not also raise `WindowsDiskSpaceLow`. Alertmanager inhibits that Low when Critical is active for the same `instance` and `volume`.
+`instance_volume:windows_disk_free_*` keeps fixed drives and mount paths (`volume=~"[A-Za-z]:.*"`, `type="fixed"`) of at least 10GiB, including `C:` and `E:\Data01`, and adds `volume_name`. `U:`, `HarddiskVolume*`, CD, and removable disks are omitted. `instance_volume:windows_backup_disk_*` keeps fixed `U:` volumes, including `U:\Databases\Backup01`. Growth at or below 64 MiB/day does not alert. Runway alerts fire at 14 days and 3 days. Alertmanager suppresses the 14-day warning and the 10% backup page while the 3-day alert is active for the same volume.
 
 ## Tuning guidance
 
 1. Tune AG (100MB), PLE (300s), and user-connection (500) thresholds per instance baseline.
 2. Load role packs only for jobs/targets that expose those metrics, or constrain them with Alertmanager inhibit/mute.
-3. `WindowsExporterDown` means the host is not being scraped: shutdown, crash, network loss, or a stopped exporter. Those causes cannot be separated from `up` alone. `WindowsHostRestarted` sees a reboot only after scrape resumes. `windows_system_system_up_time` is the Unix boot timestamp, not uptime. Both alerts are P0 and use the existing Alertmanager email and SMS route.
+3. `WindowsExporterDown` means the windows_exporter target is down. Shutdown, crash, network loss, and a stopped exporter cannot be separated from `up` alone. The host-down page is `InstanceDown`, which requires windows_exporter and sql_exporter to be down together. `WindowsHostRestarted` sees a reboot only after scrape resumes.
 
 ## Alertmanager — SMS and Email routing
 
@@ -153,6 +152,7 @@ Full details: [Alertmanager](alertmanager.md)
 | P0 | SMS (webhook) + Email | 15m |
 | P1 | Email + SMS (webhook) | 1h |
 | P2 | Email only | 12h |
+| P3 | Alert list only | none |
 
 Replace every `CHANGE_ME_*` before production. Alertmanager has no native SMS transport; SMS uses `webhook_configs` against your gateway.
 

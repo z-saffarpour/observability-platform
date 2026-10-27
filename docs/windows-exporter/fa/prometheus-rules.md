@@ -21,7 +21,7 @@
 | `windows_exporter-p0-availability.rules.yml` | P0 | قطع سرور، restart سرور، collector fail، سرویس Data Platform، time skew، MSSQL collector |
 | `windows_exporter-p0-host.rules.yml` | P0 | فضای دیسک، باند پر شدن بکاپ U، commit charge بحرانی |
 | `windows_exporter-p0-mssql.rules.yml` | P0 | Log used بحرانی، AG send/redo/delay |
-| `windows_exporter-p1-host.rules.yml` | P1 | CPU، memory، disk ۱۰٪ به‌جز `U:`، بکاپ `U:` زیر ۱۰٪، latency، commit |
+| `windows_exporter-p1-host.rules.yml` | P1 | CPU، memory، disk ۱۰٪ به‌جز `U:`، بکاپ `U:` زیر ۱۰٪ و زیر ۱۴ روز، latency و commit با اولویت P3 |
 | `windows_exporter-p1-mssql.rules.yml` | P1 | Buffer cache، PLE، deadlock، blocking، memory grant، log ۸۵٪ |
 | `windows_exporter-p2-host.rules.yml` | P2 | Processor queue، network errors، pagefile، بکاپ `U:` بین ۱۰٪ و ۱۵٪، license |
 | `windows_exporter-p2-mssql.rules.yml` | P2 | Long tran، SQL errors، latch/lock waits، tempdb، connections |

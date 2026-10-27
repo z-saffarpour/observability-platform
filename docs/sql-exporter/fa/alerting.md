@@ -44,6 +44,7 @@
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
 | `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` فقط برای `update_site`، `MasterData_V02_*` یا `ERPTransfer_MasterData_*` | 2m |
+| `SqlAgentJobRunningTooLong` | p0-maintenance | اجرای `update_site` یا `ERP_MRP` بیشتر از میانگین ۷ روز همان job | 10m |
 | `SqlFilegroupFreeSpaceCritical` | p1-space | فضای خالی filegroup کمتر از ۳ روز رشد خودش | 30m |
 | `SqlDatabaseLogGrowthCritical` | p1-performance | رشد ۲۴ساعته لاگ بیش از ۲۵٪ لاگ همان دیتابیس و بیش از ۶۴ مگابایت | 15m |
 
@@ -63,14 +64,13 @@
 | `SqlSchedulerPressure` | p1-performance | runnable > ۴ یا work queue | 10m |
 | `SqlLockWaitPersistent` | p1-performance | locks waiting > 0 | 5m |
 | `SqlLongRunningRequest` | p1-performance | request > ۵m | 5m |
-| `SqlDatabaseFileSpaceHigh` | p1-space | file used > ۸۵٪ | 15m |
-| `SqlFilegroupFreeSpaceLow` | p1-space | فضای خالی filegroup کمتر از ۱۴ روز رشد خودش | 1h |
 | `SqlFilegroupGrowthBlocked` | p1-space | مصرف filegroup حداقل ۹۸٪ و هیچ دیتافایلی روی ولوم خودش رشد نمی‌کند | 15m |
-| `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
-| `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
-| `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |
-| `SqlBackupFullTooOld` | p1-availability | Full backup > ۲۵h یا missing؛ اولویت P3، بدون SMS و Email | 15m |
-| `SqlDatabaseIntegrityAtRisk` | p1-availability | suspect pages یا CHECKDB > ۷ روز؛ اولویت P3، بدون SMS و Email | 5m |
+| `SqlDatabaseFileSpaceHigh` | p3-space | file used > ۸۵٪؛ اولویت P3، بدون SMS و Email | 15m |
+| `SqlAgentJobRecentFailure` | p3-jobs | history failures > 0؛ اولویت P3، بدون SMS و Email | 5m |
+| `SqlAgentJobLastRunFailed` | p3-jobs | last outcome == 0؛ اولویت P3، بدون SMS و Email | 5m |
+| `SqlErrorlogSignalDetected` | p3-signals | errorlog signal > 0؛ اولویت P3، بدون SMS و Email | 5m |
+| `SqlBackupFullTooOld` | p3-availability | Full backup > ۲۵h یا missing؛ اولویت P3، بدون SMS و Email | 15m |
+| `SqlDatabaseIntegrityAtRisk` | p3-availability | suspect pages یا CHECKDB > ۷ روز؛ اولویت P3، بدون SMS و Email | 5m |
 
 ## P2 — Medium
 
@@ -89,19 +89,18 @@
 | `SqlMissingIndexHighImpact` | p2-maintenance | score > ۱M | 30m |
 | `SqlStatisticsStale` | p2-maintenance | stale stats > ۲۰ | 30m |
 | `SqlQueryStoreDisabled` | p2-maintenance | Query Store off | 30m |
-| `SqlAgentJobRunningTooLong` | p2-maintenance | running > ۲h | 10m |
 | `SqlDatabaseConfigurationUnsafe` | p2-config | AUTO_SHRINK/CLOSE یا PAGE_VERIFY | 10m |
 | `SqlDatabaseGrowingRapidly` | p2-config | رشد > ۱۰ GiB / ۲۴h | 15m |
 
 ## بسته‌های نقش
 
-### Replication (`role-replication`)
+### Replication (`sql_exporter-p0-replication.rules.yml`)
 
 | Alert | اولویت | شرط |
 |---|---|---|
 | `SqlReplicationBacklog` | P0 | pending > ۱۰k یا latency > ۵m |
 
-### SSIS (`role-ssis`)
+### SSIS (`sql_exporter-p3-ssis.rules.yml`)
 
 | Alert | اولویت | شرط |
 |---|---|---|

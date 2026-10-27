@@ -31,6 +31,8 @@ tests:
         values: '1+0x8'
       - series: 'mssql_up{instance="sql-ok",job="sql_exporter",owner="FMR-DBA"}'
         values: '1+0x8'
+      - series: 'up{instance="sql-ok",job="sql_exporter_managed",owner="FMR-DBA"}'
+        values: '1+0x8'
       - series: 'up{instance="sql-miss",job="sql_exporter",owner="OK-DBA"}'
         values: '1+0x8'
       - series: 'up{instance="sql-scrape-down",job="sql_exporter",owner="OK-DBA"}'
@@ -118,30 +120,30 @@ tests:
         exp_alerts:
           - exp_labels:
               alertname: SqlServerUnavailable
-              severity: critical
-              priority: P0
+              severity: info
+              priority: P3
               alert_profile: mssql
               instance: sql-miss
               job: sql_exporter
               owner: OK-DBA
             exp_annotations:
-              summary: "SQL Server sql-miss unavailable for 1m"
-              summary_fa: "SQL Server روی sql-miss برای 1 دقیقه در دسترس نیست"
-              description: "SQL Server on sql-miss has been unavailable for more than 1 minute."
-              runbook: "Check the SQL error log and the sql_exporter query. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0."
+              summary: "SQL query up missing on sql-miss for 1m"
+              summary_fa: "متریک mssql_up روی sql-miss برای 1 دقیقه نیست"
+              description: "sql_exporter on sql-miss is up, and no mssql_up == 1 series exists for this instance."
+              runbook: "Confirm whether SELECT 1 failed or the mssql_standard collector is absent. A failed scrape of the exporter itself stays on SqlExporterDown. Priority P3 is listed only and sends no SMS or email."
           - exp_labels:
               alertname: SqlServerUnavailable
-              severity: critical
-              priority: P0
+              severity: info
+              priority: P3
               alert_profile: mssql
               instance: sql01
               job: sql_exporter
               owner: OK-DBA
             exp_annotations:
-              summary: "SQL Server sql01 unavailable for 1m"
-              summary_fa: "SQL Server روی sql01 برای 1 دقیقه در دسترس نیست"
-              description: "SQL Server on sql01 has been unavailable for more than 1 minute."
-              runbook: "Check the SQL error log and the sql_exporter query. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0."
+              summary: "SQL query up missing on sql01 for 1m"
+              summary_fa: "متریک mssql_up روی sql01 برای 1 دقیقه نیست"
+              description: "sql_exporter on sql01 is up, and no mssql_up == 1 series exists for this instance."
+              runbook: "Confirm whether SELECT 1 failed or the mssql_standard collector is absent. A failed scrape of the exporter itself stays on SqlExporterDown. Priority P3 is listed only and sends no SMS or email."
 
       - eval_time: 4m
         alertname: NTPClientDelay

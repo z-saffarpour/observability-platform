@@ -1,4 +1,5 @@
-# Host down: up==0 for 5m fires WindowsExporterDown.
+# Exporter down: up==0 for 5m fires WindowsExporterDown.
+# That alert is the windows_exporter target. Host down is InstanceDown.
 # Host restart: windows_system_system_up_time is the Unix boot timestamp.
 # A jump of more than 120s while uptime is still under 30m fires WindowsHostRestarted.
 # A 30s jitter must stay silent. A stable boot timestamp must stay silent.
@@ -45,10 +46,10 @@ tests:
               job: windows_exporter
               owner: OK-DBA
             exp_annotations:
-              summary: "Windows host host-down is down"
-              summary_fa: "سرور Windows host-down در دسترس نیست"
-              description: "Prometheus has not scraped this Windows host for five minutes. The host may be shut down, crashed, or unreachable. A stopped windows_exporter produces the same signal."
-              runbook: "Confirm whether the host was shut down. Check power, network, firewall, port 9182, and the windows_exporter service. Email and SMS follow priority P0."
+              summary: "windows_exporter is down on host-down"
+              summary_fa: "windows_exporter روی host-down در دسترس نیست"
+              description: "Prometheus has not scraped windows_exporter on host-down for five minutes. This is the exporter target, not proof that the host is down. Both windows_exporter and sql_exporter down on the same instance is InstanceDown."
+              runbook: "Check the windows_exporter service, port 9182, firewall, and whether the host itself is shut down. Email and SMS follow priority P0."
 
       - eval_time: 18m
         alertname: WindowsHostRestarted

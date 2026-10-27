@@ -21,7 +21,7 @@ Folder and profiles: [prometheus/](prometheus.md) · SMS/Email routing: [Alertma
 | `windows_exporter-p0-availability.rules.yml` | P0 | Host down, host restart, collector fail, data-platform services, time skew, MSSQL collector |
 | `windows_exporter-p0-host.rules.yml` | P0 | Disk space, U: backup runway, critical commit charge |
 | `windows_exporter-p0-mssql.rules.yml` | P0 | Critical log used, AG send/redo/delay |
-| `windows_exporter-p1-host.rules.yml` | P1 | CPU, memory, disk 10% except `U:`, backup `U:` < 10%, latency, commit |
+| `windows_exporter-p1-host.rules.yml` | P1 | CPU, memory, disk 10% except `U:`, backup `U:` under 10% and under 14 days, latency and commit at P3 |
 | `windows_exporter-p1-mssql.rules.yml` | P1 | Buffer cache, PLE, deadlocks, blocking, memory grants, log 85% |
 | `windows_exporter-p2-host.rules.yml` | P2 | Processor queue, network errors, pagefile, backup `U:` 10–15%, license |
 | `windows_exporter-p2-mssql.rules.yml` | P2 | Long tran, SQL errors, latch/lock waits, tempdb, connections |

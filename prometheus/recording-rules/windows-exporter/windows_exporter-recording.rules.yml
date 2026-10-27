@@ -17,23 +17,24 @@ groups:
       # These three series feed only WindowsDiskSpaceLow and
       # WindowsDiskSpaceCritical. OLAP volumes remain included; their runway
       # alerts are separate and fire from growth, not from this ratio.
+      # U: is excluded. Backup percent and runway alerts own that drive.
       - record: instance_volume:windows_disk_free_bytes
         expr: |
           (
-            windows_logical_disk_free_bytes{volume=~"[A-Za-z]:.*"}
+            windows_logical_disk_free_bytes{volume=~"[A-Za-z]:.*",volume!~"U:.*"}
             and on(instance, volume)
-            (windows_logical_disk_size_bytes{volume=~"[A-Za-z]:.*"} >= (10 * 1024 * 1024 * 1024))
+            (windows_logical_disk_size_bytes{volume=~"[A-Za-z]:.*",volume!~"U:.*"} >= (10 * 1024 * 1024 * 1024))
           )
           * on(instance, volume) group_left(volume_name)
-          windows_logical_disk_info{volume=~"[A-Za-z]:.*",type="fixed"}
+          windows_logical_disk_info{volume=~"[A-Za-z]:.*",volume!~"U:.*",type="fixed"}
 
       - record: instance_volume:windows_disk_size_bytes
         expr: |
           (
-            windows_logical_disk_size_bytes{volume=~"[A-Za-z]:.*"} >= (10 * 1024 * 1024 * 1024)
+            windows_logical_disk_size_bytes{volume=~"[A-Za-z]:.*",volume!~"U:.*"} >= (10 * 1024 * 1024 * 1024)
           )
           * on(instance, volume) group_left(volume_name)
-          windows_logical_disk_info{volume=~"[A-Za-z]:.*",type="fixed"}
+          windows_logical_disk_info{volume=~"[A-Za-z]:.*",volume!~"U:.*",type="fixed"}
 
       - record: instance_volume:windows_disk_free_ratio
         expr: |
@@ -176,6 +177,9 @@ groups:
               instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024),
               1e-9
             )
+
+      - record: instance_volume:windows_backup_disk_free_bytes:threshold_warning
+        expr: 14 * (instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024))
 
       - record: instance_volume:windows_backup_disk_free_bytes:threshold_critical
         expr: 3 * (instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024))

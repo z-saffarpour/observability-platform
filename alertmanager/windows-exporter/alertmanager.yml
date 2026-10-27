@@ -1,4 +1,4 @@
-# Alertmanager config for windows_exporter priority routing (P0 / P1 / P2).
+# Alertmanager config for windows_exporter priority routing (P0 / P1 / P2 / P3).
 #
 # Channels:
 #   - Email  → native email_configs (SMTP)
@@ -33,6 +33,13 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   routes:
+    # P3 stays in the alert list and sends no SMS or email.
+    # This route is first so an owner route cannot send it.
+    - matchers:
+        - priority = "P3"
+      receiver: none
+      continue: false
+
     - matchers:
         - owner = "FMR-DBA"
       receiver: email-p2-fmr-dba
@@ -197,6 +204,20 @@ inhibit_rules:
       - alertname = "WindowsOlapDiskFreeSpaceCritical"
     target_matchers:
       - alertname = "WindowsOlapDiskFreeSpaceLow"
+    equal: [instance, volume]
+
+  # Backup runway P0 suppresses the 14-day warning for the same volume.
+  - source_matchers:
+      - alertname = "WindowsBackupDiskFreeSpaceCritical"
+    target_matchers:
+      - alertname = "WindowsBackupDiskFreeSpaceLow"
+    equal: [instance, volume]
+
+  # A firing runway alert already pages this U: volume.
+  - source_matchers:
+      - alertname =~ "WindowsBackupDiskFreeSpaceCritical|WindowsBackupDiskFreeSpaceLow"
+    target_matchers:
+      - alertname = "WindowsBackupDiskFreeCritical"
     equal: [instance, volume]
 
   # Disk P0 suppresses the 10% warning for the same volume.
@@ -389,3 +410,6 @@ receivers:
         headers:
           Subject: "[P2][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
         html: '{{ template "email.windows_exporter.html" . }}'
+
+  # Keeps the alert in Alertmanager and sends no SMS or email.
+  - name: none

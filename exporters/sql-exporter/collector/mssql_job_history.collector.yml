@@ -113,6 +113,15 @@ metrics:
     values: [avg_duration_seconds]
     query_ref: mssql_job_history_avg_success_30d
 
+  - metric_name: mssql_job_history_avg_duration_seconds_7d
+    type: gauge
+    help: 'Average successful job duration (seconds) finished in last 7d (step_id=0, run_status=1, duration>=60s). Window uses finish time. Absent when that job has no qualifying success in the window.'
+    key_labels:
+      - job_name
+      - category_name
+    values: [avg_duration_seconds]
+    query_ref: mssql_job_history_avg_success_7d
+
 queries:
   - query_name: mssql_job_history_runs
     query: |
@@ -360,4 +369,45 @@ queries:
           ON j.category_id = c.category_id
       WHERE hist.duration_seconds >= 60
         AND hist.finish_dt >= DATEADD(DAY, -30, GETDATE())
+      GROUP BY j.name, c.name;
+
+  # 7d baseline for SqlAgentJobRunningTooLong. Same success and duration rules as 30d.
+  - query_name: mssql_job_history_avg_success_7d
+    query: |
+      ;WITH hist AS
+      (
+        SELECT
+            h.job_id,
+            (
+              ((h.run_duration / 10000) * 3600)
+                + (((h.run_duration % 10000) / 100) * 60)
+                + (h.run_duration % 100)
+            ) AS duration_seconds,
+            DATEADD(
+              SECOND,
+              ((h.run_duration / 10000) * 3600)
+                + (((h.run_duration % 10000) / 100) * 60)
+                + (h.run_duration % 100),
+              CONVERT(datetime,
+                STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
+                + ' '
+                + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
+              )
+            ) AS finish_dt
+        FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
+        WHERE h.step_id = 0
+          AND h.run_status = 1
+          AND h.run_date >= CONVERT(int, CONVERT(varchar(8), DATEADD(DAY, -9, GETDATE()), 112))
+      )
+      SELECT
+          ISNULL(j.name, N'') AS job_name,
+          ISNULL(c.name, N'') AS category_name,
+          CAST(AVG(CAST(hist.duration_seconds AS float)) AS float) AS avg_duration_seconds
+      FROM hist
+      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
+          ON hist.job_id = j.job_id
+      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
+          ON j.category_id = c.category_id
+      WHERE hist.duration_seconds >= 60
+        AND hist.finish_dt >= DATEADD(DAY, -7, GETDATE())
       GROUP BY j.name, c.name;

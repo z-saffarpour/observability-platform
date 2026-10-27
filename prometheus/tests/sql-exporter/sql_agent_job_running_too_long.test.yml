@@ -1,0 +1,48 @@
+# SMS only when update_site or ERP_MRP is running longer than its own 7-day
+# average. Other jobs stay silent. A named job with no 7-day average stays silent.
+# The for window is 10m. Samples cover that pending window at a 1m interval.
+rule_files:
+  - ../../alert-rules/sql-exporter/sql_exporter-p0-maintenance.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'mssql_job_running_seconds{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="ERP_MRP",category_name="Data",enabled="1",step_id="1",step_name="load"}'
+        values: '3000+0x15'
+      - series: 'mssql_job_history_avg_duration_seconds_7d{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="ERP_MRP",category_name="Data"}'
+        values: '1000+0x15'
+      - series: 'mssql_job_running_seconds{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="update_site",category_name="Data",enabled="1",step_id="1",step_name="sync"}'
+        values: '500+0x15'
+      - series: 'mssql_job_history_avg_duration_seconds_7d{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="update_site",category_name="Data"}'
+        values: '2000+0x15'
+      - series: 'mssql_job_running_seconds{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="nightly_index",category_name="Maintenance",enabled="1",step_id="1",step_name="reindex"}'
+        values: '10000+0x15'
+      - series: 'mssql_job_history_avg_duration_seconds_7d{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="nightly_index",category_name="Maintenance"}'
+        values: '1000+0x15'
+      - series: 'mssql_job_running_seconds{instance="sql02",job="sql_exporter",owner="OK-DBA",job_name="ERP_MRP",category_name="Data",enabled="1",step_id="1",step_name="no-baseline"}'
+        values: '9000+0x15'
+
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: SqlAgentJobRunningTooLong
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: SqlAgentJobRunningTooLong
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlAgentJobRunningTooLong
+              severity: critical
+              priority: P0
+              alert_profile: maintenance
+              collector: mssql_job_running
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+              job_name: ERP_MRP
+            exp_annotations:
+              summary: "SQL Agent job ERP_MRP is running longer than its 7-day average"
+              summary_fa: "اجرای job ERP_MRP از میانگین ۷ روز اخیر بیشتر است"
+              description: "Job ERP_MRP has been running for 50m 0s, above its average successful duration over the last 7 days."
+              runbook: "Check the current step, blocking, and whether this run is still making progress. SMS is limited to update_site and ERP_MRP."

@@ -28,14 +28,18 @@ SLA، Baseline و نقش هر سرور تنظیم شوند.
 | `sql_exporter-p0-availability.rules.yml` | P0 | Target down، DB state، backup، integrity، restore |
 | `sql_exporter-p0-hadr.rules.yml` | P0 | Always On / WSFC / FCI |
 | `sql_exporter-p0-jobs.rules.yml` | P0 | SQL Agent job failed |
+| `sql_exporter-p0-maintenance.rules.yml` | P0 | `update_site` و `ERP_MRP` طولانی‌تر از میانگین ۷ روز |
 | `sql_exporter-p1-performance.rules.yml` | P1 | CPU، I/O، log، blocking، memory، tempdb، … |
-| `sql_exporter-p1-space.rules.yml` | P1 | استفاده فضای فایل |
-| `sql_exporter-p1-jobs.rules.yml` | P1 | تاریخچه / آخرین اجرای ناموفق Job |
-| `sql_exporter-p1-signals.rules.yml` | P1 | سیگنال ERRORLOG |
+| `sql_exporter-p1-space.rules.yml` | P1 | filegroup runway و رشد مسدود |
+| `sql_exporter-p3-jobs.rules.yml` | P3 | تاریخچه / آخرین اجرای ناموفق Job، فقط لیست |
+| `sql_exporter-p3-signals.rules.yml` | P3 | سیگنال ERRORLOG، فقط لیست |
 | `sql_exporter-p2-performance.rules.yml` | P2 | sessions، parallelism، plan cache، waits، … |
 | `sql_exporter-p2-maintenance.rules.yml` | P2 | index، stats، autogrowth، Query Store |
 | `sql_exporter-p2-config.rules.yml` | P2 | تنظیمات ناایمن، رشد سریع |
-| `sql_exporter-role-*.rules.yml` | نقش | Replication، SSIS، Security، CDC |
+| `sql_exporter-p0-replication.rules.yml` | نقش | Replication |
+| `sql_exporter-p3-ssis.rules.yml` | نقش | SSIS، فقط لیست |
+| `sql_exporter-p1-security.rules.yml` | نقش | Security |
+| `sql_exporter-p1-cdc.rules.yml` | نقش | CDC |
 
 ### Alert profiles (`prometheus/scrape-configs/sql-exporter/`)
 
@@ -69,8 +73,9 @@ rule_files:
   - "rules/sql_exporter-p0-jobs.rules.yml"
   - "rules/sql_exporter-p1-performance.rules.yml"
   - "rules/sql_exporter-p1-space.rules.yml"
-  - "rules/sql_exporter-p1-jobs.rules.yml"
-  - "rules/sql_exporter-p1-signals.rules.yml"
+  - "rules/sql_exporter-p0-maintenance.rules.yml"
+  - "rules/sql_exporter-p3-jobs.rules.yml"
+  - "rules/sql_exporter-p3-signals.rules.yml"
 ```
 
 یا محتوای یکی از فایل‌های `prometheus/scrape-configs/sql-exporter/*.yml` را عیناً استفاده کنید.

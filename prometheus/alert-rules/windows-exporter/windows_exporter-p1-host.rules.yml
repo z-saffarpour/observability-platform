@@ -27,8 +27,8 @@ groups:
           description: "Available memory has remained below 10% for ten minutes."
           runbook: "Check SQL memory target, working sets, and external consumers."
 
-      # U: backup volumes are WindowsBackupDiskFreeCritical / Warning.
-      # Leaving them here would page the owner twice at the same 10% threshold.
+      # U: is absent from instance_volume:windows_disk_free_*.
+      # Backup runway and backup percent alerts own that drive.
       - alert: WindowsDiskSpaceLow
         expr: |
           (
@@ -69,7 +69,26 @@ groups:
           description: "OLAP volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
           runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Extend the OLAP data or cache volume, or free space, before processing fills it. SMS follows priority P1."
 
+      # 14-day runway. The 3-day alert is WindowsBackupDiskFreeSpaceCritical.
+      # Alertmanager suppresses this warning when that P0 alert is firing.
+      - alert: WindowsBackupDiskFreeSpaceLow
+        expr: |
+          instance_volume:windows_backup_disk_free_days < 14
+          and
+          instance_volume:windows_backup_disk_growth_bytes_per_day > (64 * 1024 * 1024)
+        for: 1h
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_backup_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_backup_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }}d left)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_backup_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_backup_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
+          description: "Backup volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
+          runbook: "Compare instance_volume:windows_backup_disk_free_bytes with instance_volume:windows_backup_disk_free_bytes:threshold_warning. Extend the backup volume or remove expired backups before the volume fills. SMS follows priority P1."
+
       # Dashboard red band. priority P1 routes email and SMS to the server owner.
+      # Suppressed while the 14-day or 3-day runway alert is already firing.
       # Volumes already below 5% also match WindowsDiskSpaceCritical (P0);
       # Alertmanager inhibits this alert for that case.
       - alert: WindowsBackupDiskFreeCritical

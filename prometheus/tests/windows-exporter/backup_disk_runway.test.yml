@@ -1,6 +1,6 @@
 # U: backup runway. Linear 3h history is enough for deriv and the 30m
 # critical pending window. Critical mount: about 2.9 days left.
-# U: itself is about 6.9 days left and must stay silent.
+# U: itself is about 6.9 days left and fires the 14-day warning only.
 # Flat growth is under 64 MiB/day. Shrink and a non-U volume must stay silent.
 rule_files:
   - ../../recording-rules/windows-exporter/windows_exporter-recording.rules.yml
@@ -76,6 +76,39 @@ tests:
 
     alert_rule_test:
       - eval_time: 3h
+        alertname: WindowsBackupDiskFreeSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsBackupDiskFreeSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: backup-ok
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "U:"
+              volume_name: SQL Backup
+            exp_annotations:
+              summary: "SQL Backup U: on backup-ok: 68.75Gi free of 200Gi (6.9d left)"
+              summary_fa: "SQL Backup U: روی backup-ok: 68.75Gi آزاد از 200Gi (6.9 روز مانده)"
+              description: "Backup volume U: (SQL Backup) on backup-ok has 6.9 days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
+              runbook: "Compare instance_volume:windows_backup_disk_free_bytes with instance_volume:windows_backup_disk_free_bytes:threshold_warning. Extend the backup volume or remove expired backups before the volume fills. SMS follows priority P1."
+          - exp_labels:
+              alertname: WindowsBackupDiskFreeSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: backup-critical
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "U:\\Databases\\Backup01"
+              volume_name: SQL Backup 01
+            exp_annotations:
+              summary: "SQL Backup 01 U:\\Databases\\Backup01 on backup-critical: 57.5Gi free of 100Gi (2.9d left)"
+              summary_fa: "SQL Backup 01 U:\\Databases\\Backup01 روی backup-critical: 57.5Gi آزاد از 100Gi (2.9 روز مانده)"
+              description: "Backup volume U:\\Databases\\Backup01 (SQL Backup 01) on backup-critical has 2.9 days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
+              runbook: "Compare instance_volume:windows_backup_disk_free_bytes with instance_volume:windows_backup_disk_free_bytes:threshold_warning. Extend the backup volume or remove expired backups before the volume fills. SMS follows priority P1."
+      - eval_time: 3h
         alertname: WindowsBackupDiskFreeSpaceCritical
         exp_alerts:
           - exp_labels:
@@ -89,7 +122,7 @@ tests:
               volume: "U:\\Databases\\Backup01"
               volume_name: SQL Backup 01
             exp_annotations:
-              summary: "SQL Backup 01 U:\\Databases\\Backup01 on backup-critical: 57.51Gi free of 100Gi (2.9d left)"
-              summary_fa: "SQL Backup 01 U:\\Databases\\Backup01 روی backup-critical: 57.51Gi آزاد از 100Gi (2.9 روز مانده)"
+              summary: "SQL Backup 01 U:\\Databases\\Backup01 on backup-critical: 57.5Gi free of 100Gi (2.9d left)"
+              summary_fa: "SQL Backup 01 U:\\Databases\\Backup01 روی backup-critical: 57.5Gi آزاد از 100Gi (2.9 روز مانده)"
               description: "Backup volume U:\\Databases\\Backup01 (SQL Backup 01) on backup-critical has 2.9 days of free space left at its 7-day growth rate. Backup writes can fail when this volume fills."
               runbook: "Compare instance_volume:windows_backup_disk_free_bytes with instance_volume:windows_backup_disk_free_bytes:threshold_critical. Extend the backup volume or remove expired backups before the volume reaches zero. SMS follows priority P0."

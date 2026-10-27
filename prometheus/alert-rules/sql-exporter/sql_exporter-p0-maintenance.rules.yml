@@ -1,10 +1,20 @@
-# P0 — Medium maintenance / DBA review
+# P0 — named SQL Agent jobs running longer than their own 7-day average.
+# SMS is limited to update_site and ERP_MRP. Prometheus anchors the regex.
+# A job with no successful run of at least 60 seconds in 7 days does not alert.
 groups:
   - name: sql_exporter.p0.maintenance
     interval: 60s
     rules:
       - alert: SqlAgentJobRunningTooLong
-        expr: mssql_job_running_seconds > 7200
+        expr: |
+          max by (instance, job, owner, job_name) (
+            mssql_job_running_seconds{job_name=~"update_site|ERP_MRP"}
+          )
+          >
+          on (instance, job, owner, job_name)
+          max by (instance, job, owner, job_name) (
+            mssql_job_history_avg_duration_seconds_7d{job_name=~"update_site|ERP_MRP"}
+          )
         for: 10m
         labels:
           severity: critical
@@ -12,7 +22,7 @@ groups:
           alert_profile: maintenance
           collector: mssql_job_running
         annotations:
-          summary: "SQL Agent job has been running for more than two hours"
-          summary_fa: "job در SQL Agent بیش از دو ساعت در حال اجراست"
-          description: "Job {{ $labels.job_name }} has run for {{ $value | humanizeDuration }}."
-          runbook: "Compare with baseline duration; check blocking and step progress."
+          summary: "SQL Agent job {{ $labels.job_name }} is running longer than its 7-day average"
+          summary_fa: "اجرای job {{ $labels.job_name }} از میانگین ۷ روز اخیر بیشتر است"
+          description: "Job {{ $labels.job_name }} has been running for {{ $value | humanizeDuration }}, above its average successful duration over the last 7 days."
+          runbook: "Check the current step, blocking, and whether this run is still making progress. SMS is limited to update_site and ERP_MRP."

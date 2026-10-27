@@ -26,7 +26,7 @@
 
 | Alert | فایل | شرط خلاصه | for |
 |---|---|---|---|
-| `WindowsExporterDown` | p0-availability | `up{job=~"windows.*"} == 0` (shutdown، crash یا قطع scrape) | 5m |
+| `WindowsExporterDown` | p0-availability | `up{job=~"windows.*"} == 0`. فقط target مربوط به exporter. قطع هر دو exporter یعنی `InstanceDown` | 5m |
 | `WindowsHostRestarted` | p0-availability | boot time بیشتر از ۱۲۰ ثانیه جلو رفته و uptime هنوز کمتر از ۳۰ دقیقه است | 2m |
 | `WindowsExporterCollectorFailed` | p0-availability | `windows_exporter_collector_success == 0` | 10m |
 | `DataPlatformServiceNotRunning` | p0-availability | سرویس SQL/SSAS/PBIRS/ClusSvc running نیست | 3m |
@@ -47,10 +47,11 @@
 |---|---|---|---|
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
-| `WindowsDiskSpaceLow` | p1-host | free disk < 10% | 15m |
-| `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms | 15m |
-| `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms | 15m |
-| `WindowsCommitChargeHigh` | p1-host | commit ratio > 90% | 15m |
+| `WindowsDiskSpaceLow` | p1-host | درایو fixed غیر از `U:`، فضای آزاد کمتر از ۱۰٪ و کمتر از ۱۰۰ GiB | 15m |
+| `WindowsBackupDiskFreeSpaceLow` | p1-host | فضای خالی دیسک بکاپ U کمتر از ۱۴ روز رشد خودش | 1h |
+| `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms؛ اولویت P3، بدون SMS و Email | 15m |
+| `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms؛ اولویت P3، بدون SMS و Email | 15m |
+| `WindowsCommitChargeHigh` | p1-host | commit ratio > 90%؛ اولویت P3، بدون SMS و Email | 15m |
 | `MssqlBufferCacheLow` | p1-mssql | buffer hit ratio < 95% | 15m |
 | `MssqlPageLifeExpectancyLow` | p1-mssql | PLE < 300s | 15m |
 | `MssqlDeadlocks` | p1-mssql | deadlock increase > 0 / 15m | — |
@@ -131,13 +132,13 @@
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |
 | `instance_mssql:buffer_cache_hit_ratio:rate5m` | `MssqlBufferCacheLow` |
 
-`instance_volume:windows_disk_free_*` درایو fixed و مسیر mount را نگه می‌دارد (`volume=~"[A-Za-z]:.*"` و `type="fixed"`) با اندازه حداقل ۱۰ GiB، از جمله `C:` و `E:\Data01`، و `volume_name` را هم دارد. `HarddiskVolume*`، CD و دیسک removable حذف می‌شوند. `instance_volume:windows_backup_disk_*` حجم‌های fixed روی `U:` را نگه می‌دارد، از جمله `U:\Databases\Backup01`. رشد روزانه ۶۴ MiB یا کمتر هشدار نمی‌سازد. حجم ۲TiB با ۱۶۰GiB آزاد ساکت می‌ماند؛ حجمی که هم زیر ۵٪ و هم زیر ۳۰GiB است، `WindowsDiskSpaceLow` جداگانه نمی‌سازد. Alertmanager همان Low را وقتی Critical برای همان `instance` و `volume` فعال است inhibit می‌کند.
+`instance_volume:windows_disk_free_*` درایو fixed و مسیر mount را نگه می‌دارد (`volume=~"[A-Za-z]:.*"` و `type="fixed"`) با اندازه حداقل ۱۰ GiB، از جمله `C:` و `E:\Data01`، و `volume_name` را هم دارد. `U:`، `HarddiskVolume*`، CD و دیسک removable حذف می‌شوند. `instance_volume:windows_backup_disk_*` حجم‌های fixed روی `U:` را نگه می‌دارد، از جمله `U:\Databases\Backup01`. رشد روزانه ۶۴ MiB یا کمتر هشدار runway نمی‌سازد. هشدار runway در ۱۴ روز و ۳ روز است. Alertmanager هشدار ۱۴ روز و page درصد ۱۰٪ را وقتی هشدار ۳ روز برای همان volume فعال است خاموش می‌کند.
 
 ## راهنمای tuning
 
 1. Thresholdهای AG (100MB) و PLE (300s) و user connections (500) را با baseline هر instance تنظیم کنید.
 2. Alertهای نقش را فقط روی job/targetهایی که متریک مربوطه دارند load کنید، یا با `inhibit`/`mute` در Alertmanager محدود کنید.
-3. `WindowsExporterDown` یعنی سرور scrape نمی‌شود: shutdown، crash، قطع شبکه، یا توقف خود exporter. این سیگنال‌ها از روی `up` قابل تفکیک نیستند. `WindowsHostRestarted` فقط reboot را بعد از برگشتن scrape می‌بیند؛ `windows_system_system_up_time` زمان boot به ثانیهٔ Unix است، نه uptime. هر دو P0 هستند و از مسیر موجود Alertmanager ایمیل و SMS می‌گیرند.
+3. `WindowsExporterDown` یعنی target مربوط به windows_exporter قطع است. shutdown، crash، قطع شبکه و توقف exporter از روی `up` قابل تفکیک نیستند. page مربوط به down بودن سرور `InstanceDown` است و وقتی هر دو exporter قطع باشند فعال می‌شود. `WindowsHostRestarted` فقط reboot را بعد از برگشتن scrape می‌بیند.
 
 ## Alertmanager — routing با SMS و Email
 
@@ -149,6 +150,7 @@
 | P0 | SMS (webhook) + Email | ۱۵ دقیقه |
 | P1 | Email + SMS (webhook) | ۱ ساعت |
 | P2 | فقط Email | ۱۲ ساعت |
+| P3 | فقط لیست alert | ندارد |
 
 قبل از production همهٔ `CHANGE_ME_*` را جایگزین کنید. Alertmanager SMS بومی ندارد؛ SMS از طریق `webhook_configs` به gateway شما می‌رود.
 

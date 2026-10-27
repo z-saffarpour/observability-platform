@@ -44,6 +44,7 @@ Every alert carries these labels:
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
 | `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` for `update_site`, `MasterData_V02_*`, or `ERPTransfer_MasterData_*` | 2m |
+| `SqlAgentJobRunningTooLong` | p0-maintenance | `update_site` or `ERP_MRP` running longer than its own 7-day average | 10m |
 | `SqlFilegroupFreeSpaceCritical` | p1-space | filegroup free runway < 3 days of its own 7-day growth | 30m |
 | `SqlDatabaseLogGrowthCritical` | p1-performance | 24h log growth > 25% of that database log, and > 64 MB | 15m |
 
@@ -63,14 +64,13 @@ Every alert carries these labels:
 | `SqlSchedulerPressure` | p1-performance | runnable > 4 or work queue | 10m |
 | `SqlLockWaitPersistent` | p1-performance | locks waiting > 0 | 5m |
 | `SqlLongRunningRequest` | p1-performance | request > 5m | 5m |
-| `SqlDatabaseFileSpaceHigh` | p1-space | file used > 85% | 15m |
-| `SqlFilegroupFreeSpaceLow` | p1-space | filegroup free runway < 14 days of its own 7-day growth | 1h |
 | `SqlFilegroupGrowthBlocked` | p1-space | filegroup used >= 98% and no data file can autogrow onto its volume | 15m |
-| `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
-| `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
-| `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |
-| `SqlBackupFullTooOld` | p1-availability | Full backup > 25h or missing; priority P3, no SMS or email | 15m |
-| `SqlDatabaseIntegrityAtRisk` | p1-availability | suspect pages or CHECKDB > 7d; priority P3, no SMS or email | 5m |
+| `SqlDatabaseFileSpaceHigh` | p3-space | file used > 85%; priority P3, no SMS or email | 15m |
+| `SqlAgentJobRecentFailure` | p3-jobs | history failures > 0; priority P3, no SMS or email | 5m |
+| `SqlAgentJobLastRunFailed` | p3-jobs | last outcome == 0; priority P3, no SMS or email | 5m |
+| `SqlErrorlogSignalDetected` | p3-signals | errorlog signal > 0; priority P3, no SMS or email | 5m |
+| `SqlBackupFullTooOld` | p3-availability | Full backup > 25h or missing; priority P3, no SMS or email | 15m |
+| `SqlDatabaseIntegrityAtRisk` | p3-availability | suspect pages or CHECKDB > 7d; priority P3, no SMS or email | 5m |
 
 ## P2 — Medium
 
@@ -89,19 +89,18 @@ Every alert carries these labels:
 | `SqlMissingIndexHighImpact` | p2-maintenance | score > 1M | 30m |
 | `SqlStatisticsStale` | p2-maintenance | stale stats > 20 | 30m |
 | `SqlQueryStoreDisabled` | p2-maintenance | Query Store off | 30m |
-| `SqlAgentJobRunningTooLong` | p2-maintenance | running > 2h | 10m |
 | `SqlDatabaseConfigurationUnsafe` | p2-config | AUTO_SHRINK/CLOSE or PAGE_VERIFY | 10m |
 | `SqlDatabaseGrowingRapidly` | p2-config | growth > 10 GiB / 24h | 15m |
 
 ## Role packs
 
-### Replication (`role-replication`)
+### Replication (`sql_exporter-p0-replication.rules.yml`)
 
 | Alert | Priority | Condition |
 |---|---|---|
 | `SqlReplicationBacklog` | P0 | pending > 10k or latency > 5m |
 
-### SSIS (`role-ssis`)
+### SSIS (`sql_exporter-p3-ssis.rules.yml`)
 
 | Alert | Priority | Condition |
 |---|---|---|

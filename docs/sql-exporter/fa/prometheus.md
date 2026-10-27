@@ -20,8 +20,9 @@ rule_files:
   - "rules/sql_exporter-p0-jobs.rules.yml"
   - "rules/sql_exporter-p1-performance.rules.yml"
   - "rules/sql_exporter-p1-space.rules.yml"
-  - "rules/sql_exporter-p1-jobs.rules.yml"
-  - "rules/sql_exporter-p1-signals.rules.yml"
+  - "rules/sql_exporter-p0-maintenance.rules.yml"
+  - "rules/sql_exporter-p3-jobs.rules.yml"
+  - "rules/sql_exporter-p3-signals.rules.yml"
 ```
 
 اعتبارسنجی:

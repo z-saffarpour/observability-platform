@@ -42,22 +42,24 @@ groups:
           runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
 
       # mssql_up is 1 when SELECT 1 succeeds. A failed SQL connection usually
-      # omits the series instead of publishing 0, so a live sql_exporter scrape
-      # without mssql_up == 1 is the same outage.
+      # omits the series instead of publishing 0. Match on instance only so a
+      # second sql job for the same host does not page when another job already
+      # has mssql_up == 1. Priority P3 keeps the row in the alert list. A missing
+      # mssql_up series can also mean the standard collector is not scraped.
       - alert: SqlServerUnavailable
         expr: |
           (
             up{job=~"sql.*"} == 1
-            unless on (instance, job, owner)
-            (mssql_up == 1)
+            unless on (instance)
+            (max by (instance) (mssql_up == 1))
           )
         for: 1m
         labels:
-          severity: critical
-          priority: P0
+          severity: info
+          priority: P3
           alert_profile: mssql
         annotations:
-          summary: "SQL Server {{ $labels.instance }} unavailable for 1m"
-          summary_fa: "SQL Server روی {{ $labels.instance }} برای 1 دقیقه در دسترس نیست"
-          description: "SQL Server on {{ $labels.instance }} has been unavailable for more than 1 minute."
-          runbook: "Check the SQL error log and the sql_exporter query. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0."
+          summary: "SQL query up missing on {{ $labels.instance }} for 1m"
+          summary_fa: "متریک mssql_up روی {{ $labels.instance }} برای 1 دقیقه نیست"
+          description: "sql_exporter on {{ $labels.instance }} is up, and no mssql_up == 1 series exists for this instance."
+          runbook: "Confirm whether SELECT 1 failed or the mssql_standard collector is absent. A failed scrape of the exporter itself stays on SqlExporterDown. Priority P3 is listed only and sends no SMS or email."
