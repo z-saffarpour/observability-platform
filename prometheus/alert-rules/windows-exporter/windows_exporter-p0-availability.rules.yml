@@ -9,10 +9,46 @@ groups:
           priority: P0
           alert_profile: availability
         annotations:
-          summary: "windows_exporter is unavailable on {{ $labels.instance }}"
-          summary_fa: "windows_exporter روی {{ $labels.instance }} در دسترس نیست"
-          description: "Prometheus has failed to scrape the Windows target for five minutes."
-          runbook: "Check service state, port 9182, firewall, and scrape auth."
+          summary: "Windows host {{ $labels.instance }} is down"
+          summary_fa: "سرور Windows {{ $labels.instance }} در دسترس نیست"
+          description: "Prometheus has not scraped this Windows host for five minutes. The host may be shut down, crashed, or unreachable. A stopped windows_exporter produces the same signal."
+          runbook: "Confirm whether the host was shut down. Check power, network, firewall, port 9182, and the windows_exporter service. Email and SMS follow priority P0."
+
+      # windows_system_system_up_time is the Unix boot timestamp, not uptime.
+      # Uptime is time() minus that gauge. A reboot moves the timestamp forward.
+      # The alert fires while the 15m offset still sees the previous boot and
+      # current uptime is under 30m, then resolves. P0 sends email and SMS.
+      - alert: WindowsHostRestarted
+        expr: |
+          (
+            (
+              windows_system_system_up_time{job=~"windows.*"}
+              -
+              windows_system_system_up_time{job=~"windows.*"} offset 15m
+            ) > 120
+          )
+          and
+          (
+            (time() - windows_system_system_up_time{job=~"windows.*"}) < 1800
+          )
+          and
+          (
+            (time() - windows_system_system_up_time{job=~"windows.*"}) >= 0
+          )
+          and on (instance, job, owner)
+          (
+            up{job=~"windows.*"} == 1
+          )
+        for: 2m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: availability
+        annotations:
+          summary: "Windows host {{ $labels.instance }} restarted"
+          summary_fa: "سرور Windows {{ $labels.instance }} restart شده است"
+          description: "Boot time on {{ $labels.instance }} moved forward {{ $value | printf \"%.0f\" }}s within 15 minutes, and uptime is still under 30 minutes."
+          runbook: "Confirm the reboot was planned. Check System event IDs 1074, 6006, 6008, and 41. Verify SQL Server, Agent, and cluster services are running. Email and SMS follow priority P0."
 
       - alert: WindowsExporterCollectorFailed
         expr: windows_exporter_collector_success == 0

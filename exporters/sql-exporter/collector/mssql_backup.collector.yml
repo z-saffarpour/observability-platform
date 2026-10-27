@@ -91,7 +91,7 @@ metrics:
 
   - metric_name: mssql_backup_transfer_job_last_status
     type: gauge
-    help: '1 if the latest Backup Transfer job outcome in the last 24h ended with failure, otherwise 0.'
+    help: '1 if the latest run of a Backup Transfer job ended with failure, otherwise 0.'
     key_labels:
       - job_name
       - category_name
@@ -427,44 +427,6 @@ queries:
               + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
             ) >= DATEADD(HOUR, -24, GETDATE())
       GROUP BY tj.job_name, tj.category_name;
-
-  - query_name: mssql_backup_transfer_job_last_status
-    query: |
-      ;WITH ranked AS
-      (
-          SELECT
-              h.job_id,
-              h.run_status,
-              ROW_NUMBER() OVER (
-                  PARTITION BY h.job_id
-                  ORDER BY h.run_date DESC, h.run_time DESC, h.instance_id DESC
-              ) AS rn
-          FROM msdb.dbo.sysjobhistory AS h WITH (NOLOCK)
-          WHERE h.step_id = 0
-            AND CONVERT(datetime,
-                  STUFF(STUFF(RIGHT('00000000' + CAST(h.run_date AS varchar(8)), 8), 5, 0, '-'), 8, 0, '-')
-                  + ' '
-                  + STUFF(STUFF(RIGHT('000000' + CAST(h.run_time AS varchar(6)), 6), 3, 0, ':'), 6, 0, ':')
-                ) >= DATEADD(HOUR, -24, GETDATE())
-            AND h.job_id IN (
-                SELECT DISTINCT j.job_id
-                FROM msdb.dbo.sysjobs AS j WITH (NOLOCK)
-                WHERE j.name LIKE N'%BackupTransfer%'
-                   OR j.name LIKE N'%TransferBackups%'
-                   OR j.name LIKE N'%TransferLogBackups%'
-            )
-      )
-      SELECT
-          ISNULL(j.name, N'') AS job_name,
-          ISNULL(c.name, N'') AS category_name,
-          CAST(j.[enabled] AS nvarchar(5)) AS enabled,
-          CAST(CASE WHEN r.run_status = 0 THEN 1 ELSE 0 END AS float) AS is_failed
-      FROM ranked AS r
-      INNER JOIN msdb.dbo.sysjobs AS j WITH (NOLOCK)
-          ON r.job_id = j.job_id
-      LEFT JOIN msdb.dbo.syscategories AS c WITH (NOLOCK)
-          ON j.category_id = c.category_id
-      WHERE r.rn = 1;
 
   - query_name: mssql_backup_job_failed_total
     query: |

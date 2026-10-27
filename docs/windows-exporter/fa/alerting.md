@@ -26,12 +26,15 @@
 
 | Alert | فایل | شرط خلاصه | for |
 |---|---|---|---|
-| `WindowsExporterDown` | p0-availability | `up{job=~"windows.*"} == 0` | 5m |
+| `WindowsExporterDown` | p0-availability | `up{job=~"windows.*"} == 0` (shutdown، crash یا قطع scrape) | 5m |
+| `WindowsHostRestarted` | p0-availability | boot time بیشتر از ۱۲۰ ثانیه جلو رفته و uptime هنوز کمتر از ۳۰ دقیقه است | 2m |
 | `WindowsExporterCollectorFailed` | p0-availability | `windows_exporter_collector_success == 0` | 10m |
 | `DataPlatformServiceNotRunning` | p0-availability | سرویس SQL/SSAS/PBIRS/ClusSvc running نیست | 3m |
 | `MssqlCollectorFailed` | p0-availability | `windows_mssql_collector_success == 0` | 10m |
 | `WindowsTimeSkewCritical` | p0-availability | \|time offset\| > 5s | 5m |
-| `WindowsDiskSpaceCritical` | p0-host | free disk < ۵٪ (شامل U:) | 10m |
+| `WindowsDiskSpaceCritical` | p0-host | درایو fixed یا مسیر mount حداقل ۱۰ GiB؛ فضای آزاد کمتر از ۵٪ و کمتر از ۳۰ GiB | 10m |
+| `WindowsOlapDiskFreeSpaceCritical` | p0-host | فضای خالی دیسک OLAP کمتر از ۳ روز رشد خودش | 30m |
+| `WindowsBackupDiskFreeSpaceCritical` | p0-host | فضای خالی دیسک بکاپ U کمتر از ۳ روز رشد خودش | 30m |
 | `WindowsCommitChargeCritical` | p0-host | commit ratio > 95% | 10m |
 | `MssqlLogUsedCritical` | p0-mssql | log used > 90% | 5m |
 | `MssqlAgSendQueueGrowing` | p0-mssql | log send queue > 100MB | 10m |
@@ -44,8 +47,7 @@
 |---|---|---|---|
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
-| `WindowsDiskSpaceLow` | p1-host | free disk < ۱۰٪، به‌جز مسیر بکاپ `U:` | 15m |
-| `WindowsBackupDiskFreeCritical` | p1-host | فضای آزاد `U:` کمتر از ۱۰٪ (ایمیل + SMS به Owner) | 10m |
+| `WindowsDiskSpaceLow` | p1-host | free disk < 10% | 15m |
 | `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms | 15m |
 | `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms | 15m |
 | `WindowsCommitChargeHigh` | p1-host | commit ratio > 90% | 15m |
@@ -116,6 +118,11 @@
 | `instance:windows_cpu_utilisation:rate5m` | `WindowsHighCPU` |
 | `instance:windows_memory_available_ratio` | `WindowsLowAvailableMemory` |
 | `instance:windows_memory_commit_ratio` | commit charge alerts |
+| `instance_volume:windows_disk_free_bytes` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical` |
+| `instance_volume:windows_disk_size_bytes` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical` |
+| `instance_volume:windows_disk_free_ratio` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical` |
+| `instance_volume:windows_olap_disk_free_days` | هشدار باند پر شدن دیسک OLAP |
+| `instance_volume:windows_backup_disk_free_days` | `WindowsBackupDiskFreeSpaceCritical` |
 | `instance_volume:windows_disk_free_ratio` | disk space alerts |
 | `instance_volume:windows_backup_disk_free_percent` | درصد آزاد مسیر بکاپ |
 | `instance_volume:windows_backup_disk_capacity_state` | `WindowsBackupDiskFreeCritical`، `WindowsBackupDiskFreeWarning` |
@@ -124,10 +131,13 @@
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |
 | `instance_mssql:buffer_cache_hit_ratio:rate5m` | `MssqlBufferCacheLow` |
 
+`instance_volume:windows_disk_free_*` درایو fixed و مسیر mount را نگه می‌دارد (`volume=~"[A-Za-z]:.*"` و `type="fixed"`) با اندازه حداقل ۱۰ GiB، از جمله `C:` و `E:\Data01`، و `volume_name` را هم دارد. `HarddiskVolume*`، CD و دیسک removable حذف می‌شوند. `instance_volume:windows_backup_disk_*` حجم‌های fixed روی `U:` را نگه می‌دارد، از جمله `U:\Databases\Backup01`. رشد روزانه ۶۴ MiB یا کمتر هشدار نمی‌سازد. حجم ۲TiB با ۱۶۰GiB آزاد ساکت می‌ماند؛ حجمی که هم زیر ۵٪ و هم زیر ۳۰GiB است، `WindowsDiskSpaceLow` جداگانه نمی‌سازد. Alertmanager همان Low را وقتی Critical برای همان `instance` و `volume` فعال است inhibit می‌کند.
+
 ## راهنمای tuning
 
 1. Thresholdهای AG (100MB) و PLE (300s) و user connections (500) را با baseline هر instance تنظیم کنید.
 2. Alertهای نقش را فقط روی job/targetهایی که متریک مربوطه دارند load کنید، یا با `inhibit`/`mute` در Alertmanager محدود کنید.
+3. `WindowsExporterDown` یعنی سرور scrape نمی‌شود: shutdown، crash، قطع شبکه، یا توقف خود exporter. این سیگنال‌ها از روی `up` قابل تفکیک نیستند. `WindowsHostRestarted` فقط reboot را بعد از برگشتن scrape می‌بیند؛ `windows_system_system_up_time` زمان boot به ثانیهٔ Unix است، نه uptime. هر دو P0 هستند و از مسیر موجود Alertmanager ایمیل و SMS می‌گیرند.
 
 ## Alertmanager — routing با SMS و Email
 

@@ -12,8 +12,12 @@ SQL Exporter فایل‌های پروفایل را با یکدیگر ترکیب 
 |---|---|
 | `core.yml` | مانیتورینگ پایه برای تمام Instanceهای SQL Server (شامل drift تنظیمات instance) |
 | `oltp.yml` | بارهای تراکنشی، عیب‌یابی Query فعال، Always On/HADR، Query Store |
-| `oltp-store-lite.yml` | OLTP فروشگاه با منابع ضعیف — بار کم مانیتورینگ + کوئری سنگین/plan-cache، stats، integrity، errorlog و security |
+| `oltp-alwayson.yml` | همان پوشش `oltp.yml` برای replicaی Always On |
+| `oltp-cluster.yml` | همان پوشش `oltp.yml` برای FCI / WSFC |
+| `oltp-store-lite.yml` | OLTP فروشگاه با منابع ضعیف — سلامت، فضا/رشد لاگ، کوئری سنگین و plan-cache hotspot، stats، integrity، errorlog و security؛ بدون HADR، lock inventory، Query Store و fragmentation |
 | `dwh.yml` | Data Warehouse و BI، پردازش Columnstore و بارهای Parallel |
+| `dwh-alwayson.yml` | انبار چندترابایتی که Always On یا WSFC/FCI هم هست؛ بدون اسکن buffer pool، fragmentation و stats |
+| `dwh-restore.yml` | همان `dwh.yml` به‌علاوه restore، فقط برای secondary همگام‌سازی بکاپ |
 | `ssis.yml` | سرورهای اختصاصی SSIS Catalog |
 | `polybase.yml` | Instanceهایی با PolyBase نصب‌شده یا Query روی داده خارجی |
 | `replication.yml` | سرورهای Publisher، Distributor یا Subscriber (شامل AG/HADR + CDC) |

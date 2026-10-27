@@ -1,0 +1,18 @@
+# Space / capacity alerts.
+groups:
+  - name: sql_exporter.p3.space
+    interval: 60s
+    rules:
+      - alert: SqlDatabaseFileSpaceHigh
+        expr: mssql_database_space_used_percent > 85
+        for: 15m
+        labels:
+          severity: info
+          priority: P3
+          alert_profile: space
+          collector: mssql_database_space
+        annotations:
+          summary: "File usage is high for database {{ $labels.db }}"
+          summary_fa: "مصرف فایل دیتابیس {{ $labels.db }} بالا است"
+          description: "File {{ $labels.logical_name }} in {{ $labels.db }} is {{ $value | humanize }}% used."
+          runbook: "Plan growth, purge/archive, or expand max size / disk. Tune threshold per database."

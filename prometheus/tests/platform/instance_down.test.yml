@@ -1,0 +1,75 @@
+# InstanceDown covers non-exporter jobs, and a host whose windows_exporter and
+# sql_exporter are both down on the same instance label.
+# One exporter alone must stay silent here. for is 45s.
+rule_files:
+  - ../../alert-rules/platform/platform-p0-availability.rules.yml
+
+evaluation_interval: 15s
+
+tests:
+  - interval: 15s
+    input_series:
+      - series: 'up{instance="127.0.0.1:9090",job="prometheus"}'
+        values: '0+0x6'
+      - series: 'up{instance="127.0.0.1:9093",job="alertmanager",owner="OK-DBA"}'
+        values: '0+0x6'
+      - series: 'up{instance="sql01",job="windows_exporter",owner="OK-DBA"}'
+        values: '0+0x6'
+      - series: 'up{instance="sql01",job="sql_exporter",owner="FMR-DBA"}'
+        values: '0+0x6'
+      - series: 'up{instance="only-win",job="windows_exporter",owner="OK-DBA"}'
+        values: '0+0x6'
+      - series: 'up{instance="only-sql",job="sql_exporter",owner="FMR-DBA"}'
+        values: '0+0x6'
+      - series: 'up{instance="partial",job="windows_exporter",owner="OK-DBA"}'
+        values: '0+0x6'
+      - series: 'up{instance="partial",job="sql_exporter",owner="FMR-DBA"}'
+        values: '1+0x6'
+      - series: 'up{instance="127.0.0.1:9100",job="node"}'
+        values: '1+0x6'
+
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: InstanceDown
+        exp_alerts: []
+
+      - eval_time: 45s
+        alertname: InstanceDown
+        exp_alerts:
+          - exp_labels:
+              alertname: InstanceDown
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              instance: 127.0.0.1:9090
+              job: prometheus
+            exp_annotations:
+              summary: "Instance 127.0.0.1:9090 down"
+              summary_fa: "instance 127.0.0.1:9090 در دسترس نیست"
+              description: "127.0.0.1:9090 of job prometheus has been down for more than 45 seconds."
+              runbook: "Check the target process, listen port, firewall, and the Prometheus scrape error. Both exporters down on the same instance label is treated as the host down. One exporter down keeps WindowsExporterDown or SqlExporterDown. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: InstanceDown
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              instance: 127.0.0.1:9093
+              job: alertmanager
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Instance 127.0.0.1:9093 down"
+              summary_fa: "instance 127.0.0.1:9093 در دسترس نیست"
+              description: "127.0.0.1:9093 of job alertmanager has been down for more than 45 seconds."
+              runbook: "Check the target process, listen port, firewall, and the Prometheus scrape error. Both exporters down on the same instance label is treated as the host down. One exporter down keeps WindowsExporterDown or SqlExporterDown. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: InstanceDown
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              instance: sql01
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Instance sql01 down"
+              summary_fa: "instance sql01 در دسترس نیست"
+              description: "Both windows_exporter and sql_exporter on sql01 have been down for more than 45 seconds."
+              runbook: "Check the target process, listen port, firewall, and the Prometheus scrape error. Both exporters down on the same instance label is treated as the host down. One exporter down keeps WindowsExporterDown or SqlExporterDown. Email and SMS follow priority P0."

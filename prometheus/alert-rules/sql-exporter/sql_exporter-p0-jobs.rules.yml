@@ -1,10 +1,15 @@
-# P0 — Critical SQL Agent job failure
+# P0 — Critical SQL Agent job failure.
+# Pages only the SMS allowlist. Prometheus anchors the regex, so update_site is
+# exact and the other two alternatives are prefixes.
 groups:
   - name: sql_exporter.p0.jobs
     interval: 30s
     rules:
       - alert: SqlAgentJobFailed
-        expr: mssql_job_failed_current > 0
+        expr: |
+          mssql_job_failed_current{
+            job_name=~"update_site|MasterData_V02_.*|ERPTransfer_MasterData_.*"
+          } > 0
         for: 2m
         labels:
           severity: critical
@@ -12,7 +17,7 @@ groups:
           alert_profile: jobs
           collector: mssql_job_failed
         annotations:
-          summary: "SQL Agent job failure detected"
-          summary_fa: "خطای job در SQL Agent شناسایی شد"
+          summary: "SQL Agent job {{ $labels.job_name }} failed"
+          summary_fa: "جاب {{ $labels.job_name }} در SQL Agent خطا دارد"
           description: "Job {{ $labels.job_name }} is currently reported as failed."
-          runbook: "Open job history, fix the failing step, and re-run if safe. Filter non-critical jobs if needed."
+          runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."

@@ -113,7 +113,10 @@ scripts/sql/Create-SqlExporterLogin.sql
 - `mssql_ssis` → `SSISDB` (`@GrantSsisdbRead`)
 - `mssql_errorlog_signals` / failed logins → `xp_readerrorlog` (`@GrantReadErrorLog`)
 - `mssql_index_fragmentation` و collectorهای per-DB → دسترسی DBهای کاربر (`@GrantUserDatabaseAccess`)
-- `mssql_security` (خواندن فایل Audit) → معمولاً `CONTROL SERVER` (در اسکریپت least-privilege عمداً داده نمی‌شود)
+- `mssql_autogrowth`، `mssql_schema_ddl`، `mssql_security_ddl`، `mssql_server_ddl` → `ALTER TRACE` (در `Create-SqlExporterLogin.sql` داده می‌شود)
+- `mssql_security` (DMV وضعیت Audit و خواندن فایل Audit) → `CONTROL SERVER` (در `Create-SqlExporterLogin.sql` داده می‌شود؛ حق باریک‌تری وجود ندارد)
+- `mssql_database_integrity` (`DBCC DBINFO`) و `mssql_instance_configuration` (`DBCC TRACESTATUS`) به نقش `sysadmin` نیاز دارند. در `Create-SqlExporterLogin.sql` مقدار `@GrantSysadmin = 1` بگذارید، یا به `Grant-SqlExporterProfileAccess.ps1` و `Install-SqlExporterRemote.ps1` سوئیچ `-GrantSysadmin` بدهید. پیش‌فرض `0` نقش را عوض نمی‌کند و این دو نتیجه خالی می‌مانند.
+- با `-SqlInstance`، `Install-SqlExporterRemote.ps1` برای collectorهای DDL فعال، Extended Events session را نصب می‌کند: `mssql_server_ddl` (`observability_server_ddl`)، `mssql_security_ddl` (`observability_security_ddl`) و `mssql_schema_ddl` (`observability_database_ddl`). session موجود فقط Start می‌شود و دوباره ساخته نمی‌شود. job و جدول Archive نصب نمی‌شوند. `-SkipSqlGrants` فقط لاگین را رد می‌کند.
 
 ### 5) سرویس را اجرا یا restart کن
 

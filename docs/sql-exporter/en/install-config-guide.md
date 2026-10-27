@@ -113,7 +113,10 @@ Some collectors need extra access:
 - `mssql_ssis` → `SSISDB` (`@GrantSsisdbRead`)
 - `mssql_errorlog_signals` / failed logins → `xp_readerrorlog` (`@GrantReadErrorLog`)
 - `mssql_index_fragmentation` and other per-DB collectors → user database access (`@GrantUserDatabaseAccess`)
-- `mssql_security` (Audit file read) → typically `CONTROL SERVER` (intentionally not granted by the least-privilege script)
+- `mssql_autogrowth`, `mssql_schema_ddl`, `mssql_security_ddl`, `mssql_server_ddl` → `ALTER TRACE` (granted by `Create-SqlExporterLogin.sql`)
+- `mssql_security` (audit status DMV and audit file read) → `CONTROL SERVER` (granted by `Create-SqlExporterLogin.sql`; there is no narrower permission)
+- `mssql_database_integrity` (`DBCC DBINFO`) and `mssql_instance_configuration` (`DBCC TRACESTATUS`) need the `sysadmin` role. Set `@GrantSysadmin = 1` in `Create-SqlExporterLogin.sql`, or pass `-GrantSysadmin` to `Grant-SqlExporterProfileAccess.ps1` / `Install-SqlExporterRemote.ps1`. The default `0` leaves the role unchanged and those two results stay empty.
+- When `-SqlInstance` is set, `Install-SqlExporterRemote.ps1` installs the Extended Events session for each enabled DDL collector: `mssql_server_ddl` (`observability_server_ddl`), `mssql_security_ddl` (`observability_security_ddl`), and `mssql_schema_ddl` (`observability_database_ddl`). An existing session is started and is not recreated. Archive jobs and archive tables are not installed. `-SkipSqlGrants` skips the login only.
 
 ### 5) Run or restart the service
 

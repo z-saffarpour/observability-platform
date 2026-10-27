@@ -12,8 +12,12 @@ repeat their core collectors intentionally.
 |---|---|
 | `core.yml` | Baseline monitoring for every SQL Server instance (includes instance configuration drift) |
 | `oltp.yml` | Transactional workloads, live-query diagnostics, Always On/HADR, Query Store |
-| `oltp-store-lite.yml` | Resource-constrained store OLTP — low overhead plus heavy-query/plan-cache tuning, stats, integrity, errorlog and security |
+| `oltp-alwayson.yml` | Same alert coverage as `oltp.yml` for an Always On replica |
+| `oltp-cluster.yml` | Same alert coverage as `oltp.yml` for an FCI / WSFC node |
+| `oltp-store-lite.yml` | Resource-constrained store OLTP — health, space/log growth, heavy-query and plan-cache hotspots, stats, integrity, errorlog and security; no HADR, lock inventory, Query Store, or index fragmentation |
 | `dwh.yml` | Data warehouse / BI, columnstore and parallel workloads |
+| `dwh-alwayson.yml` | Multi-terabyte warehouse that is also Always On or WSFC/FCI; no buffer-pool page scan, index fragmentation, or stats walk |
+| `dwh-restore.yml` | `dwh.yml` plus restore, for backup-sync secondaries only |
 | `ssis.yml` | Dedicated SSIS catalog hosts |
 | `polybase.yml` | Instances with PolyBase installed / external data queries |
 | `replication.yml` | Replication publisher, distributor or subscriber (includes AG/HADR + CDC) |

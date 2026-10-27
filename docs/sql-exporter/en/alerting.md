@@ -17,7 +17,7 @@ Every alert carries these labels:
 | Label | Values |
 |---|---|
 | `severity` | `critical` / `warning` / `info` |
-| `priority` | `P0` (page), `P1` (high), `P2` (medium) |
+| `priority` | `P0` (page), `P1` (high), `P2` (medium), `P3` (list only) |
 | `alert_profile` | `availability` / `hadr` / `jobs` / `performance` / `space` / `signals` / `maintenance` / `config` / `replication` / `ssis` / `security` / `cdc` |
 | `collector` | Owning collector name |
 
@@ -37,15 +37,13 @@ Every alert carries these labels:
 |---|---|---|---|
 | `SqlExporterDown` | p0-availability | `up{job=~"sql.*"} == 0` | 5m |
 | `SqlDatabaseNotOnline` | p0-availability | `mssql_database_state != 0` | 5m |
-| `SqlBackupFullTooOld` | p0-availability | Full backup > 25h or missing | 15m |
-| `SqlDatabaseIntegrityAtRisk` | p0-availability | suspect pages or CHECKDB > 7d | 5m |
 | `SqlRestoreSecondaryBehindRpo` | p0-availability | restore gap > 30m | 10m |
 | `SqlAlwaysOnReplicaUnhealthy` | p0-hadr | sync health == 0 | 2m |
 | `SqlHadrClusterQuorumNotNormal` | p0-hadr | quorum_state != 1 | 2m |
 | `SqlHadrClusterMemberDown` | p0-hadr | member_state != 1 | 2m |
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
-| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` | 2m |
+| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` for `update_site`, `MasterData_V02_*`, or `ERPTransfer_MasterData_*` | 2m |
 | `SqlFilegroupFreeSpaceCritical` | p1-space | filegroup free runway < 3 days of its own 7-day growth | 30m |
 | `SqlDatabaseLogGrowthCritical` | p1-performance | 24h log growth > 25% of that database log, and > 64 MB | 15m |
 
@@ -71,6 +69,8 @@ Every alert carries these labels:
 | `SqlAgentJobRecentFailure` | p1-jobs | history failures > 0 | 5m |
 | `SqlAgentJobLastRunFailed` | p1-jobs | last outcome == 0 | 5m |
 | `SqlErrorlogSignalDetected` | p1-signals | errorlog signal > 0 | 5m |
+| `SqlBackupFullTooOld` | p1-availability | Full backup > 25h or missing; priority P3, no SMS or email | 15m |
+| `SqlDatabaseIntegrityAtRisk` | p1-availability | suspect pages or CHECKDB > 7d; priority P3, no SMS or email | 5m |
 
 ## P2 — Medium
 

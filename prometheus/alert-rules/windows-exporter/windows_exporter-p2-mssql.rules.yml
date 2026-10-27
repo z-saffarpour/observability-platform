@@ -26,38 +26,12 @@ groups:
           description: "{{ $value }} SQL errors in 15 minutes (severity {{ $labels.severity }})."
           runbook: "Inspect SQL error log for the matching severity."
 
-      - alert: MssqlPageIoLatchWaitsHigh
-        expr: increase(windows_mssql_waitstats_page_io_latch_waits[15m]) > 1000
-        for: 15m
-        labels:
-          severity: warning
-          priority: P2
-          alert_profile: mssql
-        annotations:
-          summary: "High PAGEIOLATCH waits on {{ $labels.instance }}"
-          summary_fa: "waitهای PAGEIOLATCH روی {{ $labels.instance }} بالا است"
-          description: "PAGEIOLATCH wait count increased by {{ $value }} in 15 minutes."
-          runbook: "Correlate with disk latency and buffer cache / PLE alerts."
-
-      - alert: MssqlLockWaitsHigh
-        expr: increase(windows_mssql_waitstats_lock_waits[15m]) > 1000
-        for: 15m
-        labels:
-          severity: warning
-          priority: P2
-          alert_profile: mssql
-        annotations:
-          summary: "High lock waits on {{ $labels.instance }}"
-          summary_fa: "waitهای قفل روی {{ $labels.instance }} بالا است"
-          description: "Lock waits increased by {{ $value }} in 15 minutes."
-          runbook: "Review blocking chains and indexing / isolation level."
-
       - alert: MssqlTempdbFreeSpaceLow
         expr: windows_mssql_transactions_tempdb_free_space_bytes < 1e9
         for: 15m
         labels:
-          severity: warning
-          priority: P2
+          severity: info
+          priority: P3
           alert_profile: mssql
         annotations:
           summary: "tempdb free space low on {{ $labels.instance }}"

@@ -1,41 +1,49 @@
-# Data warehouse / BI workload profile. Includes the core baseline.
+# Data warehouse / BI workload profile.
+# Do not add mssql_buffer_pool_database here; it scans one row per cached page.
+# Backup-sync DWH secondaries use dwh-restore.yml.
 collectors:
+  # availability
+  # Restore-sync warehouses use dwh-restore.yml (adds mssql_restore).
   - mssql_standard
-  - mssql_database_configuration
-  - mssql_instance_configuration
-  - mssql_cdc_change_tracking
-  - mssql_resource_governor
   - mssql_backup
-  - mssql_job_inventory
-  - mssql_job_running
+  - mssql_database_integrity
+  # jobs
   - mssql_job_failed
   - mssql_job_history
+  - mssql_job_inventory
+  - mssql_job_running
+  # space (filegroup runway, log usage, log/data growth)
   - mssql_database_space
-  - mssql_database_integrity
-  - mssql_file_io
-  - mssql_waits
-  - mssql_memory
-  - mssql_cpu
-  - mssql_scheduler
+  - mssql_log_usage
+  - mssql_database_size_growth
   - mssql_autogrowth
-  - mssql_restore
-  - mssql_alwayson
-  - mssql_alwayson_events
-  - mssql_hadr_cluster
+  # performance
+  - mssql_cpu
+  - mssql_file_io
+  - mssql_blocking
+  - mssql_memory
+  - mssql_tempdb
+  - mssql_buffer_pool
+  - mssql_scheduler
   - mssql_heavy_queries
   - mssql_plan_cache_hotspots
-  - mssql_tempdb
-  - mssql_blocking
-  - mssql_deadlock_details  
-  - mssql_log_usage
   - mssql_connections_detail
-  - mssql_database_size_growth
-  - mssql_buffer_pool
   - mssql_parallelism
   - mssql_plan_cache
+  - mssql_resource_governor
+  - mssql_transactions_long
+  - mssql_waits
+  # maintenance — columnstore and Query Store only
   - mssql_columnstore
   - mssql_stats
-  - mssql_index_usage
-  - mssql_missing_index
   - mssql_query_store
-  - mssql_index_fragmentation
+  # config
+  - mssql_database_configuration
+  - mssql_instance_configuration
+  - mssql_database_inventory
+  - mssql_schema_ddl
+  - mssql_security_ddl
+  - mssql_server_ddl
+  # signals / security
+  - mssql_errorlog_signals
+  - mssql_security

@@ -1,15 +1,32 @@
 # Lean OLTP profile for resource-constrained store SQL Server instances.
 # Tuned for minimal lock/contention while keeping DBA tuning and integrity signals.
 #
-# Included: baseline health, backup/jobs, space/log, blocking, long transactions,
-# waits, memory/CPU/scheduler/tempdb, autogrowth, active heavy queries + plan-cache
-# hotspots (query tuning), stats staleness, DBCC integrity age, errorlog + security.
+# Covered alert categories:
+#   availability: instance/database state, backup age, CHECKDB/suspect pages
+#   jobs: current failure, recent history, last outcome, long-running
+#   space: file usage, filegroup runway, log usage, log growth (P0/P1), data growth
+#   performance (P1): CPU, file I/O, blocking, memory grants, tempdb, PLE, scheduler, long requests
+#   performance (P2 subset): session count, long transactions, wait pressure
+#   maintenance (subset): autogrowth, stale stats
+#   signals: ERRORLOG
+#   security: mssql_security (site file required; see below)
+#   config inventory: database list and DDL counts, without configuration-drift alerts
 #
-# Excluded (optional add-ons): plan-cache size, query-store, index usage/fragmentation,
-# columnstore, parallelism detail, database/instance configuration drift,
-# size-growth history, Always On/HADR, full lock inventory (mssql_locks).
-# Add mssql_alwayson / mssql_alwayson_events / mssql_hadr_cluster if the store
-# instance participates in AG; add mssql_locks for lock drill-down.
+# Intentionally not collected, so these alerts stay silent on a store:
+#   hadr: mssql_alwayson, mssql_hadr_cluster (add them if the store is in an AG/FCI)
+#   availability restore: mssql_restore (restore secondaries use restore-secondary.yml)
+#   SqlLockWaitPersistent: mssql_locks
+#   SqlPlanCacheSingleUseRatioHigh: mssql_plan_cache (hotspots stay on; cache-size stays off)
+#   SqlParallelismQueueHigh: mssql_parallelism
+#   SqlResourceGovernorPressure: mssql_resource_governor
+#   SqlQueryStoreDisabled: mssql_query_store
+#   SqlDatabaseConfigurationUnsafe: mssql_database_configuration / mssql_instance_configuration
+#   index/columnstore maintenance: mssql_index_usage, mssql_index_fragmentation,
+#   mssql_missing_index, mssql_columnstore
+#
+# mssql_security is gitignored. Copy collector/mssql_security.collector.yml.example
+# to mssql_security.collector.yml and edit the allow-list before deploy.
+# Without that file, config check fails on this collector name.
 #
 # Recommended Prometheus scrape_interval: 90s–120s (scrape_timeout: 60s).
 # Optional sql_exporter.yml tuning on very weak hosts:
@@ -20,29 +37,40 @@
 #   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 -Computers STORE-SQL01 -Profile oltp-store-lite.yml
 #   .\scripts\powershell\sql-exporter\Deploy-SqlExporterConfig.ps1 -Computers STORE-SQL01 -Profile oltp-store-lite.yml
 collectors:
+  # availability
   - mssql_standard
   - mssql_backup
-  - mssql_job_inventory
-  - mssql_job_running
+  - mssql_database_integrity
+  # jobs
   - mssql_job_failed
   - mssql_job_history
+  - mssql_job_inventory
+  - mssql_job_running
+  # space
   - mssql_database_space
-  - mssql_database_integrity
+  - mssql_log_usage
+  - mssql_database_size_growth
+  - mssql_autogrowth
+  # performance
+  - mssql_cpu
   - mssql_file_io
-  - mssql_waits
+  - mssql_blocking
   - mssql_memory
   - mssql_tempdb
-  - mssql_cpu
+  - mssql_buffer_pool
   - mssql_scheduler
-  - mssql_autogrowth
   - mssql_heavy_queries
   - mssql_plan_cache_hotspots
-  - mssql_blocking
-  - mssql_deadlock_details  
-  - mssql_log_usage
   - mssql_connections_detail
   - mssql_transactions_long
-  - mssql_buffer_pool
+  - mssql_waits
+  # maintenance
   - mssql_stats
+  # config inventory (not configuration-drift alerts)
+  - mssql_database_inventory
+  - mssql_schema_ddl
+  - mssql_security_ddl
+  - mssql_server_ddl
+  # signals / security
   - mssql_errorlog_signals
   - mssql_security

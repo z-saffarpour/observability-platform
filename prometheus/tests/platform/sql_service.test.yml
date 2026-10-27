@@ -1,0 +1,164 @@
+# Service alerts fire at 3m. SQL unavailable fires at 1m. NTP delay fires at 5m.
+rule_files:
+  - ../../alert-rules/platform/platform-p0-sql.rules.yml
+  - ../../alert-rules/platform/platform-p1-host.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQLSERVER",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQLFDLauncher",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQLServerOLAPService",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQL$INST",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="SQLSERVERAGENT",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="SQLAgent$INST",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{instance="sql-up",job="windows_exporter",owner="OK-DBA",name="MSSQLSERVER",state="running"}'
+        values: '1+0x8'
+
+      - series: 'up{instance="sql01",job="sql_exporter",owner="OK-DBA"}'
+        values: '1+0x8'
+      - series: 'mssql_up{instance="sql01",job="sql_exporter",owner="OK-DBA"}'
+        values: '0+0x8'
+      - series: 'up{instance="sql-ok",job="sql_exporter",owner="FMR-DBA"}'
+        values: '1+0x8'
+      - series: 'mssql_up{instance="sql-ok",job="sql_exporter",owner="FMR-DBA"}'
+        values: '1+0x8'
+      - series: 'up{instance="sql-miss",job="sql_exporter",owner="OK-DBA"}'
+        values: '1+0x8'
+      - series: 'up{instance="sql-scrape-down",job="sql_exporter",owner="OK-DBA"}'
+        values: '0+0x8'
+
+      - series: 'windows_time_ntp_round_trip_delay_seconds{instance="ntp-slow",job="windows_exporter",owner="OK-DBA"}'
+        values: '1.5+0x8'
+      - series: 'windows_time_ntp_round_trip_delay_seconds{instance="ntp-ok",job="windows_exporter",owner="OK-DBA"}'
+        values: '0.2+0x8'
+
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: SqlServerDown
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: SqlServerDown
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerDown
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: windows_exporter
+              owner: OK-DBA
+              name: MSSQL$INST
+              state: running
+            exp_annotations:
+              summary: "SQL Server service MSSQL$INST down on sql01 for 3m"
+              summary_fa: "سرویس SQL Server MSSQL$INST روی sql01 برای 3 دقیقه قطع است"
+              description: "Service MSSQL$INST on sql01 has not been running for 3 minutes."
+              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: SqlServerDown
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: windows_exporter
+              owner: OK-DBA
+              name: MSSQLSERVER
+              state: running
+            exp_annotations:
+              summary: "SQL Server service MSSQLSERVER down on sql01 for 3m"
+              summary_fa: "سرویس SQL Server MSSQLSERVER روی sql01 برای 3 دقیقه قطع است"
+              description: "Service MSSQLSERVER on sql01 has not been running for 3 minutes."
+              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+
+      - eval_time: 3m
+        alertname: SqlServerAgentDown
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerAgentDown
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: windows_exporter
+              owner: OK-DBA
+              name: SQLAgent$INST
+              state: running
+            exp_annotations:
+              summary: "SQL Server Agent service SQLAgent$INST down on sql01 for 3m"
+              summary_fa: "سرویس SQL Server Agent SQLAgent$INST روی sql01 برای 3 دقیقه قطع است"
+              description: "Service SQLAgent$INST on sql01 has not been running for 3 minutes."
+              runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: SqlServerAgentDown
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: windows_exporter
+              owner: OK-DBA
+              name: SQLSERVERAGENT
+              state: running
+            exp_annotations:
+              summary: "SQL Server Agent service SQLSERVERAGENT down on sql01 for 3m"
+              summary_fa: "سرویس SQL Server Agent SQLSERVERAGENT روی sql01 برای 3 دقیقه قطع است"
+              description: "Service SQLSERVERAGENT on sql01 has not been running for 3 minutes."
+              runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
+
+      - eval_time: 1m
+        alertname: SqlServerUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-miss
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "SQL Server sql-miss unavailable for 1m"
+              summary_fa: "SQL Server روی sql-miss برای 1 دقیقه در دسترس نیست"
+              description: "SQL Server on sql-miss has been unavailable for more than 1 minute."
+              runbook: "Check the SQL error log and the sql_exporter query. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "SQL Server sql01 unavailable for 1m"
+              summary_fa: "SQL Server روی sql01 برای 1 دقیقه در دسترس نیست"
+              description: "SQL Server on sql01 has been unavailable for more than 1 minute."
+              runbook: "Check the SQL error log and the sql_exporter query. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0."
+
+      - eval_time: 4m
+        alertname: NTPClientDelay
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: NTPClientDelay
+        exp_alerts:
+          - exp_labels:
+              alertname: NTPClientDelay
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: ntp-slow
+              job: windows_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "NTP delay 1.5s on ntp-slow, above 1s for 5m"
+              summary_fa: "تاخیر NTP روی ntp-slow برابر 1.5 ثانیه است، بالای 1 ثانیه برای 5 دقیقه"
+              description: "NTP client round-trip delay on ntp-slow is above 1 second. VALUE = 1.500s."
+              runbook: "Check the NTP source and network path. WindowsTimeSkewCritical remains the clock-offset alert above 5 seconds. Email and SMS follow priority P1."

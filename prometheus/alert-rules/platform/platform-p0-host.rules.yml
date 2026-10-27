@@ -1,0 +1,17 @@
+# P1 — Windows CPU. irate over 2m, pending 10m, threshold 80%.
+# owner and job stay on the series so Alertmanager can route the page.
+groups:
+  - name: platform.p0.host
+    rules:
+      - alert: MemoryExhausted
+        expr: windows_os_physical_memory_free_bytes == 0
+        for: 10m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: host
+        annotations:
+          summary: "Physical memory exhausted on {{ $labels.instance }}, 0 bytes free for 10m"
+          summary_fa: "حافظه فیزیکی {{ $labels.instance }} تمام شده است، 0 بایت آزاد برای 10 دقیقه"
+          description: "{{ $labels.instance }} has had zero free physical memory for 10 minutes."
+          runbook: "Free memory now. A live host can still have available bytes while FreePhysicalMemory is above zero, so confirm windows_memory_available_bytes too. Email and SMS follow priority P0."

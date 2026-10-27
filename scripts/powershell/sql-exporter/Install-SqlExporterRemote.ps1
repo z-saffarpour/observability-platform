@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
   Install or update sql_exporter remotely over WinRM (optionally using NSSM).
@@ -8,6 +7,12 @@
   - Stages files on remote host, then deploys atomically into install path
   - -TransferMode Archive sends one zip instead of a separate copy per file.
     Use it for WAN hosts. File remains the default for low-latency links.
+  - -StagingRoot is a directory on the target server. The script creates a
+    unique subdirectory there for the copied files or the zip extract, then
+    removes that subdirectory and the StagingRoot directory itself. A drive
+    root or a UNC share root is never removed. The default staging parent is
+    %ProgramData%\Observability\PrometheusExporters\staging and is removed
+    only when it is empty.
   - Creates or updates Windows service using native Service Control Manager
   - Supports LocalSystem / LocalService / NetworkService / gMSA / NtService / custom credential
   - Idempotent: safe to run repeatedly for update rollout
@@ -17,7 +22,15 @@
     for the service account and applies the grants required by that profile.
     Connection matches Install-SecurityDdlEventSession.ps1: SqlClient from this
     process, Windows authentication unless -SqlCredential is set.
-    Without -SqlInstance, SQL permissions are left unchanged. CONTROL SERVER is not granted.
+    Without -SqlInstance, SQL permissions are left unchanged. With -SqlInstance,
+    Create-SqlExporterLogin.sql applies the limited grants. -GrantSysadmin also
+    adds the SQL login to the sysadmin role. Omitting the switch does not remove
+    an existing sysadmin membership.
+  - With -SqlInstance, collectors in the selected profile also install their
+    Extended Events sessions: mssql_server_ddl, mssql_security_ddl, and
+    mssql_schema_ddl. A collectors wildcard such as mssql_* installs all three.
+    Existing sessions are started and are not recreated. Archive jobs and
+    archive tables are not installed. -SkipSqlGrants skips the login only.
 
   Files deployed from SourceRoot (the repository root):
     - exporters\sql-exporter\bin\sql_exporter.exe
@@ -36,6 +49,8 @@
     -RemoteCredential (Get-Credential)
 
 .EXAMPLE
+  # Deploys the profile only. Without -SqlInstance the SQL login and the
+  # Extended Events sessions are left unchanged.
   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
     -Computers sql-host-01 `
     -Profile oltp.yml `
@@ -55,13 +70,51 @@
 
 .EXAMPLE
   # -ServiceAccount is NT SERVICE\<ServiceName>. The default service name is prometheus_sql_exporter.
-  # -SqlInstance is the SqlClient data source. SQL grants follow the profile collectors.
+  # oltp.yml includes mssql_server_ddl, mssql_security_ddl, and mssql_schema_ddl.
+  # -SqlInstance applies the limited login grants and installs
+  # observability_server_ddl, observability_security_ddl, and observability_database_ddl.
+  # An existing session is started and is not recreated.
+  # Archive jobs and archive tables are not installed.
+  # Omitting -GrantSysadmin leaves an existing sysadmin membership unchanged.
   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
     -Computers sql-host-01 `
     -Profile oltp.yml `
     -ServiceAccountMode NtService `
     -SqlInstance 'sql-host-01\DYNAMICSAX' `
     -SqlCredential (Get-Credential) `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  # oltp-store-lite.yml includes the three DDL collectors, so the three
+  # Extended Events sessions are installed. -GrantSysadmin adds the login to
+  # sysadmin so DBCC DBINFO and DBCC TRACESTATUS return data.
+  # Preview with -WhatIf before running it.
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers store-sql-01 `
+    -Profile oltp-store-lite.yml `
+    -ServiceAccountMode NtService `
+    -SqlInstance 'store-sql-01' `
+    -GrantSysadmin `
+    -RemoteCredential (Get-Credential) `
+    -WhatIf
+
+.EXAMPLE
+  # -SkipSqlGrants leaves the SQL login unchanged and still installs the
+  # Extended Events sessions required by the profile.
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -Profile oltp.yml `
+    -SqlInstance 'sql-host-01' `
+    -SkipSqlGrants `
+    -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  # alert-p1.yml has no DDL collectors, so -SqlInstance grants the login and
+  # does not install an Extended Events session.
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers sql-host-01 `
+    -Profile alert-p1.yml `
+    -SqlInstance 'sql-host-01' `
     -RemoteCredential (Get-Credential)
 
 .EXAMPLE
@@ -94,12 +147,29 @@
     -RemoteCredential (Get-Credential)
 
 .EXAMPLE
+  # -TransferMode Archive sends one zip over WinRM. It does not install DDL
+  # archive jobs or tables. Without -SqlInstance, event sessions are skipped.
   .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
     -Computers store-sql-01 `
     -Profile oltp-store-lite.yml `
     -TransferMode Archive `
     -RemoteCredential (Get-Credential)
+
+.EXAMPLE
+  # StagingRoot is on the target server. Use a volume that can hold the zip
+  # and its extract. After deploy, that directory is removed. The final
+  # service files still go to -InstallRoot.
+  .\scripts\powershell\sql-exporter\Install-SqlExporterRemote.ps1 `
+    -Computers 172.29.126.70 `
+    -Profile oltp-store-lite.yml `
+    -TransferMode Archive `
+    -StagingRoot 'D:\Temp\sql-exporter-staging' `
+    -InstallRoot 'D:\Observability\PrometheusExporters\sql-exporter' `
+    -SqlInstance '172.29.126.70\DYNAMICSAX' `
+    -ServiceAccountMode NtService `
+    -RemoteCredential (Get-Credential)
 #>
+#Requires -Version 5.1
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [Parameter(Mandatory = $false)]
@@ -115,6 +185,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$InstallRoot = 'C:\Program Files\Observability\PrometheusExporters\sql-exporter',
+
+    [Parameter(Mandatory = $false)]
+    [string]$StagingRoot,
 
     [Parameter(Mandatory = $false)]
     [string]$ServiceName = 'prometheus_sql_exporter',
@@ -191,6 +264,8 @@ param(
     [Parameter(Mandatory = $false)]
     [switch]$SkipSqlGrants,
 
+    [switch]$GrantSysadmin,
+
     [Parameter(Mandatory = $false)]
     [ValidateSet('File', 'Archive')]
     [string]$TransferMode = 'File'
@@ -220,6 +295,46 @@ if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
 function Write-Step {
     param([string]$Message, [string]$Color = 'Cyan')
     Write-Host $Message -ForegroundColor $Color
+}
+
+function Get-SqlExporterRemoteCollectorNames {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Collector source was not found: $Path"
+    }
+
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($line in [IO.File]::ReadAllLines($Path)) {
+        if ($line -match '^\s*-\s+(mssql_[A-Za-z0-9_*?]+)\s*(?:#.*)?$') {
+            $names.Add($Matches[1])
+        }
+        elseif ($line -match '^\s*collectors:\s*\[([^\]]+)\]') {
+            foreach ($part in ($Matches[1] -split ',')) {
+                $token = $part.Trim().Trim("'").Trim('"')
+                if ($token) { $names.Add($token) }
+            }
+        }
+    }
+
+    if ($names.Count -eq 0) {
+        throw "No collectors were found in: $Path"
+    }
+
+    @($names)
+}
+
+function Test-SqlExporterRemoteCollectorEnabled {
+    param(
+        [string[]]$Names,
+        [string]$CollectorName
+    )
+
+    foreach ($name in $Names) {
+        if ($name -eq $CollectorName) { return $true }
+        if ($name -match '[*?]' -and ($CollectorName -like $name)) { return $true }
+    }
+    return $false
 }
 
 function ConvertTo-PlainText {
@@ -598,7 +713,20 @@ $tempWebConfigPath = if ($webConfigToDeploy -ne $layout.WebConfig) { $webConfigT
 $svcContext = Get-ServiceAccountContext -Mode $ServiceAccountMode -Account $ServiceAccount -ServiceName $ServiceName -Credential $ServiceCredential
 
 Write-Step ("Source root     : {0}" -f $layout.Root)
+if (-not [string]::IsNullOrWhiteSpace($StagingRoot)) {
+    $StagingRoot = $StagingRoot.Trim()
+    $stagingOk = $StagingRoot -match '^[A-Za-z]:\\[^''";\r\n]*$' -or
+        $StagingRoot -match '^\\\\[^''";\r\n]+\\[^''";\r\n]*$'
+    if (-not $stagingOk) {
+        throw 'StagingRoot must be an absolute drive path (D:\Staging) or a UNC path on the target server, without quotes or semicolons.'
+    }
+    if ($StagingRoot.Length -gt 3) {
+        $StagingRoot = $StagingRoot.TrimEnd('\')
+    }
+}
+
 Write-Step ("Install root    : {0}" -f $InstallRoot)
+Write-Step ("Staging root    : {0}" -f $(if ($StagingRoot) { $StagingRoot } else { '%ProgramData%\Observability\PrometheusExporters\staging' }))
 Write-Step ("Service         : {0}" -f $ServiceName)
 Write-Step ("Display name    : {0}" -f $ServiceDisplayName)
 Write-Step ("Listen address  : {0}" -f $ListenAddress)
@@ -617,6 +745,7 @@ Write-Host ''
 $results = @()
 $transferArchive = $null
 $sqlGrantError = $null
+$eventSessionError = $null
 
 try {
 if ($TransferMode -eq 'Archive' -and -not $WhatIfPreference) {
@@ -651,6 +780,7 @@ foreach ($computer in $Computers) {
         Deploy    = 'Skipped'
         Service   = 'Skipped'
         SqlGrant  = 'Skipped'
+        EventSession = 'Skipped'
         Error     = $null
     }
 
@@ -672,14 +802,17 @@ foreach ($computer in $Computers) {
         Write-Step '  WinRM session established.' 'Green'
 
         $stage = Invoke-Command -Session $session -ScriptBlock {
-            param($SvcName)
+            param($SvcName, $Root)
             $id = [guid]::NewGuid().ToString('N')
-            $stageDir = Join-Path $env:ProgramData ("Observability\PrometheusExporters\staging\sql_exporter-{0}-{1}" -f $SvcName, $id)
+            if ([string]::IsNullOrWhiteSpace($Root)) {
+                $Root = Join-Path $env:ProgramData 'Observability\PrometheusExporters\staging'
+            }
+            $stageDir = Join-Path $Root ("sql_exporter-{0}-{1}" -f $SvcName, $id)
             New-Item -Path $stageDir -ItemType Directory -Force | Out-Null
             New-Item -Path (Join-Path $stageDir 'collector') -ItemType Directory -Force | Out-Null
             New-Item -Path (Join-Path $stageDir 'profiles') -ItemType Directory -Force | Out-Null
             $stageDir
-        } -ArgumentList $ServiceName
+        } -ArgumentList $ServiceName, $StagingRoot
 
         Write-Step ("  Staging path: {0}" -f $stage) 'DarkGray'
 
@@ -947,18 +1080,37 @@ foreach ($computer in $Computers) {
             if (-not [string]::IsNullOrWhiteSpace($stage)) {
                 try {
                     Invoke-Command -Session $session -ScriptBlock {
-                        param($StageDir)
+                        param($StageDir, $ConfiguredRoot)
 
                         if (Test-Path -LiteralPath $StageDir) {
                             Remove-Item -LiteralPath $StageDir -Recurse -Force -ErrorAction Stop
                         }
 
-                        $stagingRoot = Split-Path -Parent $StageDir
-                        if ((Test-Path -LiteralPath $stagingRoot -PathType Container) -and
-                            @((Get-ChildItem -LiteralPath $stagingRoot -Force -ErrorAction Stop)).Count -eq 0) {
-                            Remove-Item -LiteralPath $stagingRoot -Force -ErrorAction Stop
+                        if ([string]::IsNullOrWhiteSpace($ConfiguredRoot)) {
+                            $parent = Split-Path -Parent $StageDir
+                            if ((Test-Path -LiteralPath $parent -PathType Container) -and
+                                @((Get-ChildItem -LiteralPath $parent -Force -ErrorAction Stop)).Count -eq 0) {
+                                Remove-Item -LiteralPath $parent -Force -ErrorAction Stop
+                            }
+                            return
                         }
-                    } -ArgumentList $stage -ErrorAction Stop
+
+                        $rootFull = [IO.Path]::GetFullPath($ConfiguredRoot).TrimEnd('\')
+                        $rootParent = Split-Path -Parent $rootFull
+                        if ([string]::IsNullOrWhiteSpace($rootParent) -or $rootFull -match '^\\\\[^\\]+\\[^\\]+$') {
+                            throw "Refusing to remove staging root '$rootFull'."
+                        }
+
+                        $stageFull = [IO.Path]::GetFullPath($StageDir)
+                        $prefix = $rootFull + '\'
+                        if (-not $stageFull.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+                            throw "Staging directory is not under StagingRoot."
+                        }
+
+                        if (Test-Path -LiteralPath $rootFull) {
+                            Remove-Item -LiteralPath $rootFull -Recurse -Force -ErrorAction Stop
+                        }
+                    } -ArgumentList @($stage, $StagingRoot) -ErrorAction Stop
                     Write-Step '  Staging files removed.' 'DarkGray'
                 }
                 catch {
@@ -989,7 +1141,8 @@ if (-not $SkipSqlGrants -and $sqlInstances.Count -gt 0) {
                 -SqlCredential $SqlCredential `
                 -LoginName $sqlLogin `
                 -CollectorSourcePath $collectorSource `
-                -TrustServerCertificate $TrustServerCertificate
+                -TrustServerCertificate $TrustServerCertificate `
+                -GrantSysadmin:$GrantSysadmin
         )
         foreach ($grantRow in $grantRows) {
             Write-Step ("  SQL login OK : {0} on {1} ({2})" -f $grantRow.LoginName, $grantRow.SqlInstance, $grantRow.Grants) 'Green'
@@ -1005,6 +1158,94 @@ if (-not $SkipSqlGrants -and $sqlInstances.Count -gt 0) {
         }
         Write-Step ("  ERROR: {0}" -f $sqlGrantError) 'Red'
     }
+}
+
+$ddlSessions = @(
+    @{ Collector = 'mssql_server_ddl'; Script = 'Install-ServerDdlEventSession.ps1'; Label = 'observability_server_ddl' }
+    @{ Collector = 'mssql_security_ddl'; Script = 'Install-SecurityDdlEventSession.ps1'; Label = 'observability_security_ddl' }
+    @{ Collector = 'mssql_schema_ddl'; Script = 'Install-DatabaseDdlEventSession.ps1'; Label = 'observability_database_ddl' }
+)
+$collectorSource = if ($profileLeaf) { Join-Path $layout.ProfilesDir $profileLeaf } else { $configToDeploy }
+$selectedDdlSessions = @()
+try {
+    if (Test-Path -LiteralPath $collectorSource -PathType Leaf) {
+        $collectorNames = @(Get-SqlExporterRemoteCollectorNames -Path $collectorSource)
+        $selectedDdlSessions = @($ddlSessions | Where-Object {
+                Test-SqlExporterRemoteCollectorEnabled -Names $collectorNames -CollectorName $_.Collector
+            })
+    }
+    elseif ($sqlInstances.Count -gt 0) {
+        throw "Collector source was not found: $collectorSource"
+    }
+}
+catch {
+    $eventSessionError = $_.Exception.Message
+    Write-Step ("  ERROR: {0}" -f $eventSessionError) 'Red'
+    foreach ($resultRow in $results) {
+        if ($resultRow.Deploy -eq 'OK' -or $resultRow.Deploy -eq 'WhatIf') {
+            $resultRow.EventSession = 'Failed'
+            if ($resultRow.Error) {
+                $resultRow.Error = '{0} | {1}' -f $resultRow.Error, $eventSessionError
+            }
+            else {
+                $resultRow.Error = $eventSessionError
+            }
+        }
+    }
+}
+
+if (-not $eventSessionError -and $selectedDdlSessions.Count -gt 0 -and $sqlInstances.Count -gt 0) {
+    Write-Step '===== Extended Events sessions =====' 'Yellow'
+    Write-Step '  Archive jobs and tables are not installed.' 'DarkGray'
+    $sessionFailures = New-Object System.Collections.Generic.List[string]
+    foreach ($sessionSpec in $selectedDdlSessions) {
+        $sessionScript = Join-Path $PSScriptRoot $sessionSpec.Script
+        if (-not (Test-Path -LiteralPath $sessionScript -PathType Leaf)) {
+            $sessionFailures.Add("$($sessionSpec.Label): script not found: $sessionScript")
+            Write-Step ("  ERROR: {0}: script not found" -f $sessionSpec.Label) 'Red'
+            continue
+        }
+        try {
+            $sessionRows = @(
+                & $sessionScript `
+                    -SqlInstance $sqlInstances `
+                    -SqlCredential $SqlCredential `
+                    -TrustServerCertificate $TrustServerCertificate
+            )
+            foreach ($sessionRow in $sessionRows) {
+                Write-Step ("  {0} : {1} running={2} file={3}" -f $sessionRow.SqlInstance, $sessionRow.SessionName, $sessionRow.IsRunning, $sessionRow.XelFile) 'Green'
+            }
+        }
+        catch {
+            $sessionFailures.Add("$($sessionSpec.Label): $($_.Exception.Message)")
+            Write-Step ("  ERROR: {0}: {1}" -f $sessionSpec.Label, $_.Exception.Message) 'Red'
+        }
+    }
+    if ($sessionFailures.Count -gt 0) {
+        $eventSessionError = $sessionFailures -join ' | '
+        foreach ($resultRow in $results) {
+            if ($resultRow.Deploy -eq 'OK' -or $resultRow.Deploy -eq 'WhatIf') {
+                $resultRow.EventSession = 'Failed'
+                if ($resultRow.Error) {
+                    $resultRow.Error = '{0} | {1}' -f $resultRow.Error, $eventSessionError
+                }
+                else {
+                    $resultRow.Error = $eventSessionError
+                }
+            }
+        }
+    }
+    else {
+        $eventSessionState = if ($WhatIfPreference) { 'WhatIf' } else { 'OK' }
+        foreach ($resultRow in $results) {
+            if ($resultRow.Deploy -eq 'OK' -or $resultRow.Deploy -eq 'WhatIf') {
+                $resultRow.EventSession = $eventSessionState
+            }
+        }
+    }
+}
+elseif ($selectedDdlSessions.Count -gt 0) {
+    Write-Step 'Event sessions skipped: -SqlInstance was not supplied.' 'DarkYellow'
 }
 }
 finally {
@@ -1023,7 +1264,7 @@ Write-Step '===== Summary =====' 'Yellow'
 $results | Format-Table -AutoSize | Out-String | Write-Host
 
 $failed = @($results | Where-Object { $_.Error })
-if ($failed.Count -gt 0 -or $sqlGrantError) {
+if ($failed.Count -gt 0 -or $sqlGrantError -or $eventSessionError) {
     exit 1
 }
 

@@ -1,0 +1,95 @@
+# U: backup runway. Linear 3h history is enough for deriv and the 30m
+# critical pending window. Critical mount: about 2.9 days left.
+# U: itself is about 6.9 days left and must stay silent.
+# Flat growth is under 64 MiB/day. Shrink and a non-U volume must stay silent.
+rule_files:
+  - ../../recording-rules/windows-exporter/windows_exporter-recording.rules.yml
+  - ../../alert-rules/windows-exporter/windows_exporter-p0-host.rules.yml
+  - ../../alert-rules/windows-exporter/windows_exporter-p1-host.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'windows_logical_disk_size_bytes{instance="backup-critical",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01"}'
+        values: '107374182400+0x180'
+      - series: 'windows_logical_disk_free_bytes{instance="backup-critical",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01"}'
+        values: '64424509440-14913081x180'
+      - series: 'windows_logical_disk_info{instance="backup-critical",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01",volume_name="SQL Backup 01",type="fixed",disk="1",filesystem="NTFS"}'
+        values: '1+0x180'
+
+      - series: 'windows_logical_disk_size_bytes{instance="backup-ok",job="windows_exporter",owner="OK-DBA",volume="U:"}'
+        values: '214748364800+0x180'
+      - series: 'windows_logical_disk_free_bytes{instance="backup-ok",job="windows_exporter",owner="OK-DBA",volume="U:"}'
+        values: '75161927680-7456540x180'
+      - series: 'windows_logical_disk_info{instance="backup-ok",job="windows_exporter",owner="OK-DBA",volume="U:",volume_name="SQL Backup",type="fixed",disk="2",filesystem="NTFS"}'
+        values: '1+0x180'
+
+      - series: 'windows_logical_disk_size_bytes{instance="backup-flat",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup02"}'
+        values: '21474836480+0x180'
+      - series: 'windows_logical_disk_free_bytes{instance="backup-flat",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup02"}'
+        values: '5368709120-7281x180'
+      - series: 'windows_logical_disk_info{instance="backup-flat",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup02",volume_name="SQL Backup 02",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x180'
+
+      - series: 'windows_logical_disk_size_bytes{instance="backup-shrink",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup03"}'
+        values: '53687091200+0x180'
+      - series: 'windows_logical_disk_free_bytes{instance="backup-shrink",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup03"}'
+        values: '10737418240+7456540x180'
+      - series: 'windows_logical_disk_info{instance="backup-shrink",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup03",volume_name="SQL Backup 03",type="fixed",disk="4",filesystem="NTFS"}'
+        values: '1+0x180'
+
+      - series: 'windows_logical_disk_size_bytes{instance="sql-data",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '107374182400+0x180'
+      - series: 'windows_logical_disk_free_bytes{instance="sql-data",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '64424509440-14913081x180'
+      - series: 'windows_logical_disk_info{instance="sql-data",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01",volume_name="SQL Data 01",type="fixed",disk="5",filesystem="NTFS"}'
+        values: '1+0x180'
+
+    promql_expr_test:
+      - expr: instance_volume:windows_backup_disk_free_days{instance="backup-critical"}
+        eval_time: 3h
+        exp_samples:
+          - labels: 'instance_volume:windows_backup_disk_free_days{instance="backup-critical",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01",volume_name="SQL Backup 01"}'
+            value: 2.874999977648258
+      - expr: instance_volume:windows_backup_disk_free_days{instance="backup-ok"}
+        eval_time: 3h
+        exp_samples:
+          - labels: 'instance_volume:windows_backup_disk_free_days{instance="backup-ok",job="windows_exporter",owner="OK-DBA",volume="U:",volume_name="SQL Backup"}'
+            value: 6.875000417232538
+      - expr: absent(instance_volume:windows_backup_disk_free_days{instance="backup-flat"})
+        eval_time: 3h
+        exp_samples:
+          - labels: '{instance="backup-flat"}'
+            value: 1
+      - expr: absent(instance_volume:windows_backup_disk_free_days{instance="backup-shrink"})
+        eval_time: 3h
+        exp_samples:
+          - labels: '{instance="backup-shrink"}'
+            value: 1
+      - expr: absent(instance_volume:windows_backup_disk_free_days{instance="sql-data"})
+        eval_time: 3h
+        exp_samples:
+          - labels: '{instance="sql-data"}'
+            value: 1
+
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: WindowsBackupDiskFreeSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsBackupDiskFreeSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: backup-critical
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "U:\\Databases\\Backup01"
+              volume_name: SQL Backup 01
+            exp_annotations:
+              summary: "SQL Backup 01 U:\\Databases\\Backup01 on backup-critical: 57.51Gi free of 100Gi (2.9d left)"
+              summary_fa: "SQL Backup 01 U:\\Databases\\Backup01 روی backup-critical: 57.51Gi آزاد از 100Gi (2.9 روز مانده)"
+              description: "Backup volume U:\\Databases\\Backup01 (SQL Backup 01) on backup-critical has 2.9 days of free space left at its 7-day growth rate. Backup writes can fail when this volume fills."
+              runbook: "Compare instance_volume:windows_backup_disk_free_bytes with instance_volume:windows_backup_disk_free_bytes:threshold_critical. Extend the backup volume or remove expired backups before the volume reaches zero. SMS follows priority P0."
