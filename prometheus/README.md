@@ -9,6 +9,8 @@ Target file discovery: [فارسی](../docs/prometheus/fa/targets.md) · [Englis
 
 Installation guide: [فارسی](../docs/prometheus/fa/installation.md) · [English](../docs/prometheus/en/installation.md)
 
+Rules catalog (standalone HTML): [فارسی](../docs/prometheus/fa/alert-catalog.html) · [English](../docs/prometheus/en/alert-catalog.html) (Alert Rules and Recording Rules; snapshot: 2026-11-09).
+
 Documentation (FA / EN):
 
 - SQL Exporter: [فارسی](../docs/sql-exporter/fa/prometheus.md) · [English](../docs/sql-exporter/en/prometheus.md)
