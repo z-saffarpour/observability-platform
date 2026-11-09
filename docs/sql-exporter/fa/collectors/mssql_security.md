@@ -112,7 +112,8 @@ ORDER BY login_name;
 
 | متریک | نوع | برچسب‌ها / مقادیر | منبع | توضیح |
 |---|---|---|---|---|
-| `mssql_failed_logins_total` | `gauge` | `login_name`, `client_host`, `reason` | `event_count` | query_ref=`mssql_security_failed_logins` | تعداد رخدادهای login ناموفق از ERRORLOG در 60 دقیقه اخیر به تفکیک کاربر/کلاینت/دلیل. |
+| `mssql_failed_logins_total` | `counter` | `login_name`, `client_host`, `reason` | `event_count` | query_ref=`mssql_security_failed_logins` | شمارندهٔ تجمعی login ناموفق در همهٔ آرشیوهای ERRORLOG که SQL Server هنوز نگه داشته است. پنجرهٔ زمانی و reset نیمه‌شب ندارد. نمونه‌ها تا retention خود Prometheus می‌مانند؛ برای بازهٔ داشبورد از `increase()` استفاده کنید. |
+| `mssql_failed_login_last_seen_seconds` | `gauge` | `login_name`, `client_host`, `reason` | `last_seen_seconds` | query_ref=`mssql_security_failed_logins` | زمان Unix (UTC) آخرین login ناموفق برای همان login/client/reason. برای هر سری یک زمان، نه یک ردیف به‌ازای هر رخداد. |
 | `mssql_privileged_sessions` | `gauge` | `login_name`, `host_name`, `program_name`, `server_role` | `session_count` | query_ref=`mssql_security_privileged_sessions` | نشست‌های کاربری جاری که عضو sysadmin یا securityadmin هستند. |
 | `mssql_unexpected_login_count` | `gauge` | `login_name` | `session_count` | query_ref=`mssql_security_unexpected_logins` | تعداد نشست‌های جاری loginهایی که در allow-list داخلی query نیستند. |
 | `mssql_sql_auth_logins_enabled` | `gauge` | (none) | `enabled_count` | query_ref=`mssql_security_sql_auth_enabled` | تعداد SQL Loginهای فعال. |
@@ -149,5 +150,5 @@ ORDER BY login_name;
 - Alert پیشنهادی:
   - `mssql_sa_login_enabled > 0`
   - `mssql_xp_cmdshell_enabled > 0`
-  - جهش ناگهانی در `mssql_failed_logins_total`
+  - جهش ناگهانی در `increase(mssql_failed_logins_total[1h])`
   - `mssql_audit_status != 1` برای auditهای فعال

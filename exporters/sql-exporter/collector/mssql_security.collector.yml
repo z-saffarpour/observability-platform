@@ -14,13 +14,23 @@ min_interval: 300s
 
 metrics:
   - metric_name: mssql_failed_logins_total
-    type: gauge
-    help: 'Failed login rows parsed from ERRORLOG in the last 60 minutes, grouped by login/client/reason.'
+    type: counter
+    help: 'Cumulative failed-login rows present in retained SQL Server ERRORLOG archives, grouped by login/client/reason. No time window. Samples stay in Prometheus until retention. Use increase() over the dashboard range.'
     key_labels:
       - login_name
       - client_host
       - reason
     values: [event_count]
+    query_ref: mssql_security_failed_logins
+
+  - metric_name: mssql_failed_login_last_seen_seconds
+    type: gauge
+    help: 'UTC Unix timestamp of the latest failed-login ERRORLOG row for this login/client/reason. Same series grain as mssql_failed_logins_total. Sample history follows Prometheus retention.'
+    key_labels:
+      - login_name
+      - client_host
+      - reason
+    values: [last_seen_seconds]
     query_ref: mssql_security_failed_logins
 
   - metric_name: mssql_privileged_sessions
@@ -220,8 +230,17 @@ metrics:
 queries:
   - query_name: mssql_security_failed_logins
     query: |
-      DECLARE @start datetime = DATEADD(HOUR, -1, GETDATE());
-      DECLARE @end datetime = GETDATE();
+      DECLARE @archive int;
+      DECLARE @cmd nvarchar(400);
+      DECLARE @start nvarchar(19) = N'19000101';
+      DECLARE @end nvarchar(19) = CONVERT(nvarchar(19), DATEADD(DAY, 1, GETDATE()), 120);
+
+      IF OBJECT_ID('tempdb..#logs') IS NOT NULL DROP TABLE #logs;
+      CREATE TABLE #logs (
+          archive_no int NOT NULL,
+          log_date datetime NULL,
+          log_size bigint NULL
+      );
 
       IF OBJECT_ID('tempdb..#el') IS NOT NULL DROP TABLE #el;
       CREATE TABLE #el (
@@ -231,18 +250,47 @@ queries:
       );
 
       BEGIN TRY
-          INSERT INTO #el EXEC xp_readerrorlog 0, 1, N'Login failed for user', NULL, @start, @end, N'asc';
+          INSERT INTO #logs
+          EXEC xp_enumerrorlogs;
       END TRY
       BEGIN CATCH
+          INSERT INTO #logs (archive_no) VALUES (0);
       END CATCH;
 
+      IF NOT EXISTS (SELECT 1 FROM #logs)
+          INSERT INTO #logs (archive_no) VALUES (0);
+
+      SELECT @archive = MIN(archive_no) FROM #logs;
+
+      WHILE @archive IS NOT NULL
+      BEGIN
+          -- xp_readerrorlog rejects untyped NULL and datetime variables under INSERT...EXEC
+          -- (Msg 22004, surfaced as Msg 0 Level 11). Pass nvarchar literals.
+          SET @cmd = N'INSERT INTO #el EXEC xp_readerrorlog '
+              + CONVERT(nvarchar(10), @archive)
+              + N', 1, N''Login failed for user'', N'''', N'''
+              + @start
+              + N''', N'''
+              + @end
+              + N''', N''asc'';';
+
+          BEGIN TRY
+              EXEC sys.sp_executesql @cmd;
+          END TRY
+          BEGIN CATCH
+          END CATCH;
+
+          SELECT @archive = MIN(archive_no) FROM #logs WHERE archive_no > @archive;
+      END;
+
       ;WITH src AS (
-          SELECT Text
+          SELECT LogDate, Text
           FROM #el
           WHERE Text LIKE N'Login failed for user %'
       ),
       pos AS (
           SELECT
+              LogDate,
               Text,
               CHARINDEX(N'Login failed for user ''', Text) AS p_login_start,
               CHARINDEX(N'''. Reason:', Text) AS p_login_end,
@@ -252,6 +300,7 @@ queries:
       ),
       parsed AS (
           SELECT
+              LogDate,
               CASE
                 WHEN p_login_start > 0 AND p_login_end > p_login_start
                   THEN SUBSTRING(
@@ -279,17 +328,26 @@ queries:
                 ELSE N'unknown'
               END AS reason
           FROM pos
+      ),
+      labeled AS (
+          SELECT
+              LogDate,
+              LEFT(ISNULL(NULLIF(REPLACE(REPLACE(LTRIM(RTRIM(login_name)), CHAR(13), N''), CHAR(10), N''), N''), N'unknown'), 128) AS login_name,
+              LEFT(ISNULL(NULLIF(REPLACE(REPLACE(LTRIM(RTRIM(client_host)), CHAR(13), N''), CHAR(10), N''), N''), N'unknown'), 128) AS client_host,
+              LEFT(ISNULL(NULLIF(REPLACE(REPLACE(LTRIM(RTRIM(reason)), CHAR(13), N''), CHAR(10), N''), N''), N'unknown'), 256) AS reason
+          FROM parsed
       )
       SELECT
-          LEFT(ISNULL(login_name, N'unknown'), 128) AS login_name,
-          LEFT(ISNULL(client_host, N'unknown'), 128) AS client_host,
-          LEFT(ISNULL(reason, N'unknown'), 256) AS reason,
-          CAST(COUNT(*) AS float) AS event_count
-      FROM parsed
+          login_name,
+          client_host,
+          reason,
+          CAST(COUNT(*) AS float) AS event_count,
+          CAST(DATEDIFF_BIG(SECOND, '19700101', DATEADD(MINUTE, DATEDIFF(MINUTE, GETDATE(), GETUTCDATE()), MAX(LogDate))) AS float) AS last_seen_seconds
+      FROM labeled
       GROUP BY
-          LEFT(ISNULL(login_name, N'unknown'), 128),
-          LEFT(ISNULL(client_host, N'unknown'), 128),
-          LEFT(ISNULL(reason, N'unknown'), 256);
+          login_name,
+          client_host,
+          reason;
 
   - query_name: mssql_security_privileged_sessions
     query: |

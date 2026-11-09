@@ -115,7 +115,8 @@ See also: [mssql_security (FA)](../../fa/collectors/mssql_security.md#allow-list
 
 | metric | type | labels / values | source | help |
 |---|---|---|---|---|
-| `mssql_failed_logins_total` | `gauge` | `login_name`, `client_host`, `reason` | `event_count` | query_ref=`mssql_security_failed_logins` | Failed login rows parsed from ERRORLOG in the last 60 minutes, grouped by login/client/reason. |
+| `mssql_failed_logins_total` | `counter` | `login_name`, `client_host`, `reason` | `event_count` | query_ref=`mssql_security_failed_logins` | Cumulative failed-login rows in every retained SQL Server ERRORLOG archive. No midnight or sliding window. Prometheus keeps samples until its own retention; use `increase()` over the dashboard range. |
+| `mssql_failed_login_last_seen_seconds` | `gauge` | `login_name`, `client_host`, `reason` | `last_seen_seconds` | query_ref=`mssql_security_failed_logins` | UTC Unix time of the latest failed login for that login/client/reason. One time per series, not one row per event. |
 | `mssql_privileged_sessions` | `gauge` | `login_name`, `host_name`, `program_name`, `server_role` | `session_count` | query_ref=`mssql_security_privileged_sessions` | Current user sessions whose login is member of sysadmin or securityadmin. |
 | `mssql_unexpected_login_count` | `gauge` | `login_name` | `session_count` | query_ref=`mssql_security_unexpected_logins` | Current user sessions with login names outside the inline allow-list CTE in this collector. |
 | `mssql_sql_auth_logins_enabled` | `gauge` | (none) | `enabled_count` | query_ref=`mssql_security_sql_auth_enabled` | Number of enabled SQL-authentication logins (type_desc = SQL_LOGIN). |
@@ -152,5 +153,5 @@ See also: [mssql_security (FA)](../../fa/collectors/mssql_security.md#allow-list
 - Recommended alert candidates:
   - `mssql_sa_login_enabled > 0`
   - `mssql_xp_cmdshell_enabled > 0`
-  - sudden rise in `mssql_failed_logins_total`
+  - sudden rise in `increase(mssql_failed_logins_total[1h])`
   - `mssql_audit_status != 1` for enabled audits
