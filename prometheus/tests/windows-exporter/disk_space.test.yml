@@ -2,7 +2,14 @@
 # pending windows.
 # disk-large: 2TiB with 160GiB free (~7.8%). Low percent, still above 100GiB. Silent.
 # disk-low: 500GiB with 40GiB free (8%). Low only.
-# disk-critical: 200GiB with 8GiB free (4%). Critical only; Low must not fire.
+# disk-critical: 200GiB with 8GiB free (4%), volume_name OS. Generic critical only.
+# Role volumes at the same 4% fire only their own alert:
+# SQL Data 01, SQL Data01, SQL Tempdb Data 01, SQL TempdbData01,
+# OLAP Data 01, SQL Olap Data 01, SQL Tempdb Log, SQL Tempdblog 01,
+# SQL Log 01, SQL Log03.
+# SQL Backup 01 on U: and SQL Backup 02 on E: fire only WindowsSqlBackupDiskSpaceCritical.
+# A U: volume named Backup stays silent for both critical disk alerts.
+# OLAP Cache at 4% stays on WindowsDiskSpaceCritical.
 # disk-mount: E:\Data01, 500GiB with 40GiB free (8%). Low, same as a drive letter.
 # disk-nested: U:\Databases\Backup01 is excluded from the generic disk series.
 # disk-harddisk / disk-small / disk-removable: excluded before the threshold.
@@ -34,7 +41,140 @@ tests:
         values: '214748364800+0x20'
       - series: 'windows_logical_disk_free_bytes{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:"}'
         values: '8589934592+0x20'
-      - series: 'windows_logical_disk_info{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:",volume_name="SQL Log",type="fixed",disk="3",filesystem="NTFS"}'
+      - series: 'windows_logical_disk_info{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:",volume_name="OS",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-data",job="windows_exporter",owner="OK-DBA",volume="G:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-data",job="windows_exporter",owner="OK-DBA",volume="G:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-data",job="windows_exporter",owner="OK-DBA",volume="G:",volume_name="SQL Data 01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-data-glued",job="windows_exporter",owner="OK-DBA",volume="G:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-data-glued",job="windows_exporter",owner="OK-DBA",volume="G:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-data-glued",job="windows_exporter",owner="OK-DBA",volume="G:",volume_name="SQL Data01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-tempdb-data",job="windows_exporter",owner="OK-DBA",volume="H:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-tempdb-data",job="windows_exporter",owner="OK-DBA",volume="H:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-tempdb-data",job="windows_exporter",owner="OK-DBA",volume="H:",volume_name="SQL Tempdb Data 01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-tempdb-data-glued",job="windows_exporter",owner="OK-DBA",volume="H:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-tempdb-data-glued",job="windows_exporter",owner="OK-DBA",volume="H:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-tempdb-data-glued",job="windows_exporter",owner="OK-DBA",volume="H:",volume_name="SQL TempdbData01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-olap-data",job="windows_exporter",owner="OK-BI-Develop",volume="I:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-olap-data",job="windows_exporter",owner="OK-BI-Develop",volume="I:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-olap-data",job="windows_exporter",owner="OK-BI-Develop",volume="I:",volume_name="OLAP Data 01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-olap",job="windows_exporter",owner="OK-DBA",volume="I:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-olap",job="windows_exporter",owner="OK-DBA",volume="I:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-olap",job="windows_exporter",owner="OK-DBA",volume="I:",volume_name="SQL Olap Data 01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-olap-cache",job="windows_exporter",owner="OK-BI-Develop",volume="I:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-olap-cache",job="windows_exporter",owner="OK-BI-Develop",volume="I:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-olap-cache",job="windows_exporter",owner="OK-BI-Develop",volume="I:",volume_name="OLAP Cache",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-tempdb-log",job="windows_exporter",owner="OK-DBA",volume="J:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-tempdb-log",job="windows_exporter",owner="OK-DBA",volume="J:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-tempdb-log",job="windows_exporter",owner="OK-DBA",volume="J:",volume_name="SQL Tempdb Log",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-tempdb-log-glued",job="windows_exporter",owner="OK-DBA",volume="J:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-tempdb-log-glued",job="windows_exporter",owner="OK-DBA",volume="J:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-tempdb-log-glued",job="windows_exporter",owner="OK-DBA",volume="J:",volume_name="SQL Tempdblog 01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-log",job="windows_exporter",owner="OK-DBA",volume="K:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-log",job="windows_exporter",owner="OK-DBA",volume="K:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-log",job="windows_exporter",owner="OK-DBA",volume="K:",volume_name="SQL Log 01",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-log-glued",job="windows_exporter",owner="OK-DBA",volume="K:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-log-glued",job="windows_exporter",owner="OK-DBA",volume="K:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-log-glued",job="windows_exporter",owner="OK-DBA",volume="K:",volume_name="SQL Log03",type="fixed",disk="3",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-backup-u",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-backup-u",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-backup-u",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup01",volume_name="SQL Backup 01",type="fixed",disk="6",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-backup-letter",job="windows_exporter",owner="OK-DBA",volume="L:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-backup-letter",job="windows_exporter",owner="OK-DBA",volume="L:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-backup-letter",job="windows_exporter",owner="OK-DBA",volume="L:",volume_name="SQL Backup 02",type="fixed",disk="6",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-backup-plain",job="windows_exporter",owner="OK-DBA",volume="U:"}'
+        values: '214748364800+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-backup-plain",job="windows_exporter",owner="OK-DBA",volume="U:"}'
+        values: '8589934592+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-backup-plain",job="windows_exporter",owner="OK-DBA",volume="U:",volume_name="Backup",type="fixed",disk="6",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-tempdb-data-low",job="windows_exporter",owner="OK-DBA",volume="M:"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-tempdb-data-low",job="windows_exporter",owner="OK-DBA",volume="M:"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-tempdb-data-low",job="windows_exporter",owner="OK-DBA",volume="M:",volume_name="SQL Tempdb Data",type="fixed",disk="7",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-olap-low",job="windows_exporter",owner="OK-BI-Develop",volume="N:"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-olap-low",job="windows_exporter",owner="OK-BI-Develop",volume="N:"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-olap-low",job="windows_exporter",owner="OK-BI-Develop",volume="N:",volume_name="OLAP Data",type="fixed",disk="7",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-tempdb-log-low",job="windows_exporter",owner="OK-DBA",volume="O:"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-tempdb-log-low",job="windows_exporter",owner="OK-DBA",volume="O:"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-tempdb-log-low",job="windows_exporter",owner="OK-DBA",volume="O:",volume_name="SQL Tempdb Log",type="fixed",disk="7",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-log-low",job="windows_exporter",owner="OK-DBA",volume="P:"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-log-low",job="windows_exporter",owner="OK-DBA",volume="P:"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-log-low",job="windows_exporter",owner="OK-DBA",volume="P:",volume_name="SQL Log",type="fixed",disk="7",filesystem="NTFS"}'
+        values: '1+0x20'
+
+      - series: 'windows_logical_disk_size_bytes{instance="disk-sql-backup-low",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup02"}'
+        values: '536870912000+0x20'
+      - series: 'windows_logical_disk_free_bytes{instance="disk-sql-backup-low",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup02"}'
+        values: '42949672960+0x20'
+      - series: 'windows_logical_disk_info{instance="disk-sql-backup-low",job="windows_exporter",owner="OK-DBA",volume="U:\\Databases\\Backup02",volume_name="SQL Backup 02",type="fixed",disk="7",filesystem="NTFS"}'
         values: '1+0x20'
 
       - series: 'windows_logical_disk_size_bytes{instance="disk-harddisk",job="windows_exporter",owner="OK-DBA",volume="HarddiskVolume2"}'
@@ -96,7 +236,7 @@ tests:
       - expr: instance_volume:windows_disk_free_ratio{instance="disk-critical"}
         eval_time: 15m
         exp_samples:
-          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:",volume_name="SQL Log"}'
+          - labels: 'instance_volume:windows_disk_free_ratio{instance="disk-critical",job="windows_exporter",owner="OK-DBA",volume="F:",volume_name="OS"}'
             value: 0.04
       - expr: instance_volume:windows_disk_free_ratio{instance="disk-large"}
         eval_time: 15m
@@ -140,21 +280,6 @@ tests:
               severity: warning
               priority: P1
               alert_profile: host
-              instance: disk-low
-              job: windows_exporter
-              owner: OK-DBA
-              volume: "E:"
-              volume_name: SQL Data
-            exp_annotations:
-              summary: "SQL Data E: on disk-low: 40Gi free of 500Gi (8% free)"
-              summary_fa: "SQL Data E: روی disk-low: 40Gi آزاد از 500Gi (8% آزاد)"
-              description: "Volume E: (SQL Data) on disk-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
-              runbook: "Free space or extend the volume before free space drops under 5% and 30GiB. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
-          - exp_labels:
-              alertname: WindowsDiskSpaceLow
-              severity: warning
-              priority: P1
-              alert_profile: host
               instance: disk-mount
               job: windows_exporter
               owner: OK-DBA
@@ -165,6 +290,114 @@ tests:
               summary_fa: "Data01 E:\\Data01 روی disk-mount: 40Gi آزاد از 500Gi (8% آزاد)"
               description: "Volume E:\\Data01 (Data01) on disk-mount has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
               runbook: "Free space or extend the volume before free space drops under 5% and 30GiB. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 16m
+        alertname: WindowsSqlDataDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlDataDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-low
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "E:"
+              volume_name: SQL Data
+            exp_annotations:
+              summary: "SQL Data E: on disk-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "SQL Data E: روی disk-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "SQL Data volume E: (SQL Data) on disk-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend this SQL Data volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 16m
+        alertname: WindowsSqlTempdbDataDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlTempdbDataDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-tempdb-data-low
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "M:"
+              volume_name: SQL Tempdb Data
+            exp_annotations:
+              summary: "SQL Tempdb Data M: on disk-tempdb-data-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "SQL Tempdb Data M: روی disk-tempdb-data-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "SQL Tempdb Data volume M: (SQL Tempdb Data) on disk-tempdb-data-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend this SQL Tempdb Data volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 16m
+        alertname: WindowsOlapDataDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsOlapDataDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-olap-low
+              job: windows_exporter
+              owner: OK-BI-Develop
+              volume: "N:"
+              volume_name: OLAP Data
+            exp_annotations:
+              summary: "OLAP Data N: on disk-olap-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "OLAP Data N: روی disk-olap-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "Olap Data volume N: (OLAP Data) on disk-olap-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend this Olap Data volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes. Runway alerts remain separate."
+      - eval_time: 16m
+        alertname: WindowsSqlTempdbLogDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlTempdbLogDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-tempdb-log-low
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "O:"
+              volume_name: SQL Tempdb Log
+            exp_annotations:
+              summary: "SQL Tempdb Log O: on disk-tempdb-log-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "SQL Tempdb Log O: روی disk-tempdb-log-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "SQL Tempdb Log volume O: (SQL Tempdb Log) on disk-tempdb-log-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend this SQL Tempdb Log volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 16m
+        alertname: WindowsSqlLogDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlLogDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-sql-log-low
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "P:"
+              volume_name: SQL Log
+            exp_annotations:
+              summary: "SQL Log P: on disk-sql-log-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "SQL Log P: روی disk-sql-log-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "SQL Log volume P: (SQL Log) on disk-sql-log-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend this SQL Log volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 16m
+        alertname: WindowsSqlBackupDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlBackupDiskSpaceLow
+              severity: warning
+              priority: P1
+              alert_profile: host
+              instance: disk-sql-backup-low
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "U:\\Databases\\Backup02"
+              volume_name: SQL Backup 02
+            exp_annotations:
+              summary: "SQL Backup 02 U:\\Databases\\Backup02 on disk-sql-backup-low: 40Gi free of 500Gi (8% free)"
+              summary_fa: "SQL Backup 02 U:\\Databases\\Backup02 روی disk-sql-backup-low: 40Gi آزاد از 500Gi (8% آزاد)"
+              description: "SQL Backup volume U:\\Databases\\Backup02 (SQL Backup 02) on disk-sql-backup-low has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+              runbook: "Free space or extend this SQL Backup volume before free space drops under 5% and 30GiB. Compare windows_logical_disk_free_bytes with windows_logical_disk_size_bytes. Runway alerts remain separate."
       - eval_time: 15m
         alertname: WindowsDiskSpaceCritical
         exp_alerts:
@@ -177,9 +410,222 @@ tests:
               job: windows_exporter
               owner: OK-DBA
               volume: "F:"
-              volume_name: SQL Log
+              volume_name: OS
             exp_annotations:
-              summary: "SQL Log F: on disk-critical: 8Gi free of 200Gi (4% free)"
-              summary_fa: "SQL Log F: روی disk-critical: 8Gi آزاد از 200Gi (4% آزاد)"
-              description: "Volume F: (SQL Log) on disk-critical has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              summary: "OS F: on disk-critical: 8Gi free of 200Gi (4% free)"
+              summary_fa: "OS F: روی disk-critical: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "Volume F: (OS) on disk-critical has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
               runbook: "Free space on this volume now. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+          - exp_labels:
+              alertname: WindowsDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-olap-cache
+              job: windows_exporter
+              owner: OK-BI-Develop
+              volume: "I:"
+              volume_name: OLAP Cache
+            exp_annotations:
+              summary: "OLAP Cache I: on disk-olap-cache: 8Gi free of 200Gi (4% free)"
+              summary_fa: "OLAP Cache I: روی disk-olap-cache: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "Volume I: (OLAP Cache) on disk-olap-cache has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this volume now. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 15m
+        alertname: WindowsSqlDataDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlDataDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-data
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "G:"
+              volume_name: SQL Data 01
+            exp_annotations:
+              summary: "SQL Data 01 G: on disk-sql-data: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Data 01 G: روی disk-sql-data: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Data volume G: (SQL Data 01) on disk-sql-data has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Data volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+          - exp_labels:
+              alertname: WindowsSqlDataDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-data-glued
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "G:"
+              volume_name: SQL Data01
+            exp_annotations:
+              summary: "SQL Data01 G: on disk-sql-data-glued: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Data01 G: روی disk-sql-data-glued: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Data volume G: (SQL Data01) on disk-sql-data-glued has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Data volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 15m
+        alertname: WindowsSqlTempdbDataDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlTempdbDataDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-tempdb-data
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "H:"
+              volume_name: SQL Tempdb Data 01
+            exp_annotations:
+              summary: "SQL Tempdb Data 01 H: on disk-tempdb-data: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Tempdb Data 01 H: روی disk-tempdb-data: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Tempdb Data volume H: (SQL Tempdb Data 01) on disk-tempdb-data has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Tempdb Data volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+          - exp_labels:
+              alertname: WindowsSqlTempdbDataDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-tempdb-data-glued
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "H:"
+              volume_name: SQL TempdbData01
+            exp_annotations:
+              summary: "SQL TempdbData01 H: on disk-tempdb-data-glued: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL TempdbData01 H: روی disk-tempdb-data-glued: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Tempdb Data volume H: (SQL TempdbData01) on disk-tempdb-data-glued has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Tempdb Data volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 15m
+        alertname: WindowsOlapDataDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsOlapDataDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-olap-data
+              job: windows_exporter
+              owner: OK-BI-Develop
+              volume: "I:"
+              volume_name: OLAP Data 01
+            exp_annotations:
+              summary: "OLAP Data 01 I: on disk-olap-data: 8Gi free of 200Gi (4% free)"
+              summary_fa: "OLAP Data 01 I: روی disk-olap-data: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "Olap Data volume I: (OLAP Data 01) on disk-olap-data has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this Olap Data volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes. Runway alerts remain separate."
+          - exp_labels:
+              alertname: WindowsOlapDataDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-olap
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "I:"
+              volume_name: SQL Olap Data 01
+            exp_annotations:
+              summary: "SQL Olap Data 01 I: on disk-sql-olap: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Olap Data 01 I: روی disk-sql-olap: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "Olap Data volume I: (SQL Olap Data 01) on disk-sql-olap has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this Olap Data volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes. Runway alerts remain separate."
+      - eval_time: 15m
+        alertname: WindowsSqlTempdbLogDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlTempdbLogDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-tempdb-log
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "J:"
+              volume_name: SQL Tempdb Log
+            exp_annotations:
+              summary: "SQL Tempdb Log J: on disk-tempdb-log: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Tempdb Log J: روی disk-tempdb-log: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Tempdb Log volume J: (SQL Tempdb Log) on disk-tempdb-log has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Tempdb Log volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+          - exp_labels:
+              alertname: WindowsSqlTempdbLogDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-tempdb-log-glued
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "J:"
+              volume_name: SQL Tempdblog 01
+            exp_annotations:
+              summary: "SQL Tempdblog 01 J: on disk-tempdb-log-glued: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Tempdblog 01 J: روی disk-tempdb-log-glued: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Tempdb Log volume J: (SQL Tempdblog 01) on disk-tempdb-log-glued has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Tempdb Log volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 15m
+        alertname: WindowsSqlLogDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlLogDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-log
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "K:"
+              volume_name: SQL Log 01
+            exp_annotations:
+              summary: "SQL Log 01 K: on disk-sql-log: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Log 01 K: روی disk-sql-log: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Log volume K: (SQL Log 01) on disk-sql-log has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Log volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+          - exp_labels:
+              alertname: WindowsSqlLogDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-log-glued
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "K:"
+              volume_name: SQL Log03
+            exp_annotations:
+              summary: "SQL Log03 K: on disk-sql-log-glued: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Log03 K: روی disk-sql-log-glued: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Log volume K: (SQL Log03) on disk-sql-log-glued has been below 5% free and below 30GiB for 10 minutes. Writes can fail when this volume fills."
+              runbook: "Free space on this SQL Log volume now. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+      - eval_time: 15m
+        alertname: WindowsSqlBackupDiskSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              alertname: WindowsSqlBackupDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-backup-u
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "U:\\Databases\\Backup01"
+              volume_name: SQL Backup 01
+            exp_annotations:
+              summary: "SQL Backup 01 U:\\Databases\\Backup01 on disk-sql-backup-u: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Backup 01 U:\\Databases\\Backup01 روی disk-sql-backup-u: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Backup volume U:\\Databases\\Backup01 (SQL Backup 01) on disk-sql-backup-u has been below 5% free and below 30GiB for 10 minutes. Backup writes can fail when this volume fills."
+              runbook: "Free space on this SQL Backup volume now. Compare windows_logical_disk_free_bytes with windows_logical_disk_size_bytes. Runway alerts remain separate."
+          - exp_labels:
+              alertname: WindowsSqlBackupDiskSpaceCritical
+              severity: critical
+              priority: P0
+              alert_profile: host
+              instance: disk-sql-backup-letter
+              job: windows_exporter
+              owner: OK-DBA
+              volume: "L:"
+              volume_name: SQL Backup 02
+            exp_annotations:
+              summary: "SQL Backup 02 L: on disk-sql-backup-letter: 8Gi free of 200Gi (4% free)"
+              summary_fa: "SQL Backup 02 L: روی disk-sql-backup-letter: 8Gi آزاد از 200Gi (4% آزاد)"
+              description: "SQL Backup volume L: (SQL Backup 02) on disk-sql-backup-letter has been below 5% free and below 30GiB for 10 minutes. Backup writes can fail when this volume fills."
+              runbook: "Free space on this SQL Backup volume now. Compare windows_logical_disk_free_bytes with windows_logical_disk_size_bytes. Runway alerts remain separate."

@@ -32,8 +32,14 @@
 | `DataPlatformServiceNotRunning` | p0-availability | سرویس SQL/SSAS/PBIRS/ClusSvc running نیست | 3m |
 | `MssqlCollectorFailed` | p0-availability | `windows_mssql_collector_success == 0` | 10m |
 | `WindowsTimeSkewCritical` | p0-availability | \|time offset\| > 5s | 5m |
-| `WindowsDiskSpaceCritical` | p0-host | درایو fixed یا مسیر mount حداقل ۱۰ GiB؛ فضای آزاد کمتر از ۵٪ و کمتر از ۳۰ GiB | 10m |
-| `WindowsOlapDiskFreeSpaceCritical` | p0-host | فضای خالی دیسک OLAP کمتر از ۳ روز رشد خودش | 30m |
+| `WindowsDiskSpaceCritical` | p0-host | درایو fixed یا مسیر mount حداقل ۱۰ GiB؛ فضای آزاد کمتر از ۵٪ و کمتر از ۳۰ GiB. دیسک‌های SQL Data، SQL Tempdb Data، Olap Data، SQL Tempdb Log، SQL Log و SQL Backup جدا هستند | 10m |
+| `WindowsSqlDataDiskSpaceCritical` | p0-host | `volume_name` برابر SQL Data، شامل `SQL Data 01` و `SQL Data01`. همان آستانه ۵٪ و ۳۰ GiB | 10m |
+| `WindowsSqlTempdbDataDiskSpaceCritical` | p0-host | `volume_name` برابر SQL Tempdb Data، شامل `SQL Tempdb Data 01` و `SQL TempdbData01`. همان آستانه | 10m |
+| `WindowsOlapDataDiskSpaceCritical` | p0-host | `volume_name` برابر Olap Data، شامل `OLAP Data 01` و `SQL Olap Data 01`. OLAP Cache روی alert عمومی می‌ماند. همان آستانه | 10m |
+| `WindowsSqlTempdbLogDiskSpaceCritical` | p0-host | `volume_name` برابر SQL Tempdb Log، شامل `SQL Tempdblog 01`. همان آستانه | 10m |
+| `WindowsSqlLogDiskSpaceCritical` | p0-host | `volume_name` برابر SQL Log، شامل `SQL Log 01` و `SQL Log03`. همان آستانه | 10m |
+| `WindowsSqlBackupDiskSpaceCritical` | p0-host | `volume_name` برابر SQL Backup، شامل `SQL Backup` و `SQL Backup 01`، روی `U:` یا درایو دیگر. همان آستانه. volume با نام فقط `Backup` خارج است | 10m |
+| `WindowsOlapDiskFreeSpaceCritical` | p0-host | دیسک OLAP هنوز در حال پر شدن است و کندترِ رشد ۱روزه و رشد کامل ۷روزه کمتر از ۳ روز جا می‌گذارد | 30m |
 | `WindowsBackupDiskFreeSpaceCritical` | p0-host | فضای خالی دیسک بکاپ U کمتر از ۳ روز رشد خودش | 30m |
 | `WindowsCommitChargeCritical` | p0-host | commit ratio > 95% | 10m |
 | `MssqlLogUsedCritical` | p0-mssql | log used > 90% | 5m |
@@ -47,7 +53,14 @@
 |---|---|---|---|
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
-| `WindowsDiskSpaceLow` | p1-host | درایو fixed غیر از `U:`، فضای آزاد کمتر از ۱۰٪ و کمتر از ۱۰۰ GiB | 15m |
+| `WindowsDiskSpaceLow` | p1-host | درایو fixed غیر از `U:` و شش نام نقش SQL/Olap، فضای آزاد کمتر از ۱۰٪ و کمتر از ۱۰۰ GiB، مگر اینکه شرط بحرانی برقرار باشد | 15m |
+| `WindowsSqlDataDiskSpaceLow` | p1-host | دیسک SQL Data، همان هشدار ۱۰٪ و ۱۰۰ GiB، مگر اینکه شرط alert بحرانی خودش برقرار باشد | 15m |
+| `WindowsSqlTempdbDataDiskSpaceLow` | p1-host | دیسک SQL Tempdb Data، همان هشدار، مگر اینکه شرط alert بحرانی خودش برقرار باشد | 15m |
+| `WindowsOlapDataDiskSpaceLow` | p1-host | دیسک Olap Data، همان هشدار، مگر اینکه شرط alert بحرانی خودش برقرار باشد | 15m |
+| `WindowsSqlTempdbLogDiskSpaceLow` | p1-host | دیسک SQL Tempdb Log، همان هشدار، مگر اینکه شرط alert بحرانی خودش برقرار باشد | 15m |
+| `WindowsSqlLogDiskSpaceLow` | p1-host | دیسک SQL Log، همان هشدار، مگر اینکه شرط alert بحرانی خودش برقرار باشد | 15m |
+| `WindowsSqlBackupDiskSpaceLow` | p1-host | دیسک SQL Backup روی `U:` یا درایو دیگر، همان هشدار، مگر اینکه شرط alert بحرانی خودش برقرار باشد | 15m |
+| `WindowsOlapDiskFreeSpaceLow` | p1-host | دیسک OLAP هنوز در حال پر شدن است و کندترِ رشد ۱روزه و رشد کامل ۷روزه کمتر از ۱۴ روز جا می‌گذارد | 1h |
 | `WindowsBackupDiskFreeSpaceLow` | p1-host | فضای خالی دیسک بکاپ U کمتر از ۱۴ روز رشد خودش | 1h |
 | `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms؛ اولویت P3، بدون SMS و Email | 15m |
 | `WindowsDiskWriteLatencyHigh` | p1-host | write latency > 50ms؛ اولویت P3، بدون SMS و Email | 15m |
@@ -119,9 +132,9 @@
 | `instance:windows_cpu_utilisation:rate5m` | `WindowsHighCPU` |
 | `instance:windows_memory_available_ratio` | `WindowsLowAvailableMemory` |
 | `instance:windows_memory_commit_ratio` | commit charge alerts |
-| `instance_volume:windows_disk_free_bytes` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical` |
-| `instance_volume:windows_disk_size_bytes` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical` |
-| `instance_volume:windows_disk_free_ratio` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical` |
+| `instance_volume:windows_disk_free_bytes` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical`، alertهای بحرانی نقش SQL و Olap Data |
+| `instance_volume:windows_disk_size_bytes` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical`، alertهای بحرانی نقش SQL و Olap Data |
+| `instance_volume:windows_disk_free_ratio` | `WindowsDiskSpaceLow`، `WindowsDiskSpaceCritical`، alertهای بحرانی نقش SQL و Olap Data |
 | `instance_volume:windows_olap_disk_free_days` | هشدار باند پر شدن دیسک OLAP |
 | `instance_volume:windows_backup_disk_free_days` | `WindowsBackupDiskFreeSpaceCritical` |
 | `instance_volume:windows_disk_free_ratio` | disk space alerts |
@@ -132,7 +145,7 @@
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |
 | `instance_mssql:buffer_cache_hit_ratio:rate5m` | `MssqlBufferCacheLow` |
 
-`instance_volume:windows_disk_free_*` درایو fixed و مسیر mount را نگه می‌دارد (`volume=~"[A-Za-z]:.*"` و `type="fixed"`) با اندازه حداقل ۱۰ GiB، از جمله `C:` و `E:\Data01`، و `volume_name` را هم دارد. `U:`، `HarddiskVolume*`، CD و دیسک removable حذف می‌شوند. `instance_volume:windows_backup_disk_*` حجم‌های fixed روی `U:` را نگه می‌دارد، از جمله `U:\Databases\Backup01`. رشد روزانه ۶۴ MiB یا کمتر هشدار runway نمی‌سازد. هشدار runway در ۱۴ روز و ۳ روز است. Alertmanager هشدار ۱۴ روز و page درصد ۱۰٪ را وقتی هشدار ۳ روز برای همان volume فعال است خاموش می‌کند.
+`instance_volume:windows_disk_free_*` درایو fixed و مسیر mount را نگه می‌دارد (`volume=~"[A-Za-z]:.*"` و `type="fixed"`) با اندازه حداقل ۱۰ GiB، از جمله `C:` و `E:\Data01`، و `volume_name` را هم دارد. `U:`، `HarddiskVolume*`، CD و دیسک removable حذف می‌شوند. `WindowsDiskSpaceCritical` شش کلاس `volume_name` را کنار می‌گذارد و هر کلاس alert جداگانه P0 با همان شرط ۵٪ و ۳۰ GiB دارد: SQL Data (`SQL Data 01`، `SQL Data01`)، SQL Tempdb Data (`SQL Tempdb Data 01`، `SQL TempdbData01`)، Olap Data (`OLAP Data`، `OLAP Data 01`، `SQL Olap Data 01`)، SQL Tempdb Log (`SQL Tempdb Log`، `SQL Tempdblog 01`)، SQL Log (`SQL Log 01`، `SQL Log03`) و SQL Backup (`SQL Backup`، `SQL Backup 01`). `U:` از سری عمومی حذف شده، بنابراین `WindowsSqlBackupDiskSpaceCritical` برای این volumeها از `instance_volume:windows_backup_disk_*` می‌خواند و برای SQL Backup روی درایو دیگر از سری عمومی. هر volume فقط با یکی از این alertها جور می‌شود. `SQL Tempdata`، `OLAP Cache`، `Olap`، volume با نام فقط `Backup`، `Postgresql Backup`، binary و OS وقتی در سری عمومی باشند روی `WindowsDiskSpaceCritical` می‌مانند. silence روی `WindowsDiskSpaceCritical` این شش alert را نمی‌پوشاند. `WindowsDiskSpaceLow` همین شش کلاس را کنار می‌گذارد. هر کلاس alert جداگانه P1 با همان شرط ۱۰٪ و ۱۰۰ GiB دارد و وقتی volume از قبل زیر ۵٪ و ۳۰ GiB باشد خاموش می‌ماند. `instance_volume:windows_backup_disk_*` حجم‌های fixed روی `U:` را نگه می‌دارد، از جمله `U:\Databases\Backup01`. رشد روزانه ۶۴ MiB یا کمتر هشدار runway نمی‌سازد. باند پرواز OLAP کندترِ نرخ خالص ۱روزه و نرخ کامل ۷روزه است و فقط وقتی ۶ ساعت اخیر هنوز در حال رشد باشد ثبت می‌شود. volume جوان‌تر از ۷ روز، یا بارگذاری تمام‌شده، هشدار نمی‌سازد. باند پرواز بکاپ هنوز deriv هفت‌روزه است. هشدار runway در ۱۴ روز و ۳ روز است. Alertmanager هشدار ۱۴ روز و page درصد ۱۰٪ را وقتی هشدار ۳ روز برای همان volume فعال است خاموش می‌کند.
 
 ## راهنمای tuning
 
@@ -151,6 +164,8 @@
 | P1 | Email + SMS (webhook) | ۱ ساعت |
 | P2 | فقط Email | ۱۲ ساعت |
 | P3 | فقط لیست alert | ندارد |
+
+`WindowsOlapDiskFreeSpaceCritical` و `WindowsBackupDiskFreeSpaceCritical` هر ۱۲ ساعت تکرار می‌شوند. `WindowsOlapDiskFreeSpaceLow` و `WindowsBackupDiskFreeSpaceLow` هر ۲۴ ساعت. اولین اعلان همین چهار آلرت هنوز بعد از ۳۰ ثانیه می‌رود. `Windows*DiskSpaceCritical` هر ۱ ساعت و `Windows*DiskSpaceLow` هر ۴ ساعت تکرار می‌شود. اولین اعلان این‌ها همچنان سریع است.
 
 قبل از production همهٔ `CHANGE_ME_*` را جایگزین کنید. Alertmanager SMS بومی ندارد؛ SMS از طریق `webhook_configs` به gateway شما می‌رود.
 

@@ -14,9 +14,12 @@ groups:
       # and E:\Data01. HarddiskVolume*, CD, and removable disks are excluded.
       # Volumes under 10GiB (EFI/Recovery) are excluded. volume_name
       # comes from windows_logical_disk_info, same join as the OLAP rules.
-      # These three series feed only WindowsDiskSpaceLow and
-      # WindowsDiskSpaceCritical. OLAP volumes remain included; their runway
-      # alerts are separate and fire from growth, not from this ratio.
+      # These three series feed WindowsDiskSpaceLow, WindowsDiskSpaceCritical,
+      # and the SQL Data, SQL Tempdb Data, Olap Data, SQL Tempdb Log, SQL Log,
+      # and non-U SQL Backup low and critical alerts. Those alerts select
+      # volume_name and are excluded from the generic disk alerts. U: SQL
+      # Backup is read from instance_volume:windows_backup_disk_*. OLAP
+      # runway alerts stay separate and fire from growth, not from this ratio.
       # U: is excluded. Backup percent and runway alerts own that drive.
       - record: instance_volume:windows_disk_free_bytes
         expr: |
@@ -70,12 +73,16 @@ groups:
   # "SQL Olap Data 01", and a volume named "Olap" are included.
   # Parent mounts such as E: ("SQL Disk Host") and backup U: are not.
   # Evaluated every 1m so samples stay inside Prometheus staleness (5m).
-  # Growth uses the raw 7-day window, so runway does not wait for this
-  # recorded series to age. deriv needs two samples; a full 7-day slope
-  # appears once logical-disk history covers the window.
-  # free_days is free bytes divided by this volume's own growth.
-  # Growth at or below 64 MiB/day is treated as noise and produces no runway.
-  # Negative growth (space being freed) produces no runway and no alert.
+  # Growth is this volume's own net used-byte change, not a deriv() fit.
+  # :week is absent until raw history covers the 1d window offset by 6d,
+  # so a 2-day-old volume cannot look like a 7-day slope.
+  # :day is the last day against the day before it.
+  # :6h is the last hour against the hour 5h earlier, scaled to bytes/day.
+  # The published growth rate is the slower of :week and :day, and only
+  # while :6h is still above 64 MiB/day. A finished load, a shrink, or a
+  # volume younger than 7 days produces no growth series.
+  # free_days is free bytes divided by that slower rate.
+  # Growth at or below 64 MiB/day is noise and produces no runway.
   - name: windows_exporter.recording.olap_disk
     interval: 1m
     rules:
@@ -100,9 +107,35 @@ groups:
           * on(instance, volume) group_left(volume_name)
           windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
 
-      - record: instance_volume:windows_olap_disk_growth_bytes_per_day
+      - record: instance_volume:windows_olap_disk_growth_bytes_per_day:week
         expr: |
-          deriv(
+          (
+            avg_over_time(
+              (
+                (
+                  windows_logical_disk_size_bytes
+                  - windows_logical_disk_free_bytes
+                )
+                * on(instance, volume) group_left(volume_name)
+                windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+              )[1d:5m]
+            )
+            -
+            avg_over_time(
+              (
+                (
+                  windows_logical_disk_size_bytes
+                  - windows_logical_disk_free_bytes
+                )
+                * on(instance, volume) group_left(volume_name)
+                windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+              )[1d:5m] offset 6d
+            )
+          ) / 6
+
+      - record: instance_volume:windows_olap_disk_growth_bytes_per_day:day
+        expr: |
+          avg_over_time(
             (
               (
                 windows_logical_disk_size_bytes
@@ -110,8 +143,66 @@ groups:
               )
               * on(instance, volume) group_left(volume_name)
               windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
-            )[7d:5m]
-          ) * 86400
+            )[1d:5m]
+          )
+          -
+          avg_over_time(
+            (
+              (
+                windows_logical_disk_size_bytes
+                - windows_logical_disk_free_bytes
+              )
+              * on(instance, volume) group_left(volume_name)
+              windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+            )[1d:5m] offset 1d
+          )
+
+      - record: instance_volume:windows_olap_disk_growth_bytes_per_day:6h
+        expr: |
+          (
+            avg_over_time(
+              (
+                (
+                  windows_logical_disk_size_bytes
+                  - windows_logical_disk_free_bytes
+                )
+                * on(instance, volume) group_left(volume_name)
+                windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+              )[1h:5m]
+            )
+            -
+            avg_over_time(
+              (
+                (
+                  windows_logical_disk_size_bytes
+                  - windows_logical_disk_free_bytes
+                )
+                * on(instance, volume) group_left(volume_name)
+                windows_logical_disk_info{volume_name=~"(?i).*olap.*",type="fixed"}
+              )[1h:5m] offset 5h
+            )
+          ) * 24 / 5
+
+      - record: instance_volume:windows_olap_disk_growth_bytes_per_day
+        expr: |
+          (
+            (
+              instance_volume:windows_olap_disk_growth_bytes_per_day:week
+              <
+              instance_volume:windows_olap_disk_growth_bytes_per_day:day
+            )
+            or
+            (
+              instance_volume:windows_olap_disk_growth_bytes_per_day:day
+              <=
+              instance_volume:windows_olap_disk_growth_bytes_per_day:week
+            )
+          )
+          and
+          (
+            instance_volume:windows_olap_disk_growth_bytes_per_day:6h
+            > (64 * 1024 * 1024)
+          )
 
       - record: instance_volume:windows_olap_disk_free_days
         expr: |
@@ -130,7 +221,8 @@ groups:
   # Backup drive U:, including U: and mount paths such as U:\Databases\Backup01.
   # The drive letter is the selector; volume_name is not. SQL Audit on U: is
   # included because it sits on this drive. Other drives are not.
-  # Same runway contract as the OLAP group: 1m evaluation, raw 7-day growth,
+  # 1m evaluation. Growth is a 7-day deriv of raw used bytes and does not
+  # require the window to be full or the last 6h to still be growing.
   # free_days = free bytes / this volume's own growth. Growth at or below
   # 64 MiB/day, and negative growth, produce no runway and no alert.
   - name: windows_exporter.recording.backup_disk
@@ -162,8 +254,8 @@ groups:
           deriv(
             (
               (
-                windows_logical_disk_size_bytes
-                - windows_logical_disk_free_bytes
+                windows_logical_disk_size_bytes{volume=~"U:.*"}
+                - windows_logical_disk_free_bytes{volume=~"U:.*"}
               )
               * on(instance, volume) group_left(volume_name)
               windows_logical_disk_info{volume=~"U:.*",type="fixed"}

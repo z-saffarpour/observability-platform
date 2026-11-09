@@ -3,7 +3,7 @@ groups:
     rules:
       - alert: WindowsExporterDown
         expr: up{job=~"windows.*"} == 0
-        for: 5m
+        for: 2m
         labels:
           severity: critical
           priority: P0
@@ -11,7 +11,7 @@ groups:
         annotations:
           summary: "windows_exporter is down on {{ $labels.instance }}"
           summary_fa: "windows_exporter روی {{ $labels.instance }} در دسترس نیست"
-          description: "Prometheus has not scraped windows_exporter on {{ $labels.instance }} for five minutes. This is the exporter target, not proof that the host is down. Both windows_exporter and sql_exporter down on the same instance is InstanceDown."
+          description: "Prometheus has not scraped windows_exporter on {{ $labels.instance }} for two minutes. This is the exporter target, not proof that the host is down. Both windows_exporter and sql_exporter down on the same instance is InstanceDown. Two minutes is long enough to page a Windows update reboot."
           runbook: "Check the windows_exporter service, port 9182, firewall, and whether the host itself is shut down. Email and SMS follow priority P0."
 
       # windows_system_system_up_time is the Unix boot timestamp, not uptime.
@@ -63,13 +63,29 @@ groups:
           description: "The collector has reported failure for ten minutes. Metrics from this collector may be missing or stale."
           runbook: "Inspect windows_exporter event log and collector permissions."
 
+      # state="running" stays 1 across a reboot until the series goes stale.
+      # up == 0 is recorded on the failed scrape, so a one-minute exporter
+      # outage pages each service that was running in the last 30 minutes.
       - alert: DataPlatformServiceNotRunning
         expr: |
-          windows_service_state{
-            state="running",
-            name=~"(?i)(MSSQLSERVER|SQLSERVERAGENT|MSSQL\\$.+|SQLAgent\\$.+|MSSQLServerOLAPService|MSOLAP\\$.+|PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*|ClusSvc)"
-          } == 0
-        for: 3m
+          (
+            windows_service_state{
+              state="running",
+              name=~"(?i)(MSSQLSERVER|SQLSERVERAGENT|MSSQL\\$.+|SQLAgent\\$.+|MSSQLServerOLAPService|MSOLAP\\$.+|PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*|ClusSvc)"
+            } == 0
+          )
+          or
+          (
+            (
+              max_over_time(windows_service_state{
+                state="running",
+                name=~"(?i)(MSSQLSERVER|SQLSERVERAGENT|MSSQL\\$.+|SQLAgent\\$.+|MSSQLServerOLAPService|MSOLAP\\$.+|PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*|ClusSvc)"
+              }[30m]) == 1
+            )
+            and on (instance, job)
+            (max by (instance, job) (up{job=~"windows.*"}) == 0)
+          )
+        for: 1m
         labels:
           severity: critical
           priority: P0
@@ -77,8 +93,8 @@ groups:
         annotations:
           summary: "Service {{ $labels.name }} is not running on {{ $labels.instance }}"
           summary_fa: "سرویس {{ $labels.name }} روی {{ $labels.instance }} در حال اجرا نیست"
-          description: "A monitored SQL Server, SSAS, PBIRS, or Cluster service has not been running for three minutes."
-          runbook: "Check Windows Services, cluster ownership, and recent Event Log errors."
+          description: "A monitored SQL Server, SQL Agent, SSAS, Power BI Report Server, or Cluster service is stopped, or windows_exporter has been down for 1 minute while that service was running."
+          runbook: "Check Windows Services, cluster ownership, and recent Event Log errors. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
 
       - alert: MssqlCollectorFailed
         expr: windows_mssql_collector_success == 0

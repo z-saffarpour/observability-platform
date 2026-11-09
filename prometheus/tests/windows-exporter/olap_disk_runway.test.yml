@@ -1,7 +1,10 @@
-# OLAP volume runway. Linear 3h history is enough for deriv and for the
-# alert pending windows (30m critical, 1h warning).
-# Warning volume: about 6.9 days left. Critical volume: about 2.9 days left.
-# Flat growth is under 64 MiB/day. Shrink and a non-OLAP name must stay silent.
+# OLAP runway is the slower of the 1-day and full 7-day net growth, and only
+# while the last 6h is still above 64 MiB/day.
+# The last 15m of olap-warn and olap-critical are flat so the annotation
+# query and the 8d sample see the same free bytes.
+# olap-new: history starts at 6d, 75% free, still growing. No 7-day window.
+# olap-settled: full history, then flat for the last 12h. Growth has stopped.
+# olap-flat, olap-shrink, and a non-OLAP name stay silent.
 rule_files:
   - ../../recording-rules/windows-exporter/windows_exporter-recording.rules.yml
   - ../../alert-rules/windows-exporter/windows_exporter-p0-host.rules.yml
@@ -10,72 +13,96 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  - interval: 1m
+  - interval: 5m
     input_series:
       - series: 'windows_logical_disk_size_bytes{instance="olap-warn",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '214748364800+0x180'
+        values: '214748364800+0x2304'
       - series: 'windows_logical_disk_free_bytes{instance="olap-warn",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '75161927680-7456540x180'
+        values: '159719086800-37282700x2301 73931594100+0x3'
       - series: 'windows_logical_disk_info{instance="olap-warn",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="Olap",type="fixed",disk="1",filesystem="NTFS"}'
-        values: '1+0x180'
+        values: '1+0x2304'
 
       - series: 'windows_logical_disk_size_bytes{instance="olap-critical",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '107374182400+0x180'
+        values: '322122547200+0x2304'
       - series: 'windows_logical_disk_free_bytes{instance="olap-critical",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '64424509440-14913081x180'
+        values: '233538848460-74565405x2301 61963851555+0x3'
       - series: 'windows_logical_disk_info{instance="olap-critical",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="OLAP Data",type="fixed",disk="1",filesystem="NTFS"}'
-        values: '1+0x180'
+        values: '1+0x2304'
+
+      - series: 'windows_logical_disk_size_bytes{instance="olap-new",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
+        values: '429496729600+0x2304'
+      - series: 'windows_logical_disk_free_bytes{instance="olap-new",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
+        values: '_x1728 408021893760-149130810x576'
+      - series: 'windows_logical_disk_info{instance="olap-new",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="OLAP Data 05",type="fixed",disk="1",filesystem="NTFS"}'
+        values: '1+0x2304'
+
+      - series: 'windows_logical_disk_size_bytes{instance="olap-settled",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
+        values: '429496729600+0x2304'
+      - series: 'windows_logical_disk_free_bytes{instance="olap-settled",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
+        values: '214748366000-74565405x2160 53687091200+0x144'
+      - series: 'windows_logical_disk_info{instance="olap-settled",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="OLAP Data",type="fixed",disk="1",filesystem="NTFS"}'
+        values: '1+0x2304'
 
       - series: 'windows_logical_disk_size_bytes{instance="olap-flat",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '21474836480+0x180'
+        values: '21474836480+0x2304'
       - series: 'windows_logical_disk_free_bytes{instance="olap-flat",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '5368709120-7281x180'
+        values: '5368709120+0x2304'
       - series: 'windows_logical_disk_info{instance="olap-flat",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="OLAP Cache",type="fixed",disk="1",filesystem="NTFS"}'
-        values: '1+0x180'
+        values: '1+0x2304'
 
       - series: 'windows_logical_disk_size_bytes{instance="olap-shrink",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '53687091200+0x180'
+        values: '214748364800+0x2304'
       - series: 'windows_logical_disk_free_bytes{instance="olap-shrink",job="windows_exporter",owner="OK-BI-Develop",volume="D:"}'
-        values: '10737418240+7456540x180'
+        values: '10737418240+37282700x2304'
       - series: 'windows_logical_disk_info{instance="olap-shrink",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="Olap",type="fixed",disk="1",filesystem="NTFS"}'
-        values: '1+0x180'
+        values: '1+0x2304'
 
       - series: 'windows_logical_disk_size_bytes{instance="sql-data",job="windows_exporter",owner="OK-DBA",volume="E:"}'
-        values: '107374182400+0x180'
+        values: '107374182400+0x2304'
       - series: 'windows_logical_disk_free_bytes{instance="sql-data",job="windows_exporter",owner="OK-DBA",volume="E:"}'
-        values: '64424509440-14913081x180'
+        values: '64424509440-74565405x2304'
       - series: 'windows_logical_disk_info{instance="sql-data",job="windows_exporter",owner="OK-DBA",volume="E:",volume_name="SQL Data",type="fixed",disk="2",filesystem="NTFS"}'
-        values: '1+0x180'
+        values: '1+0x2304'
 
     promql_expr_test:
       - expr: instance_volume:windows_olap_disk_free_days{instance="olap-warn"}
-        eval_time: 3h
+        eval_time: 8d
         exp_samples:
           - labels: 'instance_volume:windows_olap_disk_free_days{instance="olap-warn",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="Olap"}'
-            value: 6.875000417232538
+            value: 6.885914779714971
       - expr: instance_volume:windows_olap_disk_free_days{instance="olap-critical"}
-        eval_time: 3h
+        eval_time: 8d
         exp_samples:
           - labels: 'instance_volume:windows_olap_disk_free_days{instance="olap-critical",job="windows_exporter",owner="OK-BI-Develop",volume="D:",volume_name="OLAP Data"}'
-            value: 2.874999977648258
+            value: 2.8856254069304783
+      - expr: absent(instance_volume:windows_olap_disk_free_days{instance="olap-new"})
+        eval_time: 8d
+        exp_samples:
+          - labels: '{instance="olap-new"}'
+            value: 1
+      - expr: absent(instance_volume:windows_olap_disk_free_days{instance="olap-settled"})
+        eval_time: 8d
+        exp_samples:
+          - labels: '{instance="olap-settled"}'
+            value: 1
       - expr: absent(instance_volume:windows_olap_disk_free_days{instance="olap-flat"})
-        eval_time: 3h
+        eval_time: 8d
         exp_samples:
           - labels: '{instance="olap-flat"}'
             value: 1
       - expr: absent(instance_volume:windows_olap_disk_free_days{instance="olap-shrink"})
-        eval_time: 3h
+        eval_time: 8d
         exp_samples:
           - labels: '{instance="olap-shrink"}'
             value: 1
       - expr: absent(instance_volume:windows_olap_disk_free_days{instance="sql-data"})
-        eval_time: 3h
+        eval_time: 8d
         exp_samples:
           - labels: '{instance="sql-data"}'
             value: 1
 
     alert_rule_test:
-      - eval_time: 3h
+      - eval_time: 8d
         alertname: WindowsOlapDiskFreeSpaceLow
         exp_alerts:
           - exp_labels:
@@ -89,10 +116,11 @@ tests:
               volume: "D:"
               volume_name: Olap
             exp_annotations:
-              summary: "Olap D: on olap-warn: 68.75Gi free of 200Gi (6.9d left)"
-              summary_fa: "Olap D: روی olap-warn: 68.75Gi آزاد از 200Gi (6.9 روز مانده)"
-              description: "OLAP volume D: (Olap) on olap-warn has 6.9 days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
-              runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Extend the OLAP data or cache volume, or free space, before processing fills it. SMS follows priority P1."
+              summary: "Olap D: on olap-warn: 6.9d left at 9.999Gi/day, 68.85Gi free of 200Gi (34.43% free)"
+              summary_fa: "Olap D: روی olap-warn: 6.9 روز مانده با رشد 9.999Gi/روز، 68.85Gi آزاد از 200Gi (34.43% آزاد). درصد آزاد شرط این هشدار نیست"
+              description: "OLAP volume D: (Olap) on olap-warn is still gaining used space. At the slower of the last 1-day net growth and the full 7-day net growth, 6.9 days of free space remain. Check those two rates and the days left. Free percent is context, not the alert condition."
+              impact: "OLAP processing can fail if this volume keeps filling at the current rate."
+              runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Confirm growth :day and :week are both above 64MiB/day and :6h is still positive. Extend the OLAP volume or remove unused partitions. A finished process, or a volume younger than 7 days, has no runway. SMS follows priority P1."
           - exp_labels:
               alertname: WindowsOlapDiskFreeSpaceLow
               severity: warning
@@ -104,11 +132,12 @@ tests:
               volume: "D:"
               volume_name: OLAP Data
             exp_annotations:
-              summary: "OLAP Data D: on olap-critical: 57.5Gi free of 100Gi (2.9d left)"
-              summary_fa: "OLAP Data D: روی olap-critical: 57.5Gi آزاد از 100Gi (2.9 روز مانده)"
-              description: "OLAP volume D: (OLAP Data) on olap-critical has 2.9 days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
-              runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Extend the OLAP data or cache volume, or free space, before processing fills it. SMS follows priority P1."
-      - eval_time: 3h
+              summary: "OLAP Data D: on olap-critical: 2.9d left at 20Gi/day, 57.71Gi free of 300Gi (19.24% free)"
+              summary_fa: "OLAP Data D: روی olap-critical: 2.9 روز مانده با رشد 20Gi/روز، 57.71Gi آزاد از 300Gi (19.24% آزاد). درصد آزاد شرط این هشدار نیست"
+              description: "OLAP volume D: (OLAP Data) on olap-critical is still gaining used space. At the slower of the last 1-day net growth and the full 7-day net growth, 2.9 days of free space remain. Check those two rates and the days left. Free percent is context, not the alert condition."
+              impact: "OLAP processing can fail if this volume keeps filling at the current rate."
+              runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Confirm growth :day and :week are both above 64MiB/day and :6h is still positive. Extend the OLAP volume or remove unused partitions. A finished process, or a volume younger than 7 days, has no runway. SMS follows priority P1."
+      - eval_time: 8d
         alertname: WindowsOlapDiskFreeSpaceCritical
         exp_alerts:
           - exp_labels:
@@ -122,7 +151,8 @@ tests:
               volume: "D:"
               volume_name: OLAP Data
             exp_annotations:
-              summary: "OLAP Data D: on olap-critical: 57.5Gi free of 100Gi (2.9d left)"
-              summary_fa: "OLAP Data D: روی olap-critical: 57.5Gi آزاد از 100Gi (2.9 روز مانده)"
-              description: "OLAP volume D: (OLAP Data) on olap-critical has 2.9 days of free space left at its 7-day growth rate. Processing or cache writes can fail when this volume fills."
-              runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_critical. Extend the OLAP data or cache volume, or remove unused partitions, before the volume reaches zero. SMS follows priority P0."
+              summary: "OLAP Data D: on olap-critical: 2.9d left at 20Gi/day, 57.71Gi free of 300Gi (19.24% free)"
+              summary_fa: "OLAP Data D: روی olap-critical: 2.9 روز مانده با رشد 20Gi/روز، 57.71Gi آزاد از 300Gi (19.24% آزاد). درصد آزاد شرط این هشدار نیست"
+              description: "OLAP volume D: (OLAP Data) on olap-critical is still gaining used space. At the slower of the last 1-day net growth and the full 7-day net growth, 2.9 days of free space remain. Check those two rates and the days left. Free percent is context, not the alert condition. Processing or cache writes can fail if this rate continues."
+              impact: "OLAP processing can fail when this volume fills."
+              runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_critical. Confirm growth :day and :week are both above 64MiB/day and :6h is still positive. Extend the OLAP volume or remove unused partitions before it reaches zero. A finished process, or a volume younger than 7 days, has no runway. SMS follows priority P0."

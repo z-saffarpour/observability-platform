@@ -1,48 +1,48 @@
 groups:
   - name: windows_exporter.p2.host
     rules:
-      - alert: WindowsProcessorQueueHigh
-        expr: windows_system_processor_queue_length > 4
-        for: 15m
-        labels:
-          severity: warning
-          priority: P2
-          alert_profile: host
-        annotations:
-          summary: "Processor queue high on {{ $labels.instance }}"
-          summary_fa: "صف پردازنده روی {{ $labels.instance }} بالا است"
-          description: "Processor queue length is {{ $value }} for 15 minutes. Tune threshold to core count."
-          runbook: "Compare with CPU util and runnable SQL workers."
+      # - alert: WindowsProcessorQueueHigh
+      #   expr: windows_system_processor_queue_length > 4
+      #   for: 15m
+      #   labels:
+      #     severity: warning
+      #     priority: P2
+      #     alert_profile: host
+      #   annotations:
+      #     summary: "Processor queue high on {{ $labels.instance }}"
+      #     summary_fa: "صف پردازنده روی {{ $labels.instance }} بالا است"
+      #     description: "Processor queue length is {{ $value }} for 15 minutes. Tune threshold to core count."
+      #     runbook: "Compare with CPU util and runnable SQL workers."
 
-      - alert: WindowsNetworkErrors
-        expr: |
-          increase(windows_net_packets_outbound_errors_total[15m]) > 0
-          or increase(windows_net_packets_received_errors_total[15m]) > 0
-          or increase(windows_net_packets_outbound_discarded_total[15m]) > 10
-          or increase(windows_net_packets_received_discarded_total[15m]) > 10
-        for: 15m
-        labels:
-          severity: warning
-          priority: P2
-          alert_profile: host
-        annotations:
-          summary: "Network errors/discards on {{ $labels.instance }}"
-          summary_fa: "خطا یا discard شبکه روی {{ $labels.instance }}"
-          description: "NIC {{ $labels.nic }} reported packet errors or elevated discards."
-          runbook: "Check NIC drivers, duplex/speed, and switch port counters."
+      # - alert: WindowsNetworkErrors
+      #   expr: |
+      #     increase(windows_net_packets_outbound_errors_total[15m]) > 0
+      #     or increase(windows_net_packets_received_errors_total[15m]) > 0
+      #     or increase(windows_net_packets_outbound_discarded_total[15m]) > 10
+      #     or increase(windows_net_packets_received_discarded_total[15m]) > 10
+      #   for: 15m
+      #   labels:
+      #     severity: warning
+      #     priority: P2
+      #     alert_profile: host
+      #   annotations:
+      #     summary: "Network errors/discards on {{ $labels.instance }}"
+      #     summary_fa: "خطا یا discard شبکه روی {{ $labels.instance }}"
+      #     description: "NIC {{ $labels.nic }} reported packet errors or elevated discards."
+      #     runbook: "Check NIC drivers, duplex/speed, and switch port counters."
 
-      - alert: WindowsPagefileLow
-        expr: instance:windows_pagefile_free_ratio < 0.10
-        for: 20m
-        labels:
-          severity: warning
-          priority: P2
-          alert_profile: host
-        annotations:
-          summary: "Pagefile free space low on {{ $labels.instance }}"
-          summary_fa: "فضای آزاد pagefile روی {{ $labels.instance }} کم است"
-          description: "Pagefile free ratio is below 10% for 20 minutes."
-          runbook: "Review commit charge and pagefile configuration."
+      # - alert: WindowsPagefileLow
+      #   expr: instance:windows_pagefile_free_ratio < 0.10
+      #   for: 20m
+      #   labels:
+      #     severity: warning
+      #     priority: P2
+      #     alert_profile: host
+      #   annotations:
+      #     summary: "Pagefile free space low on {{ $labels.instance }}"
+      #     summary_fa: "فضای آزاد pagefile روی {{ $labels.instance }} کم است"
+      #     description: "Pagefile free ratio is below 10% for 20 minutes."
+      #     runbook: "Review commit charge and pagefile configuration."
 
       # Dashboard orange band: 10% <= free < 15%. Email only (P2). No SMS.
       - alert: WindowsBackupDiskFreeWarning

@@ -32,8 +32,14 @@ Every alert carries these labels:
 | `DataPlatformServiceNotRunning` | p0-availability | SQL/SSAS/PBIRS/ClusSvc not running | 3m |
 | `MssqlCollectorFailed` | p0-availability | `windows_mssql_collector_success == 0` | 10m |
 | `WindowsTimeSkewCritical` | p0-availability | \|time offset\| > 5s | 5m |
-| `WindowsDiskSpaceCritical` | p0-host | fixed drive or mount path, size ≥ 10GiB, free < 5% and free < 30GiB | 10m |
-| `WindowsOlapDiskFreeSpaceCritical` | p0-host | OLAP volume free runway < 3 days of its own 7-day growth | 30m |
+| `WindowsDiskSpaceCritical` | p0-host | fixed drive or mount path, size ≥ 10GiB, free < 5% and free < 30GiB. Excludes SQL Data, SQL Tempdb Data, Olap Data, SQL Tempdb Log, SQL Log, and SQL Backup | 10m |
+| `WindowsSqlDataDiskSpaceCritical` | p0-host | `volume_name` SQL Data, including `SQL Data 01` and `SQL Data01`. Same 5% and 30GiB threshold | 10m |
+| `WindowsSqlTempdbDataDiskSpaceCritical` | p0-host | `volume_name` SQL Tempdb Data, including `SQL Tempdb Data 01` and `SQL TempdbData01`. Same threshold | 10m |
+| `WindowsOlapDataDiskSpaceCritical` | p0-host | `volume_name` Olap Data, including `OLAP Data 01` and `SQL Olap Data 01`. OLAP Cache stays on the generic alert. Same threshold | 10m |
+| `WindowsSqlTempdbLogDiskSpaceCritical` | p0-host | `volume_name` SQL Tempdb Log, including `SQL Tempdblog 01`. Same threshold | 10m |
+| `WindowsSqlLogDiskSpaceCritical` | p0-host | `volume_name` SQL Log, including `SQL Log 01` and `SQL Log03`. Same threshold | 10m |
+| `WindowsSqlBackupDiskSpaceCritical` | p0-host | `volume_name` SQL Backup, including `SQL Backup` and `SQL Backup 01`, on `U:` or another drive. Same threshold. A volume named only `Backup` stays out | 10m |
+| `WindowsOlapDiskFreeSpaceCritical` | p0-host | OLAP volume still filling and the slower of the 1-day and full 7-day net growth leaves < 3 days | 30m |
 | `WindowsBackupDiskFreeSpaceCritical` | p0-host | U: backup volume free runway < 3 days of its own 7-day growth | 30m |
 | `WindowsCommitChargeCritical` | p0-host | commit ratio > 95% | 10m |
 | `MssqlLogUsedCritical` | p0-mssql | log used > 90% | 5m |
@@ -47,8 +53,14 @@ Every alert carries these labels:
 |---|---|---|---|
 | `WindowsHighCPU` | p1-host | CPU util > 85% | 15m |
 | `WindowsLowAvailableMemory` | p1-host | available memory < 10% | 10m |
-| `WindowsDiskSpaceLow` | p1-host | fixed drive or mount path except `U:`, size ≥ 10GiB, free < 10% and free < 100GiB, unless the critical condition holds | 15m |
-| `WindowsOlapDiskFreeSpaceLow` | p1-host | OLAP volume free runway < 14 days of its own 7-day growth | 1h |
+| `WindowsDiskSpaceLow` | p1-host | fixed drive or mount path except `U:` and the six SQL/Olap role names, size ≥ 10GiB, free < 10% and free < 100GiB, unless the critical condition holds | 15m |
+| `WindowsSqlDataDiskSpaceLow` | p1-host | SQL Data volume, same 10% and 100GiB warning, unless its critical alert condition holds | 15m |
+| `WindowsSqlTempdbDataDiskSpaceLow` | p1-host | SQL Tempdb Data volume, same warning, unless its critical alert condition holds | 15m |
+| `WindowsOlapDataDiskSpaceLow` | p1-host | Olap Data volume, same warning, unless its critical alert condition holds | 15m |
+| `WindowsSqlTempdbLogDiskSpaceLow` | p1-host | SQL Tempdb Log volume, same warning, unless its critical alert condition holds | 15m |
+| `WindowsSqlLogDiskSpaceLow` | p1-host | SQL Log volume, same warning, unless its critical alert condition holds | 15m |
+| `WindowsSqlBackupDiskSpaceLow` | p1-host | SQL Backup volume on `U:` or another drive, same warning, unless its critical alert condition holds | 15m |
+| `WindowsOlapDiskFreeSpaceLow` | p1-host | OLAP volume still filling and the slower of the 1-day and full 7-day net growth leaves < 14 days | 1h |
 | `WindowsBackupDiskFreeSpaceLow` | p1-host | U: backup volume free runway < 14 days of its own 7-day growth | 1h |
 | `WindowsBackupDiskFreeCritical` | p1-host | backup volume `U:` free < 10%. Suppressed while a U: runway alert is firing | 10m |
 | `WindowsDiskReadLatencyHigh` | p1-host | read latency > 50ms; priority P3, no SMS or email | 15m |
@@ -121,9 +133,9 @@ SSAS metric details: [SSAS monitoring](ssas-monitoring.md).
 | `instance:windows_cpu_utilisation:rate5m` | `WindowsHighCPU` |
 | `instance:windows_memory_available_ratio` | `WindowsLowAvailableMemory` |
 | `instance:windows_memory_commit_ratio` | commit charge alerts |
-| `instance_volume:windows_disk_free_bytes` | `WindowsDiskSpaceLow`, `WindowsDiskSpaceCritical` |
-| `instance_volume:windows_disk_size_bytes` | `WindowsDiskSpaceLow`, `WindowsDiskSpaceCritical` |
-| `instance_volume:windows_disk_free_ratio` | `WindowsDiskSpaceLow`, `WindowsDiskSpaceCritical` |
+| `instance_volume:windows_disk_free_bytes` | `WindowsDiskSpaceLow`, `WindowsDiskSpaceCritical`, SQL and Olap Data role critical alerts |
+| `instance_volume:windows_disk_size_bytes` | `WindowsDiskSpaceLow`, `WindowsDiskSpaceCritical`, SQL and Olap Data role critical alerts |
+| `instance_volume:windows_disk_free_ratio` | `WindowsDiskSpaceLow`, `WindowsDiskSpaceCritical`, SQL and Olap Data role critical alerts |
 | `instance_volume:windows_olap_disk_free_days` | OLAP volume runway alerts |
 | `instance_volume:windows_backup_disk_free_days` | `WindowsBackupDiskFreeSpaceCritical` |
 | `instance_volume:windows_disk_free_ratio` | disk space alerts |
@@ -134,7 +146,7 @@ SSAS metric details: [SSAS monitoring](ssas-monitoring.md).
 | `instance:windows_terminal_services_*_sessions` | RDS session alerts |
 | `instance_mssql:buffer_cache_hit_ratio:rate5m` | `MssqlBufferCacheLow` |
 
-`instance_volume:windows_disk_free_*` keeps fixed drives and mount paths (`volume=~"[A-Za-z]:.*"`, `type="fixed"`) of at least 10GiB, including `C:` and `E:\Data01`, and adds `volume_name`. `U:`, `HarddiskVolume*`, CD, and removable disks are omitted. `instance_volume:windows_backup_disk_*` keeps fixed `U:` volumes, including `U:\Databases\Backup01`. Growth at or below 64 MiB/day does not alert. Runway alerts fire at 14 days and 3 days. Alertmanager suppresses the 14-day warning and the 10% backup page while the 3-day alert is active for the same volume.
+`instance_volume:windows_disk_free_*` keeps fixed drives and mount paths (`volume=~"[A-Za-z]:.*"`, `type="fixed"`) of at least 10GiB, including `C:` and `E:\Data01`, and adds `volume_name`. `U:`, `HarddiskVolume*`, CD, and removable disks are omitted. `WindowsDiskSpaceCritical` excludes six `volume_name` classes, and each class has its own P0 alert with the same 5% and 30GiB condition: SQL Data (`SQL Data 01`, `SQL Data01`), SQL Tempdb Data (`SQL Tempdb Data 01`, `SQL TempdbData01`), Olap Data (`OLAP Data`, `OLAP Data 01`, `SQL Olap Data 01`), SQL Tempdb Log (`SQL Tempdb Log`, `SQL Tempdblog 01`), SQL Log (`SQL Log 01`, `SQL Log03`), and SQL Backup (`SQL Backup`, `SQL Backup 01`). `U:` is omitted from the generic series, so `WindowsSqlBackupDiskSpaceCritical` reads `instance_volume:windows_backup_disk_*` for those volumes and the generic series for a SQL Backup volume on any other drive. A volume matches only one of those alerts. `SQL Tempdata`, `OLAP Cache`, `Olap`, a volume named only `Backup`, `Postgresql Backup`, binary, and OS volumes stay on `WindowsDiskSpaceCritical` when that series includes them. A silence on `WindowsDiskSpaceCritical` does not cover the six role alerts. `WindowsDiskSpaceLow` excludes the same six classes. Each has a P1 alert with the same 10% and 100GiB condition, and that alert stays silent when the volume is already below 5% and 30GiB. `instance_volume:windows_backup_disk_*` keeps fixed `U:` volumes, including `U:\Databases\Backup01`. Growth at or below 64 MiB/day does not alert. OLAP runway uses the slower of the 1-day and full 7-day net rates, and only while the last 6h is still growing. A volume younger than 7 days, or a finished load, does not alert. Backup runway is still a 7-day deriv. Runway alerts fire at 14 days and 3 days. Alertmanager suppresses the 14-day warning and the 10% backup page while the 3-day alert is active for the same volume.
 
 ## Tuning guidance
 
@@ -153,6 +165,8 @@ Full details: [Alertmanager](alertmanager.md)
 | P1 | Email + SMS (webhook) | 1h |
 | P2 | Email only | 12h |
 | P3 | Alert list only | none |
+
+`WindowsOlapDiskFreeSpaceCritical` and `WindowsBackupDiskFreeSpaceCritical` repeat every 12h. `WindowsOlapDiskFreeSpaceLow` and `WindowsBackupDiskFreeSpaceLow` repeat every 24h. The first notification for those four still goes out after 30s. `Windows*DiskSpaceCritical` repeats every 1h and `Windows*DiskSpaceLow` every 4h. The first notice for those is still prompt.
 
 Replace every `CHANGE_ME_*` before production. Alertmanager has no native SMS transport; SMS uses `webhook_configs` against your gateway.
 

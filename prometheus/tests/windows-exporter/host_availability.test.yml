@@ -1,4 +1,4 @@
-# Exporter down: up==0 for 5m fires WindowsExporterDown.
+# Exporter down: up==0 for 2m fires WindowsExporterDown.
 # That alert is the windows_exporter target. Host down is InstanceDown.
 # Host restart: windows_system_system_up_time is the Unix boot timestamp.
 # A jump of more than 120s while uptime is still under 30m fires WindowsHostRestarted.
@@ -30,11 +30,11 @@ tests:
         values: '100+0x16 130+0x24'
 
     alert_rule_test:
-      - eval_time: 4m
+      - eval_time: 1m
         alertname: WindowsExporterDown
         exp_alerts: []
 
-      - eval_time: 5m
+      - eval_time: 2m
         alertname: WindowsExporterDown
         exp_alerts:
           - exp_labels:
@@ -48,7 +48,7 @@ tests:
             exp_annotations:
               summary: "windows_exporter is down on host-down"
               summary_fa: "windows_exporter روی host-down در دسترس نیست"
-              description: "Prometheus has not scraped windows_exporter on host-down for five minutes. This is the exporter target, not proof that the host is down. Both windows_exporter and sql_exporter down on the same instance is InstanceDown."
+              description: "Prometheus has not scraped windows_exporter on host-down for two minutes. This is the exporter target, not proof that the host is down. Both windows_exporter and sql_exporter down on the same instance is InstanceDown. Two minutes is long enough to page a Windows update reboot."
               runbook: "Check the windows_exporter service, port 9182, firewall, and whether the host itself is shut down. Email and SMS follow priority P0."
 
       - eval_time: 18m

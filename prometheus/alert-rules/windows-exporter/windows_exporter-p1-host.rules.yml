@@ -28,20 +28,28 @@ groups:
           runbook: "Check SQL memory target, working sets, and external consumers."
 
       # U: is absent from instance_volume:windows_disk_free_*.
-      # Backup runway and backup percent alerts own that drive.
+      # SQL Data, SQL Tempdb Data, Olap Data, SQL Tempdb Log, SQL Log, and
+      # SQL Backup use the role alerts below and are excluded here. The
+      # critical band is excluded so a volume is not both Low and Critical.
       - alert: WindowsDiskSpaceLow
         expr: |
           (
-            instance_volume:windows_disk_free_ratio < 0.10
-            and
-            instance_volume:windows_disk_free_bytes < (100 * 1024 * 1024 * 1024)
+            (
+              instance_volume:windows_disk_free_ratio < 0.10
+              and
+              instance_volume:windows_disk_free_bytes < (100 * 1024 * 1024 * 1024)
+            )
+            unless
+            (
+              instance_volume:windows_disk_free_ratio < 0.05
+              and
+              instance_volume:windows_disk_free_bytes < (30 * 1024 * 1024 * 1024)
+            )
           )
           unless
-          (
-            instance_volume:windows_disk_free_ratio < 0.05
-            and
-            instance_volume:windows_disk_free_bytes < (30 * 1024 * 1024 * 1024)
-          )
+          instance_volume:windows_disk_free_ratio{
+            volume_name=~"(?i)SQL Tempdb ?Data( [0-9].*|\\d+.*)?|SQL Tempdb ?Log( [0-9].*|\\d+.*)?|SQL Log( [0-9].*|\\d+.*)?|SQL Data( [0-9].*|\\d+.*)?|(SQL )?Olap Data( [0-9].*|\\d+.*)?|SQL Backup( [0-9].*|\\d+.*)?"
+          }
         for: 15m
         labels:
           severity: warning
@@ -52,6 +60,180 @@ groups:
           summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
           description: "Volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
           runbook: "Free space or extend the volume before free space drops under 5% and 30GiB. Prioritize SQL data, log, and OS drives. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+
+      - alert: WindowsSqlDataDiskSpaceLow
+        expr: |
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Data( [0-9].*|\\d+.*)?"} < 0.10
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Data( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+          )
+          unless
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Data( [0-9].*|\\d+.*)?"} < 0.05
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Data( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "SQL Data volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+          runbook: "Free space or extend this SQL Data volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+
+      - alert: WindowsSqlTempdbDataDiskSpaceLow
+        expr: |
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Tempdb ?Data( [0-9].*|\\d+.*)?"} < 0.10
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Tempdb ?Data( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+          )
+          unless
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Tempdb ?Data( [0-9].*|\\d+.*)?"} < 0.05
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Tempdb ?Data( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "SQL Tempdb Data volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+          runbook: "Free space or extend this SQL Tempdb Data volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+
+      - alert: WindowsOlapDataDiskSpaceLow
+        expr: |
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)(SQL )?Olap Data( [0-9].*|\\d+.*)?"} < 0.10
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)(SQL )?Olap Data( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+          )
+          unless
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)(SQL )?Olap Data( [0-9].*|\\d+.*)?"} < 0.05
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)(SQL )?Olap Data( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "Olap Data volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+          runbook: "Free space or extend this Olap Data volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes. Runway alerts remain separate."
+
+      - alert: WindowsSqlTempdbLogDiskSpaceLow
+        expr: |
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Tempdb ?Log( [0-9].*|\\d+.*)?"} < 0.10
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Tempdb ?Log( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+          )
+          unless
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Tempdb ?Log( [0-9].*|\\d+.*)?"} < 0.05
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Tempdb ?Log( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "SQL Tempdb Log volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+          runbook: "Free space or extend this SQL Tempdb Log volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+
+      - alert: WindowsSqlLogDiskSpaceLow
+        expr: |
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Log( [0-9].*|\\d+.*)?"} < 0.10
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Log( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+          )
+          unless
+          (
+            instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Log( [0-9].*|\\d+.*)?"} < 0.05
+            and
+            instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Log( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+          )
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "SQL Log volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+          runbook: "Free space or extend this SQL Log volume before free space drops under 5% and 30GiB. Compare instance_volume:windows_disk_free_bytes with instance_volume:windows_disk_size_bytes."
+
+      # U: SQL Backup is read from the backup series. The critical band is
+      # excluded, and WindowsDiskSpaceLow does not include this volume_name.
+      - alert: WindowsSqlBackupDiskSpaceLow
+        expr: |
+          (
+            (
+              instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} < 0.10
+              and
+              instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+            )
+            or
+            (
+              (
+                instance_volume:windows_backup_disk_free_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"}
+                /
+                instance_volume:windows_backup_disk_size_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"}
+              ) < 0.10
+              and
+              instance_volume:windows_backup_disk_free_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} < (100 * 1024 * 1024 * 1024)
+              and
+              instance_volume:windows_backup_disk_size_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} >= (10 * 1024 * 1024 * 1024)
+            )
+          )
+          unless
+          (
+            (
+              instance_volume:windows_disk_free_ratio{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} < 0.05
+              and
+              instance_volume:windows_disk_free_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+            )
+            or
+            (
+              (
+                instance_volume:windows_backup_disk_free_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"}
+                /
+                instance_volume:windows_backup_disk_size_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"}
+              ) < 0.05
+              and
+              instance_volume:windows_backup_disk_free_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} < (30 * 1024 * 1024 * 1024)
+              and
+              instance_volume:windows_backup_disk_size_bytes{volume_name=~"(?i)SQL Backup( [0-9].*|\\d+.*)?"} >= (10 * 1024 * 1024 * 1024)
+            )
+          )
+        for: 15m
+        labels:
+          severity: warning
+          priority: P1
+          alert_profile: host
+        annotations:
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(windows_logical_disk_free_bytes{instance=%q,volume=%q})" $labels.instance $labels.volume | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(windows_logical_disk_size_bytes{instance=%q,volume=%q})" $labels.instance $labels.volume | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(windows_logical_disk_free_bytes{instance=%q,volume=%q})" $labels.instance $labels.volume | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(windows_logical_disk_size_bytes{instance=%q,volume=%q})" $labels.instance $labels.volume | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | humanizePercentage }} آزاد)'
+          description: "SQL Backup volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has been below 10% free and below 100GiB for 15 minutes, and is not below both 5% and 30GiB."
+          runbook: "Free space or extend this SQL Backup volume before free space drops under 5% and 30GiB. Compare windows_logical_disk_free_bytes with windows_logical_disk_size_bytes. Runway alerts remain separate."
 
       - alert: WindowsOlapDiskFreeSpaceLow
         expr: |
@@ -64,10 +246,11 @@ groups:
           priority: P1
           alert_profile: ssas
         annotations:
-          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }}d left)'
-          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ $value | printf "%.1f" }} روز مانده)'
-          description: "OLAP volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} has {{ $value | printf \"%.1f\" }} days of free space left at its 7-day growth rate. The free-byte threshold is 14 times that volume's own daily growth, not a fixed size."
-          runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Extend the OLAP data or cache volume, or free space, before processing fills it. SMS follows priority P1."
+          summary: '{{ $labels.volume_name }} {{ $labels.volume }} on {{ $labels.instance }}: {{ $value | printf "%.1f" }}d left at {{ with printf "max(instance_volume:windows_olap_disk_growth_bytes_per_day{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }}/day, {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} free of {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q} / instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanizePercentage }}{{ end }} free)'
+          summary_fa: '{{ $labels.volume_name }} {{ $labels.volume }} روی {{ $labels.instance }}: {{ $value | printf "%.1f" }} روز مانده با رشد {{ with printf "max(instance_volume:windows_olap_disk_growth_bytes_per_day{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }}/روز، {{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} آزاد از {{ with printf "max(instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanize1024 }}{{ end }} ({{ with printf "max(instance_volume:windows_olap_disk_free_bytes{instance=%q,volume=%q,volume_name=%q} / instance_volume:windows_olap_disk_size_bytes{instance=%q,volume=%q,volume_name=%q})" $labels.instance $labels.volume $labels.volume_name $labels.instance $labels.volume $labels.volume_name | query }}{{ . | first | value | humanizePercentage }}{{ end }} آزاد). درصد آزاد شرط این هشدار نیست'
+          description: "OLAP volume {{ $labels.volume }} ({{ $labels.volume_name }}) on {{ $labels.instance }} is still gaining used space. At the slower of the last 1-day net growth and the full 7-day net growth, {{ $value | printf \"%.1f\" }} days of free space remain. Check those two rates and the days left. Free percent is context, not the alert condition."
+          impact: "OLAP processing can fail if this volume keeps filling at the current rate."
+          runbook: "Compare instance_volume:windows_olap_disk_free_bytes with instance_volume:windows_olap_disk_free_bytes:threshold_warning. Confirm growth :day and :week are both above 64MiB/day and :6h is still positive. Extend the OLAP volume or remove unused partitions. A finished process, or a volume younger than 7 days, has no runway. SMS follows priority P1."
 
       # 14-day runway. The 3-day alert is WindowsBackupDiskFreeSpaceCritical.
       # Alertmanager suppresses this warning when that P0 alert is firing.
