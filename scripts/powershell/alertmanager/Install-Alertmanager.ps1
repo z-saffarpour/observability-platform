@@ -3,8 +3,9 @@
 .SYNOPSIS
   Installs or upgrades Alertmanager as an automatic Windows service using NSSM.
 .EXAMPLE
+  .\scripts\powershell\alertmanager\Build-AlertmanagerConfig.ps1
   .\scripts\powershell\alertmanager\Install-Alertmanager.ps1 `
-    -ConfigPath .\alertmanager\windows-exporter\alertmanager.yml
+    -ConfigPath .\alertmanager\config\alertmanager.yml
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -118,16 +119,26 @@ finally {
     Pop-Location
 }
 
-$appParameters = @(
-    "--config.file=`"$deployedConfig`""
-    "--storage.path=`"$DataRoot`""
-    "--web.listen-address=`"$ListenAddress`""
-) -join ' '
+foreach ($argument in @($deployedConfig, $DataRoot, $ListenAddress)) {
+    if ($argument.Contains('"')) { throw "Alertmanager argument contains a quote: $argument" }
+}
+# "Program Files" contains a space, so each path must be wrapped in ".
+# nssm.exe set from Windows PowerShell stores a backtick before that quote
+# and the path splits. Write AppParameters directly to keep the " characters.
+$appParameters = '--config.file="{0}" --storage.path="{1}" --web.listen-address={2}' -f $deployedConfig, $DataRoot, $ListenAddress
 
 if (-not $existingService) { Invoke-Nssm -Arguments @('install', $ServiceName, $alertmanagerTarget) }
 Invoke-Nssm -Arguments @('set', $ServiceName, 'Application', $alertmanagerTarget)
 Invoke-Nssm -Arguments @('set', $ServiceName, 'AppDirectory', $configTarget)
-Invoke-Nssm -Arguments @('set', $ServiceName, 'AppParameters', $appParameters)
+$parametersKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName\Parameters"
+if (-not (Test-Path -LiteralPath $parametersKey)) {
+    throw "NSSM parameters key was not found: $parametersKey"
+}
+Set-ItemProperty -LiteralPath $parametersKey -Name AppParameters -Value $appParameters
+$storedParameters = [string](Get-ItemProperty -LiteralPath $parametersKey -Name AppParameters).AppParameters
+if ($storedParameters -cne $appParameters -or $storedParameters.Contains('`"')) {
+    throw "AppParameters was not stored with double quotes: $storedParameters"
+}
 Invoke-Nssm -Arguments @('set', $ServiceName, 'DisplayName', $ServiceDisplayName)
 Invoke-Nssm -Arguments @('set', $ServiceName, 'Description', $ServiceDescription)
 Invoke-Nssm -Arguments @('set', $ServiceName, 'Start', 'SERVICE_DELAYED_AUTO_START')

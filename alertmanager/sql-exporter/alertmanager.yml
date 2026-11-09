@@ -1,4 +1,6 @@
 # Alertmanager config for sql_exporter priority routing (P0 / P1 / P2).
+# Source for the single Alertmanager. Register it in alertmanager/exporters.json
+# and rebuild with scripts/powershell/alertmanager/Build-AlertmanagerConfig.ps1.
 #
 # Channels:
 #   - Email  → native email_configs (SMTP)
@@ -18,6 +20,8 @@ global:
   smtp_auth_username: "CHANGE_ME_SMTP_USER"
   smtp_auth_password: "CHANGE_ME_SMTP_PASSWORD"
   smtp_require_tls: true
+  smtp_tls_config:
+    insecure_skip_verify: true
 
 templates:
   - "templates/*.tmpl"
@@ -61,6 +65,14 @@ route:
           group_wait: 30s
           group_interval: 5m
           repeat_interval: 1h
+        # Stays open while the next run is in progress. Resolve is sent only
+        # after a successful run. 12h repeat avoids a second failure SMS.
+        - matchers:
+            - alertname = "SqlAgentJobFailed"
+          receiver: sms-email-p0-fmr-dba-job-failed
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 12h
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-fmr-dba
@@ -99,6 +111,14 @@ route:
           group_wait: 30s
           group_interval: 5m
           repeat_interval: 1h
+        # Stays open while the next run is in progress. Resolve is sent only
+        # after a successful run. 12h repeat avoids a second failure SMS.
+        - matchers:
+            - alertname = "SqlAgentJobFailed"
+          receiver: sms-email-p0-ok-dba-job-failed
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 12h
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-ok-dba
@@ -137,6 +157,14 @@ route:
           group_wait: 30s
           group_interval: 5m
           repeat_interval: 1h
+        # Stays open while the next run is in progress. Resolve is sent only
+        # after a successful run. 12h repeat avoids a second failure SMS.
+        - matchers:
+            - alertname = "SqlAgentJobFailed"
+          receiver: sms-email-p0-fmr-bi-develop-job-failed
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 12h
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-fmr-bi-develop
@@ -175,6 +203,14 @@ route:
           group_wait: 30s
           group_interval: 5m
           repeat_interval: 1h
+        # Stays open while the next run is in progress. Resolve is sent only
+        # after a successful run. 12h repeat avoids a second failure SMS.
+        - matchers:
+            - alertname = "SqlAgentJobFailed"
+          receiver: sms-email-p0-ok-bi-develop-job-failed
+          group_wait: 0s
+          group_interval: 2m
+          repeat_interval: 12h
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-ok-bi-develop
@@ -195,6 +231,16 @@ route:
           repeat_interval: 12h
 
     # Unknown owner keeps the shared mailbox. Do not drop the alert.
+    # Stays open while the next run is in progress. Resolve is sent only
+    # after a successful run. 12h repeat avoids a second failure SMS.
+    - matchers:
+        - alertname = "SqlAgentJobFailed"
+      receiver: sms-email-p0-job-failed
+      group_wait: 0s
+      group_interval: 2m
+      repeat_interval: 12h
+      continue: false
+
     - matchers:
         - priority = "P0"
       receiver: sms-email-p0
@@ -227,9 +273,9 @@ inhibit_rules:
       - alertname = "MemoryLow"
     equal: [instance]
 
-  # SQL engine and Agent pages use SqlServerDown / SqlServerAgentDown.
+  # SQL engine, Agent, and Power BI pages use their own alerts.
   - source_matchers:
-      - alertname =~ "SqlServerDown|SqlServerAgentDown"
+      - alertname =~ "SqlServerDown|SqlServerAgentDown|PowerBIDown"
     target_matchers:
       - alertname = "DataPlatformServiceNotRunning"
     equal: [instance, name]
@@ -276,7 +322,21 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: sms-email-p0-fmr-dba-job-failed
+    email_configs:
+      - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
@@ -290,7 +350,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
@@ -302,7 +362,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][sql_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0-ok-dba
@@ -310,7 +370,21 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: sms-email-p0-ok-dba-job-failed
+    email_configs:
+      - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
@@ -324,7 +398,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
@@ -336,7 +410,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][sql_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0-fmr-bi-develop
@@ -344,7 +418,21 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: sms-email-p0-fmr-bi-develop-job-failed
+    email_configs:
+      - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
@@ -358,7 +446,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
@@ -370,7 +458,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][sql_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0-ok-bi-develop
@@ -378,7 +466,21 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
+      - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: sms-email-p0-ok-bi-develop-job-failed
+    email_configs:
+      - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
@@ -392,7 +494,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
@@ -404,7 +506,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][sql_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
 
   - name: sms-email-p0
@@ -412,11 +514,25 @@ receivers:
       - to: "CHANGE_ME_P0_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       # SMS gateway / custom notifier. Expected to accept Alertmanager webhook JSON.
       # Example body fields: commonLabels.priority, commonLabels.alertname, commonLabels.instance
+      - url: "http://127.0.0.1:49177/sendsms"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 0
+
+  - name: sms-email-p0-job-failed
+    email_configs:
+      - to: "CHANGE_ME_P0_EMAIL@example.com"
+        send_resolved: true
+        headers:
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
+        html: '{{ template "email.sql_exporter.html" . }}'
+    webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms"
         send_resolved: true
         http_config:
@@ -428,7 +544,7 @@ receivers:
       - to: "CHANGE_ME_P1_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
     webhook_configs:
       # Keep SMS for P1 if your gateway supports priority filtering; otherwise remove this block.
@@ -441,7 +557,7 @@ receivers:
       - to: "CHANGE_ME_P2_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][sql_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}{{ with .GroupLabels.db }}/{{ . }}{{ end }}'
         html: '{{ template "email.sql_exporter.html" . }}'
 
   # Keeps the alert in Alertmanager and sends no SMS or email.

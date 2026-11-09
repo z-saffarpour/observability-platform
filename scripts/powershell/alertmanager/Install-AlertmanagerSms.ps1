@@ -152,12 +152,26 @@ if ($urlAcl -notmatch [regex]::Escape($prefix)) {
 
 $powershellExe = Join-Path $PSHOME 'powershell.exe'
 if (-not (Test-Path -LiteralPath $powershellExe -PathType Leaf)) { throw "powershell.exe was not found: $powershellExe" }
+foreach ($argument in @($scriptTarget, $deployedConfig)) {
+    if ($argument.Contains('"')) { throw "SMS gateway argument contains a quote: $argument" }
+}
+# "Program Files" contains a space, so each path must be wrapped in ".
+# nssm.exe set from Windows PowerShell stores a backtick before that quote
+# and the path splits. Write AppParameters directly to keep the " characters.
 $appParameters = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -ConfigPath "{1}"' -f $scriptTarget, $deployedConfig
 
 if (-not $existingService) { Invoke-Nssm -Arguments @('install', $ServiceName, $powershellExe) }
 Invoke-Nssm -Arguments @('set', $ServiceName, 'Application', $powershellExe)
 Invoke-Nssm -Arguments @('set', $ServiceName, 'AppDirectory', $InstallRoot)
-Invoke-Nssm -Arguments @('set', $ServiceName, 'AppParameters', $appParameters)
+$parametersKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName\Parameters"
+if (-not (Test-Path -LiteralPath $parametersKey)) {
+    throw "NSSM parameters key was not found: $parametersKey"
+}
+Set-ItemProperty -LiteralPath $parametersKey -Name AppParameters -Value $appParameters
+$storedParameters = [string](Get-ItemProperty -LiteralPath $parametersKey -Name AppParameters).AppParameters
+if ($storedParameters -cne $appParameters -or $storedParameters.Contains('`"')) {
+    throw "AppParameters was not stored with double quotes: $storedParameters"
+}
 Invoke-Nssm -Arguments @('set', $ServiceName, 'DisplayName', $ServiceDisplayName)
 Invoke-Nssm -Arguments @('set', $ServiceName, 'Description', $ServiceDescription)
 Invoke-Nssm -Arguments @('set', $ServiceName, 'Start', 'SERVICE_DELAYED_AUTO_START')

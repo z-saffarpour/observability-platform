@@ -10,6 +10,8 @@
 | **P1** | Email + SMS (webhook) | ۱ ساعت |
 | **P2** | فقط Email | ۱۲ ساعت |
 
+`WindowsOlapDiskFreeSpaceCritical` و `WindowsBackupDiskFreeSpaceCritical` هر ۱۲ ساعت تکرار می‌شوند. `WindowsOlapDiskFreeSpaceLow` و `WindowsBackupDiskFreeSpaceLow` هر ۲۴ ساعت. اولین اعلان همین چهار آلرت هنوز بعد از ۳۰ ثانیه می‌رود. `Windows*DiskSpaceCritical` هر ۱ ساعت و `Windows*DiskSpaceLow` هر ۴ ساعت تکرار می‌شود. اولین اعلان این‌ها همچنان سریع است. بقیهٔ P0 و P1 همان فاصله‌های جدول بالا را دارند.
+
 فایل‌های کانفیگ در `alertmanager/windows-exporter/`:
 
 | مسیر | کاربرد |

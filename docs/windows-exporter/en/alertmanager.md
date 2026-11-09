@@ -10,6 +10,8 @@ Sample config for alerts that carry `priority`, `severity`, and `alert_profile` 
 | **P1** | Email + SMS webhook | 1h |
 | **P2** | Email only | 12h |
 
+`WindowsOlapDiskFreeSpaceCritical` and `WindowsBackupDiskFreeSpaceCritical` repeat every 12h. `WindowsOlapDiskFreeSpaceLow` and `WindowsBackupDiskFreeSpaceLow` repeat every 24h. The first notification for those four still goes out after 30s. `Windows*DiskSpaceCritical` repeats every 1h and `Windows*DiskSpaceLow` every 4h. The first notice for those is still prompt. Other P0 and P1 alerts keep the intervals above.
+
 Config files live under `alertmanager/windows-exporter/`:
 
 | Path | Purpose |

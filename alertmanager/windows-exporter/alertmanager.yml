@@ -1,4 +1,6 @@
 # Alertmanager config for windows_exporter priority routing (P0 / P1 / P2 / P3).
+# Source for the single Alertmanager. Register it in alertmanager/exporters.json
+# and rebuild with scripts/powershell/alertmanager/Build-AlertmanagerConfig.ps1.
 #
 # Channels:
 #   - Email  → native email_configs (SMTP)
@@ -18,6 +20,8 @@ global:
   smtp_auth_username: "CHANGE_ME_SMTP_USER"
   smtp_auth_password: "CHANGE_ME_SMTP_PASSWORD"
   smtp_require_tls: true
+  smtp_tls_config:
+    insecure_skip_verify: true
 
 templates:
   - "templates/*.tmpl"
@@ -45,6 +49,43 @@ route:
       receiver: email-p2-fmr-dba
       continue: false
       routes:
+        # Disk runway is a multi-day condition. The first notice is still
+        # prompt; repeats stay at 12h (under 3 days) and 24h (under 14 days).
+        # DiskSpaceCritical repeats hourly and DiskSpaceLow every 4h.
+        # The first notice for both is still prompt. Outage routes below
+        # keep the 15m P0 repeat.
+        - &disk-runway-critical
+          matchers:
+            - alertname =~ "WindowsOlapDiskFreeSpaceCritical|WindowsBackupDiskFreeSpaceCritical"
+          receiver: sms-email-p0-fmr-dba
+          group_by: [owner, priority, alertname, instance, volume]
+          group_wait: 30s
+          group_interval: 12h
+          repeat_interval: 12h
+        - &disk-runway-warning
+          matchers:
+            - alertname =~ "WindowsOlapDiskFreeSpaceLow|WindowsBackupDiskFreeSpaceLow"
+          receiver: email-sms-p1-fmr-dba
+          group_by: [owner, priority, alertname, instance, volume]
+          group_wait: 30s
+          group_interval: 24h
+          repeat_interval: 24h
+        - &disk-space-critical
+          matchers:
+            - alertname =~ "Windows.*DiskSpaceCritical"
+          receiver: sms-email-p0-fmr-dba
+          group_by: [owner, priority, alertname, instance, volume]
+          group_wait: 0s
+          group_interval: 1h
+          repeat_interval: 1h
+        - &disk-space-low
+          matchers:
+            - alertname =~ "Windows.*DiskSpaceLow"
+          receiver: email-sms-p1-fmr-dba
+          group_by: [owner, priority, alertname, instance, volume]
+          group_wait: 30s
+          group_interval: 4h
+          repeat_interval: 4h
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-fmr-dba
@@ -69,6 +110,14 @@ route:
       receiver: email-p2-ok-dba
       continue: false
       routes:
+        - <<: *disk-runway-critical
+          receiver: sms-email-p0-ok-dba
+        - <<: *disk-runway-warning
+          receiver: email-sms-p1-ok-dba
+        - <<: *disk-space-critical
+          receiver: sms-email-p0-ok-dba
+        - <<: *disk-space-low
+          receiver: email-sms-p1-ok-dba
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-ok-dba
@@ -93,6 +142,14 @@ route:
       receiver: email-p2-fmr-bi-develop
       continue: false
       routes:
+        - <<: *disk-runway-critical
+          receiver: sms-email-p0-fmr-bi-develop
+        - <<: *disk-runway-warning
+          receiver: email-sms-p1-fmr-bi-develop
+        - <<: *disk-space-critical
+          receiver: sms-email-p0-fmr-bi-develop
+        - <<: *disk-space-low
+          receiver: email-sms-p1-fmr-bi-develop
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-fmr-bi-develop
@@ -117,6 +174,14 @@ route:
       receiver: email-p2-ok-bi-develop
       continue: false
       routes:
+        - <<: *disk-runway-critical
+          receiver: sms-email-p0-ok-bi-develop
+        - <<: *disk-runway-warning
+          receiver: email-sms-p1-ok-bi-develop
+        - <<: *disk-space-critical
+          receiver: sms-email-p0-ok-bi-develop
+        - <<: *disk-space-low
+          receiver: email-sms-p1-ok-bi-develop
         - matchers:
             - priority = "P0"
           receiver: sms-email-p0-ok-bi-develop
@@ -137,6 +202,18 @@ route:
           repeat_interval: 12h
 
     # Unknown owner keeps the shared mailbox. Do not drop the alert.
+    - <<: *disk-runway-critical
+      receiver: sms-email-p0
+      continue: false
+    - <<: *disk-runway-warning
+      receiver: email-sms-p1
+      continue: false
+    - <<: *disk-space-critical
+      receiver: sms-email-p0
+      continue: false
+    - <<: *disk-space-low
+      receiver: email-sms-p1
+      continue: false
     - matchers:
         - priority = "P0"
       receiver: sms-email-p0
@@ -171,14 +248,15 @@ inhibit_rules:
       - alertname = "MemoryLow"
     equal: [instance]
 
-  # SQL engine and Agent pages use SqlServerDown / SqlServerAgentDown.
+  # SQL engine, Agent, and Power BI pages use their own alerts.
   - source_matchers:
-      - alertname =~ "SqlServerDown|SqlServerAgentDown"
+      - alertname =~ "SqlServerDown|SqlServerAgentDown|PowerBIDown"
     target_matchers:
       - alertname = "DataPlatformServiceNotRunning"
     equal: [instance, name]
 
   # Both exporters down is already paged as InstanceDown.
+  # inhibit-scope: global
   - source_matchers:
       - alertname = "InstanceDown"
     target_matchers:
@@ -222,16 +300,17 @@ inhibit_rules:
 
   # Disk P0 suppresses the 10% warning for the same volume.
   # The generic inhibit matches alertname, so Low and Critical would both notify.
+  # Role alerts are separate alertnames and must inhibit Low themselves.
   - source_matchers:
-      - alertname = "WindowsDiskSpaceCritical"
+      - alertname =~ "WindowsDiskSpaceCritical|WindowsSqlDataDiskSpaceCritical|WindowsSqlTempdbDataDiskSpaceCritical|WindowsOlapDataDiskSpaceCritical|WindowsSqlTempdbLogDiskSpaceCritical|WindowsSqlLogDiskSpaceCritical|WindowsSqlBackupDiskSpaceCritical"
     target_matchers:
-      - alertname = "WindowsDiskSpaceLow"
+      - alertname =~ "WindowsDiskSpaceLow|WindowsSqlDataDiskSpaceLow|WindowsSqlTempdbDataDiskSpaceLow|WindowsOlapDataDiskSpaceLow|WindowsSqlTempdbLogDiskSpaceLow|WindowsSqlLogDiskSpaceLow|WindowsSqlBackupDiskSpaceLow"
     equal: [instance, volume]
 
-  # U: below 5% already pages as WindowsDiskSpaceCritical (P0 email + SMS).
-  # Suppress the backup P1 so the owner is not paged twice for the same volume.
+  # SQL Backup below 5% and 30GiB pages as WindowsSqlBackupDiskSpaceCritical.
+  # Suppress the backup 10% page so the owner is not paged twice.
   - source_matchers:
-      - alertname = "WindowsDiskSpaceCritical"
+      - alertname =~ "WindowsDiskSpaceCritical|WindowsSqlBackupDiskSpaceCritical"
     target_matchers:
       - alertname = "WindowsBackupDiskFreeCritical"
     equal: [instance, volume]
@@ -243,7 +322,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
@@ -257,7 +336,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-DBA"
@@ -269,7 +348,7 @@ receivers:
       - to: "CHANGE_ME_FMR_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][windows_exporter][FMR-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
 
   - name: sms-email-p0-ok-dba
@@ -277,7 +356,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
@@ -291,7 +370,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-DBA"
@@ -303,7 +382,7 @@ receivers:
       - to: "CHANGE_ME_OK_DBA_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][windows_exporter][OK-DBA] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
 
   - name: sms-email-p0-fmr-bi-develop
@@ -311,7 +390,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
@@ -325,7 +404,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=FMR-BI-Develop"
@@ -337,7 +416,7 @@ receivers:
       - to: "CHANGE_ME_FMR_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][windows_exporter][FMR-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
 
   - name: sms-email-p0-ok-bi-develop
@@ -345,7 +424,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
@@ -359,7 +438,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       - url: "http://127.0.0.1:49177/sendsms?owner=OK-BI-Develop"
@@ -371,7 +450,7 @@ receivers:
       - to: "CHANGE_ME_OK_BI_DEVELOP_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][windows_exporter][OK-BI-Develop] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
 
   - name: sms-email-p0
@@ -379,7 +458,7 @@ receivers:
       - to: "CHANGE_ME_P0_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P0][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P0][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       # SMS gateway / custom notifier. Expected to accept Alertmanager webhook JSON.
@@ -395,7 +474,7 @@ receivers:
       - to: "CHANGE_ME_P1_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P1][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P1][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
     webhook_configs:
       # Keep SMS for P1 if your gateway supports priority filtering; otherwise remove this block.
@@ -408,7 +487,7 @@ receivers:
       - to: "CHANGE_ME_P2_EMAIL@example.com"
         send_resolved: true
         headers:
-          Subject: "[P2][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}"
+          Subject: '{{ if eq .Status "resolved" }}[RESOLVED] {{ end }}[P2][windows_exporter] {{ .GroupLabels.alertname }} — {{ .GroupLabels.instance }}'
         html: '{{ template "email.windows_exporter.html" . }}'
 
   # Keeps the alert in Alertmanager and sends no SMS or email.

@@ -9,14 +9,19 @@ To install the Windows binary as an automatic service, run an elevated
 PowerShell session from the repository root:
 
 ```powershell
+.\scripts\powershell\alertmanager\Build-AlertmanagerConfig.ps1
 .\scripts\powershell\alertmanager\Install-Alertmanager.ps1 `
-  -ConfigPath .\alertmanager\windows-exporter\alertmanager.yml `
+  -ConfigPath .\alertmanager\config\alertmanager.yml `
   -OpenFirewall
 ```
 
-The default service name is `prometheus_alert_manager` and its display name is
-`Prometheus Alert Manager`. Replace every `CHANGE_ME_*` value in the selected
-configuration before installation. The installer copies the adjacent
-`templates` directory, validates the deployed configuration with `amtool`,
-configures restart recovery and rotating logs, and starts the service on port
-`9093`.
+One Alertmanager process on port `9093` serves every exporter. Edit
+`windows-exporter/alertmanager.yml` and `sql-exporter/alertmanager.yml`, list
+them in `exporters.json` (the same role as `prometheus/targets/*.json`), then
+rebuild `config/alertmanager.yml`. The default service name is
+`prometheus_alert_manager` and its display name is `Prometheus Alert Manager`.
+Replace every `CHANGE_ME_*` value before installation. SMTP settings must be
+identical in every exporter file because Alertmanager has one global SMTP
+block. The installer copies the adjacent `templates` directory, validates the
+deployed configuration with `amtool`, configures restart recovery and rotating
+logs, and starts the service on port `9093`.
