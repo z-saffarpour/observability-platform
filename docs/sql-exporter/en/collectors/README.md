@@ -46,8 +46,9 @@ This folder contains a dedicated guide for each collector.
 | `mssql_resource_governor.md` | `60s` | `27` | Resource-pool and workload-group configuration and pressure. |
 | `mssql_restore.md` | `300s` | `14` | Restore / backup-sync freshness (msdb.dbo.restorehistory + backupset). |
 | `mssql_scheduler.md` | `30s` | `12` | Scheduler / SOS worker pressure and CPU topology. |
-| `mssql_security.md` | `300s` | `25` | SQL Server security posture: login failures, audit, privileged access, encryption, surface area, and moved security metrics. |
+| `mssql_security.md` | `300s` | `27` | SQL Server security posture: login failures, audit, privileged access, encryption, surface area, and moved security metrics. |
 | `mssql_service_broker.md` | `60s` | `65` | Service Broker queues, transmission, conversations, endpoint/transport, activation and forwarding. |
+| `mssql_slow_query_history.md` | `300s` | `5` | Fifty slowest completed executions in the last 6 hours, from Extended Events. |
 | `mssql_ssis.md` | `60s` | `32` | SSIS catalog + SSISDB health monitoring. |
 | `mssql_standard.md` | `30s` | `25` | Core instance identity + unique counters not owned by specialized collectors. |
 | `mssql_stats.md` | `600s` | `6` | Stale / heavily modified statistics (TOP N across online user databases). |

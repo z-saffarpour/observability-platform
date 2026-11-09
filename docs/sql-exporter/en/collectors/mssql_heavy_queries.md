@@ -16,9 +16,12 @@
 
 All four metrics share `mssql_active_heavy_requests` and preserve up to 8000 Unicode characters in `statement_snip`.
 
+These gauges describe the request while it is still in `sys.dm_exec_requests`. When the request completes, that series stops. Completed executions stay on `mssql_slow_query_history` for six hours.
+
+`SqlLongRunningRequest` reads `mssql_requests_elapsed_ms`.
+
 ## Permissions
 
 The exporter login requires `VIEW SERVER STATE` and `VIEW ANY DEFINITION`.
 
-Enable `mssql_plan_cache_hotspots` alongside this collector when the heavy-query dashboard's historical plan-cache panels are required.
-
+Enable `mssql_plan_cache_hotspots` alongside this collector when the heavy-query dashboard's historical plan-cache panels are required. Enable `mssql_slow_query_history` for the six-hour Extended Events list.

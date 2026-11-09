@@ -73,6 +73,7 @@
   # oltp.yml includes mssql_server_ddl, mssql_security_ddl, and mssql_schema_ddl.
   # -SqlInstance applies the limited login grants and installs
   # observability_server_ddl, observability_security_ddl, and observability_database_ddl.
+  # observability_slow_queries uses -DurationMs. The default is 5000.
   # An existing session is started and is not recreated.
   # Archive jobs and archive tables are not installed.
   # Omitting -GrantSysadmin leaves an existing sysadmin membership unchanged.
@@ -85,7 +86,8 @@
     -RemoteCredential (Get-Credential)
 
 .EXAMPLE
-  # oltp-store-lite.yml includes the three DDL collectors, so the three
+  # oltp-store-lite.yml includes the three DDL collectors and mssql_slow_query_history.
+  # -DurationMs 100 is the store slow-query threshold. Omit it for the 5000 ms default.
   # Extended Events sessions are installed. -GrantSysadmin adds the login to
   # sysadmin so DBCC DBINFO and DBCC TRACESTATUS return data.
   # Preview with -WhatIf before running it.
@@ -94,6 +96,7 @@
     -Profile oltp-store-lite.yml `
     -ServiceAccountMode NtService `
     -SqlInstance 'store-sql-01' `
+    -DurationMs 100 `
     -GrantSysadmin `
     -RemoteCredential (Get-Credential) `
     -WhatIf
@@ -250,6 +253,10 @@ param(
 
     [Parameter(Mandatory = $false)]
     [bool]$TrustServerCertificate = $true,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(100, 60000)]
+    [int]$DurationMs = 5000,
 
     [Parameter(Mandatory = $false)]
     [int]$ServiceTimeoutSec = 60,
@@ -1164,6 +1171,7 @@ $ddlSessions = @(
     @{ Collector = 'mssql_server_ddl'; Script = 'Install-ServerDdlEventSession.ps1'; Label = 'observability_server_ddl' }
     @{ Collector = 'mssql_security_ddl'; Script = 'Install-SecurityDdlEventSession.ps1'; Label = 'observability_security_ddl' }
     @{ Collector = 'mssql_schema_ddl'; Script = 'Install-DatabaseDdlEventSession.ps1'; Label = 'observability_database_ddl' }
+    @{ Collector = 'mssql_slow_query_history'; Script = 'Install-SlowQueryEventSession.ps1'; Label = 'observability_slow_queries' }
 )
 $collectorSource = if ($profileLeaf) { Join-Path $layout.ProfilesDir $profileLeaf } else { $configToDeploy }
 $selectedDdlSessions = @()
@@ -1206,14 +1214,26 @@ if (-not $eventSessionError -and $selectedDdlSessions.Count -gt 0 -and $sqlInsta
             continue
         }
         try {
+            $sessionArgs = @{
+                SqlInstance             = $sqlInstances
+                SqlCredential           = $SqlCredential
+                TrustServerCertificate  = $TrustServerCertificate
+            }
+            if ($sessionSpec.Collector -eq 'mssql_slow_query_history') {
+                $sessionArgs.DurationMs = $DurationMs
+            }
             $sessionRows = @(
-                & $sessionScript `
-                    -SqlInstance $sqlInstances `
-                    -SqlCredential $SqlCredential `
-                    -TrustServerCertificate $TrustServerCertificate
+                & $sessionScript @sessionArgs
             )
             foreach ($sessionRow in $sessionRows) {
-                Write-Step ("  {0} : {1} running={2} file={3}" -f $sessionRow.SqlInstance, $sessionRow.SessionName, $sessionRow.IsRunning, $sessionRow.XelFile) 'Green'
+                $sessionDetail = "  {0} : {1} running={2} file={3}" -f $sessionRow.SqlInstance, $sessionRow.SessionName, $sessionRow.IsRunning, $sessionRow.XelFile
+                if ($sessionRow.PSObject.Properties.Name -contains 'DurationMs') {
+                    $sessionDetail = "{0} duration_ms={1}" -f $sessionDetail, $sessionRow.DurationMs
+                    if ([int]$sessionRow.IsRunning -eq 1 -and [int]$sessionRow.DurationMatches -eq 0) {
+                        Write-Step ("  WARNING: {0} on {1} is running at a different duration. Re-run Install-SlowQueryEventSession.ps1 -Replace to apply {2} ms." -f $sessionRow.SessionName, $sessionRow.SqlInstance, $sessionRow.DurationMs) 'Yellow'
+                    }
+                }
+                Write-Step $sessionDetail 'Green'
             }
         }
         catch {

@@ -1,0 +1,297 @@
+# Slow statements captured by the observability_slow_queries Extended Events
+# session. The capture threshold is -DurationMs on the installer.
+# The default is 5000. A store install passes -DurationMs 100.
+# The collector keeps rows at or above 100 ms, which is the lowest
+# allowed -DurationMs, so a lower install value is not filtered out.
+# Each scrape re-reads the event files and emits the same execution
+# again while it is still inside the 6-hour window and among the 50 slowest.
+# event_time is part of the series identity, so one execution stays one series
+# for that window. This is a gauge because the value is that execution, not a
+# counter. After 6 hours, or when a slower execution pushes it out of the 50,
+# the scrape stops emitting it.
+#
+# The scrape does not create or start the session. Install it with
+# scripts/powershell/sql-exporter/Install-SlowQueryEventSession.ps1.
+# mssql_slow_query_xe_up is 0 until that session is running.
+# An empty list with xe_up = 0 means capture is off, not that nothing was slow.
+#
+# XE duration and cpu_time are microseconds. Exported elapsed and CPU are
+# milliseconds. event_time is SQL Server local time. Age uses the UTC event
+# timestamp. statement_snip is capped at 400 characters.
+#
+# Required permission: VIEW SERVER STATE.
+# Reading object names uses OBJECT_NAME when it is permitted; otherwise obj
+# stays (ad-hoc) and statement_snip still identifies the text.
+#
+# Cost: every 5 minutes the collector parses the session XEL files
+# (20 MB x 8). If those files roll over faster than 6 hours, the list is
+# shorter than 6 hours. ALLOW_SINGLE_EVENT_LOSS can drop a burst.
+
+collector_name: mssql_slow_query_history
+
+min_interval: 300s
+
+metrics:
+  - metric_name: mssql_slow_query_xe_up
+    type: gauge
+    help: '1 when observability_slow_queries is running with an event_file target, else 0.'
+    values: [xe_up]
+    query_ref: mssql_slow_query_xe_up
+
+  - metric_name: mssql_slow_query_elapsed_ms
+    type: gauge
+    help: 'Elapsed milliseconds for one slow execution in the last 6 hours (50 slowest). The session threshold is the installed -DurationMs.'
+    key_labels:
+      - event_time
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+      - session_id
+      - event_name
+    values: [elapsed_ms]
+    query_ref: mssql_slow_query_events
+
+  - metric_name: mssql_slow_query_cpu_ms
+    type: gauge
+    help: 'CPU milliseconds for that slow execution.'
+    key_labels:
+      - event_time
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+      - session_id
+      - event_name
+    values: [cpu_ms]
+    query_ref: mssql_slow_query_events
+
+  - metric_name: mssql_slow_query_logical_reads
+    type: gauge
+    help: 'Logical reads for that slow execution.'
+    key_labels:
+      - event_time
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+      - session_id
+      - event_name
+    values: [logical_reads]
+    query_ref: mssql_slow_query_events
+
+  - metric_name: mssql_slow_query_age_seconds
+    type: gauge
+    help: 'Seconds since that slow execution. The series stays while the execution is inside the 6-hour window and the top 50.'
+    key_labels:
+      - event_time
+      - db
+      - obj
+      - query_hash
+      - statement_snip
+      - session_id
+      - event_name
+    values: [age_seconds]
+    query_ref: mssql_slow_query_events
+
+queries:
+  - query_name: mssql_slow_query_xe_up
+    query: |
+      SET NOCOUNT ON;
+
+      SELECT CAST(
+          CASE
+              WHEN EXISTS (
+                  SELECT 1
+                  FROM sys.dm_xe_sessions AS s WITH (NOLOCK)
+                  INNER JOIN sys.dm_xe_session_targets AS t WITH (NOLOCK)
+                      ON t.event_session_address = s.address
+                  WHERE s.name = N'observability_slow_queries'
+                    AND t.target_name = N'event_file'
+              ) THEN 1
+              ELSE 0
+          END
+      AS float) AS xe_up;
+
+  - query_name: mssql_slow_query_events
+    query: |
+      SET NOCOUNT ON;
+      -- observability_slow_queries
+      -- Keep this marker in the first 400 characters so a slow scrape of
+      -- this batch is excluded even when the statement text is truncated.
+
+      DECLARE @xe_file nvarchar(260);
+      DECLARE @xe_glob nvarchar(400);
+
+      IF OBJECT_ID(N'tempdb..#slow_query_xe') IS NOT NULL
+          DROP TABLE #slow_query_xe;
+
+      CREATE TABLE #slow_query_xe (
+          event_utc datetimeoffset(7) NOT NULL,
+          event_time varchar(23) NOT NULL,
+          db nvarchar(128) NOT NULL,
+          query_hash varchar(34) NOT NULL,
+          statement_snip nvarchar(400) NOT NULL,
+          session_id nvarchar(11) NOT NULL,
+          event_name varchar(20) NOT NULL,
+          object_name nvarchar(256) NOT NULL,
+          object_id int NULL,
+          elapsed_ms float NOT NULL,
+          cpu_ms float NOT NULL,
+          logical_reads float NOT NULL
+      );
+
+      SELECT @xe_file = CAST(t.target_data AS xml).value(N'(EventFileTarget/File/@name)[1]', N'nvarchar(260)')
+      FROM sys.dm_xe_sessions AS s WITH (NOLOCK)
+      INNER JOIN sys.dm_xe_session_targets AS t WITH (NOLOCK)
+          ON t.event_session_address = s.address
+      WHERE s.name = N'observability_slow_queries'
+        AND t.target_name = N'event_file';
+
+      IF @xe_file IS NOT NULL AND @xe_file <> N''
+      BEGIN
+          IF CHARINDEX(N'\', @xe_file) > 0
+              SET @xe_glob = LEFT(@xe_file, LEN(@xe_file) - CHARINDEX(N'\', REVERSE(@xe_file)) + 1) + N'observability_slow_queries*.xel';
+          ELSE
+              SET @xe_glob = @xe_file;
+
+          BEGIN TRY
+              INSERT INTO #slow_query_xe ( -- fn_xe_file_target_read_file observability_slow_queries
+                  event_utc, event_time, db, query_hash, statement_snip, session_id,
+                  event_name, object_name, object_id, elapsed_ms, cpu_ms, logical_reads
+              )
+              SELECT
+                  ev.event_utc,
+                  CONVERT(varchar(23), CAST(SWITCHOFFSET(ev.event_utc, DATENAME(TZOFFSET, SYSDATETIMEOFFSET())) AS datetime2(3)), 121),
+                  ev.db,
+                  ev.query_hash,
+                  ev.statement_snip,
+                  ev.session_id,
+                  ev.event_name,
+                  ev.object_name,
+                  ev.object_id,
+                  ev.elapsed_ms,
+                  ev.cpu_ms,
+                  ev.logical_reads
+              FROM (
+                  SELECT
+                      xd.event_data.value(N'(event/@timestamp)[1]', N'datetimeoffset(7)') AS event_utc,
+                      LEFT(ISNULL(xd.event_data.value(N'(event/action[@name="database_name"]/value)[1]', N'nvarchar(128)'), N''), 128) AS db,
+                      LEFT(ISNULL(xd.event_data.value(N'(event/action[@name="query_hash"]/value)[1]', N'varchar(34)'), N''), 34) AS query_hash,
+                      LEFT(REPLACE(REPLACE(REPLACE(
+                          ISNULL(xd.event_data.value(N'(event/data[@name="statement"]/value)[1]', N'nvarchar(400)'), N''),
+                          CHAR(13), N' '), CHAR(10), N' '), N'  ', N' '), 400) AS statement_snip,
+                      LEFT(ISNULL(xd.event_data.value(N'(event/action[@name="session_id"]/value)[1]', N'nvarchar(11)'), N''), 11) AS session_id,
+                      CASE f.object_name
+                          WHEN N'sql_statement_completed' THEN N'statement'
+                          WHEN N'rpc_completed' THEN N'rpc'
+                          WHEN N'sp_statement_completed' THEN N'proc_statement'
+                          ELSE N''
+                      END AS event_name,
+                      LEFT(ISNULL(xd.event_data.value(N'(event/data[@name="object_name"]/value)[1]', N'nvarchar(256)'), N''), 256) AS object_name,
+                      TRY_CONVERT(int, xd.event_data.value(N'(event/data[@name="object_id"]/value)[1]', N'nvarchar(11)')) AS object_id,
+                      CAST(TRY_CONVERT(bigint, xd.event_data.value(N'(event/data[@name="duration"]/value)[1]', N'nvarchar(20)')) AS float) / 1000.0 AS elapsed_ms,
+                      CAST(ISNULL(TRY_CONVERT(bigint, xd.event_data.value(N'(event/data[@name="cpu_time"]/value)[1]', N'nvarchar(20)')), 0) AS float) / 1000.0 AS cpu_ms,
+                      CAST(ISNULL(TRY_CONVERT(bigint, xd.event_data.value(N'(event/data[@name="logical_reads"]/value)[1]', N'nvarchar(20)')), 0) AS float) AS logical_reads,
+                      ISNULL(xd.event_data.value(N'(event/data[@name="statement"]/value)[1]', N'nvarchar(400)'), N'') AS statement_filter
+                  FROM sys.fn_xe_file_target_read_file(@xe_glob, NULL, NULL, NULL) AS f
+                  CROSS APPLY (SELECT TRY_CAST(f.event_data AS xml) AS event_data) AS xd
+                  WHERE f.object_name IN (N'sql_statement_completed', N'rpc_completed', N'sp_statement_completed')
+                    AND xd.event_data IS NOT NULL
+              ) AS ev
+              WHERE ev.event_utc >= TODATETIMEOFFSET(DATEADD(HOUR, -6, SYSUTCDATETIME()), 0)
+                AND ev.elapsed_ms >= 100
+                AND ev.event_name <> N''
+                AND ev.statement_filter NOT LIKE N'%fn_xe_file_target_read_file%'
+                AND ev.statement_filter NOT LIKE N'%observability_slow_queries%'
+                AND ev.statement_filter NOT LIKE N'%sql_exporter%';
+          END TRY
+          BEGIN CATCH
+              DELETE FROM #slow_query_xe;
+              THROW;
+          END CATCH;
+      END;
+
+      ;WITH topn AS (
+          SELECT TOP (50)
+              event_utc,
+              event_time,
+              db,
+              query_hash,
+              statement_snip,
+              session_id,
+              event_name,
+              object_name,
+              object_id,
+              elapsed_ms,
+              cpu_ms,
+              logical_reads
+          FROM #slow_query_xe
+          ORDER BY elapsed_ms DESC, event_utc DESC
+      ),
+      resolved AS (
+          SELECT
+              event_time,
+              db,
+              CASE
+                  WHEN NULLIF(object_name, N'') IS NOT NULL THEN object_name
+                  WHEN NULLIF(object_id, 0) IS NOT NULL AND DB_ID(NULLIF(db, N'')) IS NOT NULL THEN
+                      COALESCE(
+                          NULLIF(
+                              OBJECT_SCHEMA_NAME(object_id, DB_ID(db))
+                                  + N'.' + OBJECT_NAME(object_id, DB_ID(db)),
+                              N''
+                          ),
+                          N'(ad-hoc)'
+                      )
+                  ELSE N'(ad-hoc)'
+              END AS obj,
+              query_hash,
+              statement_snip,
+              session_id,
+              event_name,
+              elapsed_ms,
+              cpu_ms,
+              logical_reads,
+              CAST(
+                  CASE
+                      WHEN DATEDIFF_BIG(SECOND, event_utc, SYSUTCDATETIME()) < 0 THEN 0
+                      ELSE DATEDIFF_BIG(SECOND, event_utc, SYSUTCDATETIME())
+                  END
+              AS float) AS age_seconds
+          FROM topn
+      ),
+      ranked AS (
+          SELECT
+              event_time,
+              db,
+              obj,
+              query_hash,
+              statement_snip,
+              session_id,
+              event_name,
+              elapsed_ms,
+              cpu_ms,
+              logical_reads,
+              age_seconds,
+              ROW_NUMBER() OVER (
+                  PARTITION BY event_time, db, obj, query_hash, statement_snip, session_id, event_name
+                  ORDER BY elapsed_ms DESC, age_seconds ASC
+              ) AS rn
+          FROM resolved
+      )
+      SELECT
+          event_time,
+          db,
+          obj,
+          query_hash,
+          statement_snip,
+          session_id,
+          event_name,
+          CAST(elapsed_ms AS float) AS elapsed_ms,
+          CAST(cpu_ms AS float) AS cpu_ms,
+          CAST(logical_reads AS float) AS logical_reads,
+          CAST(age_seconds AS float) AS age_seconds
+      FROM ranked
+      WHERE rn = 1
+      ORDER BY elapsed_ms DESC, event_time DESC;

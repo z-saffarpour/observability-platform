@@ -46,8 +46,9 @@
 | `mssql_resource_governor.md` | `60s` | `27` | پیکربندی و فشار Runtime در Resource Pool و Workload Group |
 | `mssql_restore.md` | `300s` | `14` | تازگی restore / backup-sync (msdb.dbo.restorehistory + backupset) |
 | `mssql_scheduler.md` | `30s` | `12` | فشار scheduler / SOS worker و توپولوژی CPU |
-| `mssql_security.md` | `300s` | `25` | وضعیت امنیت SQL Server: failed login، audit، دسترسی privileged، رمزنگاری، surface area و متریک‌های امنیتی منتقل‌شده |
+| `mssql_security.md` | `300s` | `27` | وضعیت امنیت SQL Server: failed login، audit، دسترسی privileged، رمزنگاری، surface area و متریک‌های امنیتی منتقل‌شده |
 | `mssql_service_broker.md` | `60s` | `65` | Service Broker: صف‌ها، transmission، conversation، endpoint/transport، activation و forwarding |
+| `mssql_slow_query_history.md` | `300s` | `5` | ۵۰ اجرای کندِ شش ساعت اخیر از Extended Events |
 | `mssql_ssis.md` | `60s` | `32` | کاتالوگ SSIS + مانیتورینگ سلامت SSISDB |
 | `mssql_standard.md` | `30s` | `25` | هویت اصلی instance و counterهای یکتا که به collectorهای تخصصی تعلق ندارند |
 | `mssql_stats.md` | `600s` | `6` | statistics قدیمی / زیاد تغییرکرده (TOP N در دیتابیس‌های آنلاین user) |

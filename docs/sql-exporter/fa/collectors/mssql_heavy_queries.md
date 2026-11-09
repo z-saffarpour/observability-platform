@@ -16,8 +16,12 @@
 
 هر چهار متریک از `mssql_active_heavy_requests` استفاده می‌کنند و `statement_snip` را تا ۸۰۰۰ کاراکتر Unicode نگه می‌دارند.
 
+این gaugeها فقط تا وقتی درخواست در `sys.dm_exec_requests` است مقدار دارند. با تمام شدن درخواست، سری حذف می‌شود. اجرای تمام‌شده تا شش ساعت در `mssql_slow_query_history` می‌ماند.
+
+آلرت `SqlLongRunningRequest` متریک `mssql_requests_elapsed_ms` را می‌خواند.
+
 ## دسترسی‌ها
 
 login مربوط به exporter به `VIEW SERVER STATE` و `VIEW ANY DEFINITION` نیاز دارد.
 
-برای فعال بودن پنل‌های تاریخی plan cache در داشبورد heavy-query، collector جدید `mssql_plan_cache_hotspots` را نیز فعال کنید.
+برای پنل‌های تاریخی plan cache در داشبورد heavy-query، collector `mssql_plan_cache_hotspots` را هم فعال کنید. برای فهرست شش‌ساعته Extended Events، collector `mssql_slow_query_history` را فعال کنید.
