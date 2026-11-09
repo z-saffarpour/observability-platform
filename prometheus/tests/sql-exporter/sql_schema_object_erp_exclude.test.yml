@@ -1,0 +1,143 @@
+# SqlSchemaObjectCreated, Altered, and Dropped stay silent only when all three
+# match: instance GIG-DC1-G545, db MicrosoftDynamicsAX or master, login OKSRV\ERPSA.
+# A different instance, database, or login still alerts. Age at or above 1800s does not.
+rule_files:
+  - ../../alert-rules/sql-exporter/sql_exporter-p2-config.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="MicrosoftDynamicsAX",schema_name="dbo",object_name="CustTable",object_type="table",event="created",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:00:00"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="master",schema_name="dbo",object_name="usp_setup",object_type="procedure",event="created",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:00:01"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="MicrosoftDynamicsAX",schema_name="dbo",object_name="CustView",object_type="view",event="altered",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:00:02"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="master",schema_name="dbo",object_name="OldTable",object_type="table",event="dropped",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:00:03"}'
+        values: '100+0x8'
+
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="App",schema_name="dbo",object_name="KeepTable",object_type="table",event="created",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:01:00"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="MicrosoftDynamicsAX",schema_name="dbo",object_name="OtherLoginTable",object_type="table",event="created",login_name="OKSRV\\OTHER",event_time="2026-11-04 12:01:01"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="OTHER-HOST",job="sql_exporter",db="MicrosoftDynamicsAX",schema_name="dbo",object_name="OtherHostTable",object_type="table",event="created",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:01:02"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="GIG-DC1-G545",job="sql_exporter",db="App",schema_name="dbo",object_name="KeepView",object_type="view",event="altered",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:01:03"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="OTHER-HOST",job="sql_exporter",db="master",schema_name="dbo",object_name="KeepDrop",object_type="table",event="dropped",login_name="OKSRV\\ERPSA",event_time="2026-11-04 12:01:04"}'
+        values: '100+0x8'
+      - series: 'mssql_schema_ddl_age_seconds{instance="OTHER-HOST",job="sql_exporter",db="App",schema_name="dbo",object_name="OldEvent",object_type="table",event="created",login_name="sa",event_time="2026-11-04 11:00:00"}'
+        values: '2000+0x8'
+
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: SqlSchemaObjectCreated
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlSchemaObjectCreated
+              severity: info
+              priority: P2
+              alert_profile: config
+              collector: mssql_schema_ddl
+              instance: GIG-DC1-G545
+              job: sql_exporter
+              db: App
+              schema_name: dbo
+              object_name: KeepTable
+              object_type: table
+              event: created
+              login_name: 'OKSRV\ERPSA'
+              event_time: '2026-11-04 12:01:00'
+            exp_annotations:
+              summary: "Table, view, or procedure created"
+              summary_fa: "جدول، view یا procedure ایجاد شد"
+              description: "table dbo.KeepTable was created in App by OKSRV\\ERPSA at 2026-11-04 12:01:00 (SQL Server local time), 100 seconds ago."
+              runbook: "Confirm the create was a planned release. Schema '-' means the object was already gone or not visible. Dashboard: sqlx-schema-change."
+          - exp_labels:
+              alertname: SqlSchemaObjectCreated
+              severity: info
+              priority: P2
+              alert_profile: config
+              collector: mssql_schema_ddl
+              instance: GIG-DC1-G545
+              job: sql_exporter
+              db: MicrosoftDynamicsAX
+              schema_name: dbo
+              object_name: OtherLoginTable
+              object_type: table
+              event: created
+              login_name: 'OKSRV\OTHER'
+              event_time: '2026-11-04 12:01:01'
+            exp_annotations:
+              summary: "Table, view, or procedure created"
+              summary_fa: "جدول، view یا procedure ایجاد شد"
+              description: "table dbo.OtherLoginTable was created in MicrosoftDynamicsAX by OKSRV\\OTHER at 2026-11-04 12:01:01 (SQL Server local time), 100 seconds ago."
+              runbook: "Confirm the create was a planned release. Schema '-' means the object was already gone or not visible. Dashboard: sqlx-schema-change."
+          - exp_labels:
+              alertname: SqlSchemaObjectCreated
+              severity: info
+              priority: P2
+              alert_profile: config
+              collector: mssql_schema_ddl
+              instance: OTHER-HOST
+              job: sql_exporter
+              db: MicrosoftDynamicsAX
+              schema_name: dbo
+              object_name: OtherHostTable
+              object_type: table
+              event: created
+              login_name: 'OKSRV\ERPSA'
+              event_time: '2026-11-04 12:01:02'
+            exp_annotations:
+              summary: "Table, view, or procedure created"
+              summary_fa: "جدول، view یا procedure ایجاد شد"
+              description: "table dbo.OtherHostTable was created in MicrosoftDynamicsAX by OKSRV\\ERPSA at 2026-11-04 12:01:02 (SQL Server local time), 100 seconds ago."
+              runbook: "Confirm the create was a planned release. Schema '-' means the object was already gone or not visible. Dashboard: sqlx-schema-change."
+      - eval_time: 5m
+        alertname: SqlSchemaObjectAltered
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlSchemaObjectAltered
+              severity: info
+              priority: P2
+              alert_profile: config
+              collector: mssql_schema_ddl
+              instance: GIG-DC1-G545
+              job: sql_exporter
+              db: App
+              schema_name: dbo
+              object_name: KeepView
+              object_type: view
+              event: altered
+              login_name: 'OKSRV\ERPSA'
+              event_time: '2026-11-04 12:01:03'
+            exp_annotations:
+              summary: "Table, view, or procedure altered"
+              summary_fa: "جدول، view یا procedure تغییر کرد"
+              description: "view dbo.KeepView was altered in App by OKSRV\\ERPSA at 2026-11-04 12:01:03 (SQL Server local time), 100 seconds ago."
+              runbook: "Confirm the ALTER was a planned release. Dashboard: sqlx-schema-change."
+      - eval_time: 5m
+        alertname: SqlSchemaObjectDropped
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlSchemaObjectDropped
+              severity: warning
+              priority: P2
+              alert_profile: config
+              collector: mssql_schema_ddl
+              instance: OTHER-HOST
+              job: sql_exporter
+              db: master
+              schema_name: dbo
+              object_name: KeepDrop
+              object_type: table
+              event: dropped
+              login_name: 'OKSRV\ERPSA'
+              event_time: '2026-11-04 12:01:04'
+            exp_annotations:
+              summary: "Table, view, or procedure dropped"
+              summary_fa: "جدول، view یا procedure حذف شد"
+              description: "table dbo.KeepDrop was dropped in master by OKSRV\\ERPSA at 2026-11-04 12:01:04 (SQL Server local time), 100 seconds ago."
+              runbook: "Confirm the drop was planned. A dropped table is a data-loss risk until a backup or deploy record matches it. Dashboard: sqlx-schema-change."

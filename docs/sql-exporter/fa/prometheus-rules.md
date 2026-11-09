@@ -30,7 +30,7 @@ SLA، Baseline و نقش هر سرور تنظیم شوند.
 | `sql_exporter-p0-jobs.rules.yml` | P0 | SQL Agent job failed |
 | `sql_exporter-p0-maintenance.rules.yml` | P0 | `update_site` و `ERP_MRP` طولانی‌تر از میانگین ۷ روز |
 | `sql_exporter-p1-performance.rules.yml` | P1 | CPU، I/O، log، blocking، memory، tempdb، … |
-| `sql_exporter-p1-space.rules.yml` | P1 | filegroup runway و رشد مسدود |
+| `sql_exporter-p1-space.rules.yml` | P1 | باند فرود filegroup وقتی رشد مسدود است، و رشد مسدود در ۹۸٪ |
 | `sql_exporter-p3-jobs.rules.yml` | P3 | تاریخچه / آخرین اجرای ناموفق Job، فقط لیست |
 | `sql_exporter-p3-signals.rules.yml` | P3 | سیگنال ERRORLOG، فقط لیست |
 | `sql_exporter-p2-performance.rules.yml` | P2 | sessions، parallelism، plan cache، waits، … |

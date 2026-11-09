@@ -1,0 +1,160 @@
+# Difference Restore is checked from 06:00 until 09:00 Asia/Tehran.
+# promtool time starts at Unix epoch (UTC). Tehran is UTC+03:30, so
+# 06:00 Tehran is eval 2h30m, 07:00 is 3h30m, 08:00 is 4h30m, and 09:00 is 5h30m.
+# 12h30m lag fires at 2h45m (hour 6), stays firing at 07:00 (hour 7) and
+# 08:15 (hour 8), and resolves at 09:00 even while the lag is still over 4h.
+# The same lag before 06:00, a 3h lag, and a missing restore stay silent.
+# A second database that drops to 3h at 07:31 resolves inside the window.
+rule_files:
+  - ../../alert-rules/sql-exporter/sql_exporter-p0-availability.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'mssql_restore_lag_seconds{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH",original_db="OKDWH",backup_type="log",original_server="OKDC34017",recovery_model="BULK-LOGGED"}'
+        values: '45000+0x360'
+      - series: 'mssql_restore_lag_seconds{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH_RECOVERED",original_db="OKDWH_RECOVERED",backup_type="log",original_server="OKDC34017",recovery_model="BULK-LOGGED"}'
+        values: '45000+0x240 10800+0x120'
+      - series: 'mssql_restore_lag_seconds{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH_FRESH",original_db="OKDWH_FRESH",backup_type="log",original_server="OKDC34017",recovery_model="BULK-LOGGED"}'
+        values: '10800+0x360'
+      - series: 'mssql_restore_lag_seconds{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH_NONE",original_db="OKDWH_NONE",backup_type="log",original_server="OKDC34017",recovery_model="BULK-LOGGED"}'
+        values: '-1+0x360'
+
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts: []
+      - eval_time: 2h44m
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts: []
+      - eval_time: 2h45m
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlRestoreDifferenceHigh
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_restore
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH
+              original_db: OKDWH
+              backup_type: log
+              original_server: OKDC34017
+              recovery_model: BULK-LOGGED
+            exp_annotations:
+              summary: "Difference Restore for OKDWH on OKDC34022 is 12:30 (over 4h at hour 6)"
+              summary_fa: "اختلاف ریستور بکاپ OKDWH روی OKDC34022 در ساعت 6 برابر 12:30 است"
+              description: "Last applied log backup of OKDWH finished 12:30 ago. Source OKDC34017. Checked 06:00-09:00 while the lag is over 4h. Current hour 6."
+              runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."
+          - exp_labels:
+              alertname: SqlRestoreDifferenceHigh
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_restore
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH_RECOVERED
+              original_db: OKDWH_RECOVERED
+              backup_type: log
+              original_server: OKDC34017
+              recovery_model: BULK-LOGGED
+            exp_annotations:
+              summary: "Difference Restore for OKDWH_RECOVERED on OKDC34022 is 12:30 (over 4h at hour 6)"
+              summary_fa: "اختلاف ریستور بکاپ OKDWH_RECOVERED روی OKDC34022 در ساعت 6 برابر 12:30 است"
+              description: "Last applied log backup of OKDWH_RECOVERED finished 12:30 ago. Source OKDC34017. Checked 06:00-09:00 while the lag is over 4h. Current hour 6."
+              runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."
+      - eval_time: 3h30m
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlRestoreDifferenceHigh
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_restore
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH
+              original_db: OKDWH
+              backup_type: log
+              original_server: OKDC34017
+              recovery_model: BULK-LOGGED
+            exp_annotations:
+              summary: "Difference Restore for OKDWH on OKDC34022 is 12:30 (over 4h at hour 7)"
+              summary_fa: "اختلاف ریستور بکاپ OKDWH روی OKDC34022 در ساعت 7 برابر 12:30 است"
+              description: "Last applied log backup of OKDWH finished 12:30 ago. Source OKDC34017. Checked 06:00-09:00 while the lag is over 4h. Current hour 7."
+              runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."
+          - exp_labels:
+              alertname: SqlRestoreDifferenceHigh
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_restore
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH_RECOVERED
+              original_db: OKDWH_RECOVERED
+              backup_type: log
+              original_server: OKDC34017
+              recovery_model: BULK-LOGGED
+            exp_annotations:
+              summary: "Difference Restore for OKDWH_RECOVERED on OKDC34022 is 12:30 (over 4h at hour 7)"
+              summary_fa: "اختلاف ریستور بکاپ OKDWH_RECOVERED روی OKDC34022 در ساعت 7 برابر 12:30 است"
+              description: "Last applied log backup of OKDWH_RECOVERED finished 12:30 ago. Source OKDC34017. Checked 06:00-09:00 while the lag is over 4h. Current hour 7."
+              runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."
+      - eval_time: 4h01m
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlRestoreDifferenceHigh
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_restore
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH
+              original_db: OKDWH
+              backup_type: log
+              original_server: OKDC34017
+              recovery_model: BULK-LOGGED
+            exp_annotations:
+              summary: "Difference Restore for OKDWH on OKDC34022 is 12:30 (over 4h at hour 7)"
+              summary_fa: "اختلاف ریستور بکاپ OKDWH روی OKDC34022 در ساعت 7 برابر 12:30 است"
+              description: "Last applied log backup of OKDWH finished 12:30 ago. Source OKDC34017. Checked 06:00-09:00 while the lag is over 4h. Current hour 7."
+              runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."
+      - eval_time: 4h45m
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlRestoreDifferenceHigh
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_restore
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH
+              original_db: OKDWH
+              backup_type: log
+              original_server: OKDC34017
+              recovery_model: BULK-LOGGED
+            exp_annotations:
+              summary: "Difference Restore for OKDWH on OKDC34022 is 12:30 (over 4h at hour 8)"
+              summary_fa: "اختلاف ریستور بکاپ OKDWH روی OKDC34022 در ساعت 8 برابر 12:30 است"
+              description: "Last applied log backup of OKDWH finished 12:30 ago. Source OKDC34017. Checked 06:00-09:00 while the lag is over 4h. Current hour 8."
+              runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."
+      - eval_time: 5h30m
+        alertname: SqlRestoreDifferenceHigh
+        exp_alerts: []

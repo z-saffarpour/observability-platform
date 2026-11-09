@@ -1,0 +1,82 @@
+# RESTORING is not a P0 page. A restore that stays in that state for 15m
+# sends SqlDatabaseRestoring (P2 email, 12h repeat in Alertmanager).
+# SUSPECT still pages as SqlDatabaseNotOnline after 5m.
+# ONLINE and a 2m RECOVERING blip stay silent.
+rule_files:
+  - ../../alert-rules/sql-exporter/sql_exporter-p0-availability.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_state{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH",state_desc="RESTORING"}'
+        values: '1+0x20'
+      - series: 'mssql_database_state{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH_SUSPECT",state_desc="SUSPECT"}'
+        values: '4+0x20'
+      - series: 'mssql_database_state{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH_ONLINE",state_desc="ONLINE"}'
+        values: '0+0x20'
+      - series: 'mssql_database_state{instance="OKDC34022",job="sql_exporter",owner="OK-BI-Develop",db="OKDWH_RECOVERING",state_desc="RECOVERING"}'
+        values: '2'
+
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: SqlDatabaseNotOnline
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlDatabaseNotOnline
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_standard
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH_SUSPECT
+              state_desc: SUSPECT
+            exp_annotations:
+              summary: "Database OKDWH_SUSPECT is SUSPECT, not ONLINE"
+              summary_fa: "دیتابیس OKDWH_SUSPECT در وضعیت SUSPECT است و ONLINE نیست"
+              description: "Database OKDWH_SUSPECT state code is 4. RESTORING is not this page."
+              runbook: "Check SUSPECT, EMERGENCY, RECOVERY_PENDING, OFFLINE, or a long RECOVERING state. Review ERRORLOG and recent failovers. An in-progress restore is SqlDatabaseRestoring and sends email only."
+      - eval_time: 14m
+        alertname: SqlDatabaseRestoring
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: SqlDatabaseRestoring
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlDatabaseRestoring
+              severity: warning
+              priority: P2
+              alert_profile: availability
+              collector: mssql_standard
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH
+              state_desc: RESTORING
+            exp_annotations:
+              summary: "Database OKDWH on OKDC34022 is RESTORING"
+              summary_fa: "دیتابیس OKDWH روی OKDC34022 در حال RESTORING است"
+              description: "Database OKDWH has stayed in RESTORING for 15 minutes. Email repeats every 12 hours while the restore continues. SMS is not sent."
+              runbook: "Confirm the restore or log-shipping apply is expected. A restore that returns ONLINE and starts again sends one new email, not a page every 15 minutes."
+      - eval_time: 15m
+        alertname: SqlDatabaseNotOnline
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlDatabaseNotOnline
+              severity: critical
+              priority: P0
+              alert_profile: availability
+              collector: mssql_standard
+              instance: OKDC34022
+              job: sql_exporter
+              owner: OK-BI-Develop
+              db: OKDWH_SUSPECT
+              state_desc: SUSPECT
+            exp_annotations:
+              summary: "Database OKDWH_SUSPECT is SUSPECT, not ONLINE"
+              summary_fa: "دیتابیس OKDWH_SUSPECT در وضعیت SUSPECT است و ONLINE نیست"
+              description: "Database OKDWH_SUSPECT state code is 4. RESTORING is not this page."
+              runbook: "Check SUSPECT, EMERGENCY, RECOVERY_PENDING, OFFLINE, or a long RECOVERING state. Review ERRORLOG and recent failovers. An in-progress restore is SqlDatabaseRestoring and sends email only."

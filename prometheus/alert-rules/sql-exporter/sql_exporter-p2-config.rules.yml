@@ -3,8 +3,19 @@ groups:
   - name: sql_exporter.p2.config
     interval: 60s
     rules:
+      # Read-only databases stay out: AUTO_SHRINK, AUTO_CLOSE, and PAGE_VERIFY
+      # cannot be changed until the database is read-write. is_read_only comes
+      # from mssql_standard. A missing series does not suppress the alert.
       - alert: SqlDatabaseConfigurationUnsafe
-        expr: mssql_database_auto_shrink_enabled == 1 or mssql_database_auto_close_enabled == 1 or mssql_database_page_verify_option{db!="tempdb"} != 2
+        expr: |
+          (
+            mssql_database_auto_shrink_enabled == 1
+            or mssql_database_auto_close_enabled == 1
+            or mssql_database_page_verify_option{db!="tempdb"} != 2
+          )
+          unless on(instance, db) (
+            mssql_database_is_read_only == 1
+          )
         for: 10m
         labels:
           severity: warning
@@ -14,8 +25,8 @@ groups:
         annotations:
           summary: "Unsafe configuration detected for database {{ $labels.db }}"
           summary_fa: "پیکربندی ناامن برای دیتابیس {{ $labels.db }} شناسایی شد"
-          description: "Database {{ $labels.db }} has AUTO_SHRINK/AUTO_CLOSE enabled or PAGE_VERIFY is not CHECKSUM."
-          runbook: "Disable AUTO_SHRINK/AUTO_CLOSE and set PAGE_VERIFY=CHECKSUM where appropriate."
+          description: "Database {{ $labels.db }} has AUTO_SHRINK/AUTO_CLOSE enabled or PAGE_VERIFY is not CHECKSUM. Read-only databases are excluded."
+          runbook: "Disable AUTO_SHRINK/AUTO_CLOSE and set PAGE_VERIFY=CHECKSUM where appropriate. Read-only databases are excluded until they are read-write."
 
       # - alert: SqlDatabaseGrowingRapidly
       #   expr: increase(mssql_database_data_size_mb[24h]) > 10240
@@ -73,8 +84,19 @@ groups:
           description: "Database {{ $labels.db }} was dropped by {{ $labels.login_name }} at {{ $labels.event_time }} (SQL Server local time), {{ $value }} seconds ago."
           runbook: "Confirm the drop was planned and a backup exists. Dashboard: sqlx-schema-change."
 
+      # Expected ERP DDL: OKSRV\ERPSA on GIG-DC1-G545 in MicrosoftDynamicsAX or
+      # master does not alert for create, alter, or drop. Any other instance,
+      # database, or login still alerts. Both sides of unless use the same
+      # comparison so label sets match after Prometheus drops __name__.
       - alert: SqlSchemaObjectCreated
-        expr: mssql_schema_ddl_age_seconds{event="created", object_type=~"table|view|procedure"} < 1800
+        expr: |
+          (
+            mssql_schema_ddl_age_seconds{event="created", object_type=~"table|view|procedure"} < 1800
+          )
+          unless
+          (
+            mssql_schema_ddl_age_seconds{event="created", object_type=~"table|view|procedure", instance="GIG-DC1-G545", db=~"MicrosoftDynamicsAX|master", login_name="OKSRV\\ERPSA"} < 1800
+          )
         for: 5m
         labels:
           severity: info
@@ -88,7 +110,14 @@ groups:
           runbook: "Confirm the create was a planned release. Schema '-' means the object was already gone or not visible. Dashboard: sqlx-schema-change."
 
       - alert: SqlSchemaObjectAltered
-        expr: mssql_schema_ddl_age_seconds{event="altered", object_type=~"table|view|procedure"} < 1800
+        expr: |
+          (
+            mssql_schema_ddl_age_seconds{event="altered", object_type=~"table|view|procedure"} < 1800
+          )
+          unless
+          (
+            mssql_schema_ddl_age_seconds{event="altered", object_type=~"table|view|procedure", instance="GIG-DC1-G545", db=~"MicrosoftDynamicsAX|master", login_name="OKSRV\\ERPSA"} < 1800
+          )
         for: 5m
         labels:
           severity: info
@@ -102,7 +131,14 @@ groups:
           runbook: "Confirm the ALTER was a planned release. Dashboard: sqlx-schema-change."
 
       - alert: SqlSchemaObjectDropped
-        expr: mssql_schema_ddl_age_seconds{event="dropped", object_type=~"table|view|procedure"} < 1800
+        expr: |
+          (
+            mssql_schema_ddl_age_seconds{event="dropped", object_type=~"table|view|procedure"} < 1800
+          )
+          unless
+          (
+            mssql_schema_ddl_age_seconds{event="dropped", object_type=~"table|view|procedure", instance="GIG-DC1-G545", db=~"MicrosoftDynamicsAX|master", login_name="OKSRV\\ERPSA"} < 1800
+          )
         for: 5m
         labels:
           severity: warning

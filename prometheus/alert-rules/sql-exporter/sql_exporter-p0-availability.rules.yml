@@ -18,8 +18,11 @@ groups:
           description: "Prometheus has failed to scrape the SQL exporter target for five minutes."
           runbook: "Check service prometheus_sql_exporter, port 9399, firewall, and scrape Basic Auth."
 
+      # RESTORING is a separate P2 alert. state_desc is a label, so each restore
+      # wave is a new series. Paging that series every 15m floods SMS for a
+      # planned restore and then starts again on the next wave.
       - alert: SqlDatabaseNotOnline
-        expr: mssql_database_state != 0
+        expr: mssql_database_state{state_desc!="RESTORING"} != 0
         for: 5m
         labels:
           severity: critical
@@ -29,8 +32,25 @@ groups:
         annotations:
           summary: "Database {{ $labels.db }} is {{ $labels.state_desc }}, not ONLINE"
           summary_fa: "دیتابیس {{ $labels.db }} در وضعیت {{ $labels.state_desc }} است و ONLINE نیست"
-          description: "Database {{ $labels.db }} state code is {{ $value }}."
-          runbook: "Check database state (SUSPECT/RECOVERING/OFFLINE). Review ERRORLOG and recent failovers."
+          description: "Database {{ $labels.db }} state code is {{ $value }}. RESTORING is not this page."
+          runbook: "Check SUSPECT, EMERGENCY, RECOVERY_PENDING, OFFLINE, or a long RECOVERING state. Review ERRORLOG and recent failovers. An in-progress restore is SqlDatabaseRestoring and sends email only."
+
+      # One email per restore episode. P2 repeat is 12h, so a restore that
+      # stays in RESTORING does not send again until then. The next restore
+      # wave, after the database returns ONLINE, sends one new email.
+      - alert: SqlDatabaseRestoring
+        expr: mssql_database_state{state_desc="RESTORING"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          priority: P2
+          alert_profile: availability
+          collector: mssql_standard
+        annotations:
+          summary: "Database {{ $labels.db }} on {{ $labels.instance }} is RESTORING"
+          summary_fa: "دیتابیس {{ $labels.db }} روی {{ $labels.instance }} در حال RESTORING است"
+          description: "Database {{ $labels.db }} has stayed in RESTORING for 15 minutes. Email repeats every 12 hours while the restore continues. SMS is not sent."
+          runbook: "Confirm the restore or log-shipping apply is expected. A restore that returns ONLINE and starts again sends one new email, not a page every 15 minutes."
 
       # Writable full-backup age is SqlBackupFullTooOld in the P3 file.
       # Read-only DBs: monthly Full only (Diff/Log not expected). 35d = ~1 month + grace.
@@ -48,16 +68,33 @@ groups:
           description: "Read-only database {{ $labels.db }} expects Full backup ~monthly; age={{ $value | humanizeDuration }}."
           runbook: "Confirm monthly Full job for read-only DBs. Diff/Log are not required. Threshold sample: 35d."
 
-      - alert: SqlRestoreSecondaryBehindRpo
-        expr: mssql_restore_gap_to_rpo_seconds > 1800
-        for: 10m
+      # Difference Restore is mssql_restore_lag_seconds: seconds since
+      # backup_finish_date of the last applied backup. Check only from 06:00
+      # until 09:00 Asia/Tehran (UTC+03:30, no DST). While the gap is over 4h
+      # the alert stays firing, including after 07:00, and resolves at 09:00
+      # or when the lag is back to 4h or less. hour() is UTC, so the offset
+      # is added before it. Annotations state the current Tehran hour.
+      # P0 repeats while firing.
+      - alert: SqlRestoreDifferenceHigh
+        expr: |
+          (mssql_restore_lag_seconds > 4 * 3600)
+          and ignoring(__name__)
+          (
+            (hour(timestamp(mssql_restore_lag_seconds) + 3 * 3600 + 30 * 60) >= 6)
+            and
+            (hour(timestamp(mssql_restore_lag_seconds) + 3 * 3600 + 30 * 60) < 9)
+          )
+        for: 15m
         labels:
           severity: critical
           priority: P0
           alert_profile: availability
           collector: mssql_restore
         annotations:
-          summary: "Restore secondary for database {{ $labels.db }} is behind its sample RPO"
-          summary_fa: "secondary بازیابی دیتابیس {{ $labels.db }} از RPO نمونه عقب است"
-          description: "Restore gap for {{ $labels.db }} is {{ $value | humanizeDuration }}."
-          runbook: "Check restore/log-shipping jobs, file share access, and RPO threshold (sample 30m)."
+          # Lag is seconds. SMS reads summary / summary_fa, so both state the
+          # gap as total hours and minutes, for example 12:30. Seconds are dropped.
+          # The hour is Asia/Tehran at evaluation time, not a fixed 06:00.
+          summary: "Difference Restore for {{ $labels.db }} on {{ $labels.instance }} is {{ with printf \"floor(vector(%.0f) / 3600)\" $value | query }}{{ . | first | value | printf \"%.0f\" }}{{ end }}:{{ with printf \"floor(vector(%.0f) %% 3600 / 60)\" $value | query }}{{ . | first | value | printf \"%02.0f\" }}{{ end }} (over 4h at hour {{ with query \"hour(vector(time() + 3 * 3600 + 30 * 60))\" }}{{ . | first | value | printf \"%.0f\" }}{{ end }})"
+          summary_fa: "اختلاف ریستور بکاپ {{ $labels.db }} روی {{ $labels.instance }} در ساعت {{ with query \"hour(vector(time() + 3 * 3600 + 30 * 60))\" }}{{ . | first | value | printf \"%.0f\" }}{{ end }} برابر {{ with printf \"floor(vector(%.0f) / 3600)\" $value | query }}{{ . | first | value | printf \"%.0f\" }}{{ end }}:{{ with printf \"floor(vector(%.0f) %% 3600 / 60)\" $value | query }}{{ . | first | value | printf \"%02.0f\" }}{{ end }} است"
+          description: "Last applied {{ $labels.backup_type }} backup of {{ $labels.db }} finished {{ with printf \"floor(vector(%.0f) / 3600)\" $value | query }}{{ . | first | value | printf \"%.0f\" }}{{ end }}:{{ with printf \"floor(vector(%.0f) %% 3600 / 60)\" $value | query }}{{ . | first | value | printf \"%02.0f\" }}{{ end }} ago. Source {{ $labels.original_server }}. Checked 06:00-09:00 while the lag is over 4h. Current hour {{ with query \"hour(vector(time() + 3 * 3600 + 30 * 60))\" }}{{ . | first | value | printf \"%.0f\" }}{{ end }}."
+          runbook: "Compare mssql_restore_lag_seconds with 4h on the restore host. Confirm the log restore applied a newer backup from the source. Dashboard: sqlx-restore."

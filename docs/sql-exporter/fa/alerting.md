@@ -36,23 +36,22 @@
 | Alert | فایل | شرط خلاصه | for |
 |---|---|---|---|
 | `SqlExporterDown` | p0-availability | `up{job=~"sql.*"} == 0` | 5m |
-| `SqlDatabaseNotOnline` | p0-availability | `mssql_database_state != 0` | 5m |
-| `SqlRestoreSecondaryBehindRpo` | p0-availability | restore gap > ۳۰m | 10m |
+| `SqlDatabaseNotOnline` | p0-availability | وضعیت غیر از ONLINE و غیر از RESTORING | 5m |
 | `SqlAlwaysOnReplicaUnhealthy` | p0-hadr | sync health == 0 | 2m |
 | `SqlHadrClusterQuorumNotNormal` | p0-hadr | quorum_state != 1 | 2m |
 | `SqlHadrClusterMemberDown` | p0-hadr | member_state != 1 | 2m |
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
-| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` فقط برای `update_site`، `MasterData_V02_*` یا `ERPTransfer_MasterData_*` | 2m |
+| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` تا اجرای موفق؛ فقط `update_site`، `MasterData_V02_*` یا `ERPTransfer_MasterData_*`؛ شروع اجرای بعدی پیامی ندارد و resolve فقط بعد از موفقیت | 2m |
 | `SqlAgentJobRunningTooLong` | p0-maintenance | اجرای `update_site` یا `ERP_MRP` بیشتر از میانگین ۷ روز همان job | 10m |
-| `SqlFilegroupFreeSpaceCritical` | p1-space | فضای خالی filegroup کمتر از ۳ روز رشد خودش | 30m |
+| `SqlFilegroupFreeSpaceCritical` | p1-space | فضای خالی filegroup کمتر از ۳ روز رشد خودش و هیچ دیتافایلی روی ولوم خودش رشد نمی‌کند | 30m |
 | `SqlDatabaseLogGrowthCritical` | p1-performance | رشد ۲۴ساعته لاگ بیش از ۲۵٪ لاگ همان دیتابیس و بیش از ۶۴ مگابایت | 15m |
 
 ## P1 — High
 
 | Alert | فایل | شرط خلاصه | for |
 |---|---|---|---|
-| `SqlServerCpuHigh` | p1-performance | CPU > ۸۰٪ | 10m |
+| `SqlRestoreDifferenceHigh` | p0-availability | اختلاف ریستور بکاپ بیش از ۴ ساعت، فقط ۰۶:۰۰ تا ۰۹:۰۰ تهران؛ متن، ساعت جاری تهران را می‌گوید؛ ایمیل و SMS تا رفع یا ۰۹:۰۰ | 15m |
 | `SqlFileIoLatencyHigh` | p1-performance | latency > ۲۰ms | 10m |
 | `SqlTransactionLogUsageHigh` | p1-performance | log used دیتابیس کاربری > ۸۰٪ | 10m |
 | `SqlSystemDbTransactionLogUsageHigh` | p1-performance | log used برای tempdb/msdb > ۸۰٪ | 10m |
@@ -76,6 +75,7 @@
 
 | Alert | فایل | شرط خلاصه | for |
 |---|---|---|---|
+| `SqlDatabaseRestoring` | p0-availability | وضعیت RESTORING؛ فقط ایمیل، تکرار هر ۱۲ ساعت | 15m |
 | `SqlConnectionCountHigh` | p2-performance | sessions > ۵۰۰ | 10m |
 | `SqlParallelismQueueHigh` | p2-performance | waiting tasks > ۱۰ | 10m |
 | `SqlPlanCacheSingleUseRatioHigh` | p2-performance | single-use ratio > ۵۰٪ | 15m |
@@ -89,7 +89,7 @@
 | `SqlMissingIndexHighImpact` | p2-maintenance | score > ۱M | 30m |
 | `SqlStatisticsStale` | p2-maintenance | stale stats > ۲۰ | 30m |
 | `SqlQueryStoreDisabled` | p2-maintenance | Query Store off | 30m |
-| `SqlDatabaseConfigurationUnsafe` | p2-config | AUTO_SHRINK/CLOSE یا PAGE_VERIFY | 10m |
+| `SqlDatabaseConfigurationUnsafe` | p2-config | AUTO_SHRINK/CLOSE یا PAGE_VERIFY؛ دیتابیس READONLY حذف می‌شود | 10m |
 | `SqlDatabaseGrowingRapidly` | p2-config | رشد > ۱۰ GiB / ۲۴h | 15m |
 
 ## بسته‌های نقش

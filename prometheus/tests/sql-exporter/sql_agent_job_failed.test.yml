@@ -1,6 +1,7 @@
 # SqlAgentJobFailed pages only the SMS allowlist.
 # update_site is exact. MasterData_V02_ and ERPTransfer_MasterData_ are prefixes.
-# The for window is 2m. Samples cover that pending window at a 30s interval.
+# One alert stays open across a retry, including a new failed run_time, and
+# clears only when the failed series disappears. The for window is 2m.
 rule_files:
   - ../../alert-rules/sql-exporter/sql_exporter-p0-jobs.rules.yml
 
@@ -39,15 +40,11 @@ tests:
               instance: sql01
               job: sql_exporter
               job_name: update_site
-              category_name: Uncategorized
-              enabled: "1"
-              run_date: "2026-10-25"
-              run_time: "08:00:00"
             exp_annotations:
               summary: "SQL Agent job update_site failed"
-              summary_fa: "جاب update_site در SQL Agent خطا دارد"
-              description: "Job update_site is currently reported as failed."
-              runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+              summary_fa: "آخرین اجرای جاب update_site خطا دارد"
+              description: "The last completed run of job update_site failed. This alert stays open until a later run succeeds."
+              runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
           - exp_labels:
               alertname: SqlAgentJobFailed
               severity: critical
@@ -57,15 +54,11 @@ tests:
               instance: sql01
               job: sql_exporter
               job_name: MasterData_V02_Customers
-              category_name: Data
-              enabled: "1"
-              run_date: "2026-10-25"
-              run_time: "08:00:00"
             exp_annotations:
               summary: "SQL Agent job MasterData_V02_Customers failed"
-              summary_fa: "جاب MasterData_V02_Customers در SQL Agent خطا دارد"
-              description: "Job MasterData_V02_Customers is currently reported as failed."
-              runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+              summary_fa: "آخرین اجرای جاب MasterData_V02_Customers خطا دارد"
+              description: "The last completed run of job MasterData_V02_Customers failed. This alert stays open until a later run succeeds."
+              runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
           - exp_labels:
               alertname: SqlAgentJobFailed
               severity: critical
@@ -75,12 +68,78 @@ tests:
               instance: sql01
               job: sql_exporter
               job_name: ERPTransfer_MasterData_Items
-              category_name: Data
-              enabled: "1"
-              run_date: "2026-10-25"
-              run_time: "08:00:00"
             exp_annotations:
               summary: "SQL Agent job ERPTransfer_MasterData_Items failed"
-              summary_fa: "جاب ERPTransfer_MasterData_Items در SQL Agent خطا دارد"
-              description: "Job ERPTransfer_MasterData_Items is currently reported as failed."
-              runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+              summary_fa: "آخرین اجرای جاب ERPTransfer_MasterData_Items خطا دارد"
+              description: "The last completed run of job ERPTransfer_MasterData_Items failed. This alert stays open until a later run succeeds."
+              runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+
+  # The 10:33 failure stays open while the job is running and while a later
+  # failed attempt overlaps it. The alert clears only after the failed series ends.
+  - interval: 30s
+    input_series:
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="update_site",category_name="SSIS",enabled="1",run_date="2026-11-04",run_time="10:33:00"}'
+        values: '1+0x9'
+      - series: 'mssql_job_failed_current{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="update_site",category_name="SSIS",enabled="1",run_date="2026-11-04",run_time="11:05:00"}'
+        values: '_x8 1+0x8 _x16'
+      - series: 'mssql_job_running_seconds{instance="sql01",job="sql_exporter",owner="OK-DBA",job_name="update_site",category_name="SSIS",enabled="1",step_id="8",step_name="sync"}'
+        values: '_x8 1427+0x12'
+
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: SqlAgentJobFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlAgentJobFailed
+              severity: critical
+              priority: P0
+              alert_profile: jobs
+              collector: mssql_job_failed
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+              job_name: update_site
+            exp_annotations:
+              summary: "SQL Agent job update_site failed"
+              summary_fa: "آخرین اجرای جاب update_site خطا دارد"
+              description: "The last completed run of job update_site failed. This alert stays open until a later run succeeds."
+              runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+      - eval_time: 4m
+        alertname: SqlAgentJobFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlAgentJobFailed
+              severity: critical
+              priority: P0
+              alert_profile: jobs
+              collector: mssql_job_failed
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+              job_name: update_site
+            exp_annotations:
+              summary: "SQL Agent job update_site failed"
+              summary_fa: "آخرین اجرای جاب update_site خطا دارد"
+              description: "The last completed run of job update_site failed. This alert stays open until a later run succeeds."
+              runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+      - eval_time: 5m
+        alertname: SqlAgentJobFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlAgentJobFailed
+              severity: critical
+              priority: P0
+              alert_profile: jobs
+              collector: mssql_job_failed
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+              job_name: update_site
+            exp_annotations:
+              summary: "SQL Agent job update_site failed"
+              summary_fa: "آخرین اجرای جاب update_site خطا دارد"
+              description: "The last completed run of job update_site failed. This alert stays open until a later run succeeds."
+              runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+      - eval_time: 14m
+        alertname: SqlAgentJobFailed
+        exp_alerts: []

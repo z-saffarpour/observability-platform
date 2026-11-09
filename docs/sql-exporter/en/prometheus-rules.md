@@ -30,9 +30,9 @@ them to each server’s SLA, baseline and role before production.
 | `sql_exporter-p0-jobs.rules.yml` | P0 | SQL Agent job failed |
 | `sql_exporter-p0-maintenance.rules.yml` | P0 | `update_site` and `ERP_MRP` running longer than the 7-day average |
 | `sql_exporter-p0-config.rules.yml` | P0 | Trigger and configuration changes |
-| `sql_exporter-p0-space.rules.yml` | P0 | Filegroup runway under 3 days. Omit when `p1-space` is loaded |
+| `sql_exporter-p0-space.rules.yml` | P0 | Filegroup runway under 3 days only when growth is blocked. Omit when `p1-space` is loaded |
 | `sql_exporter-p1-performance.rules.yml` | P1 | CPU, I/O, log, blocking, memory, tempdb, … |
-| `sql_exporter-p1-space.rules.yml` | P1 | Filegroup runway and blocked growth |
+| `sql_exporter-p1-space.rules.yml` | P1 | Filegroup runway when growth is blocked, and blocked growth at 98% |
 | `sql_exporter-p3-jobs.rules.yml` | P3 | Job history / last-run failures, list only |
 | `sql_exporter-p3-signals.rules.yml` | P3 | ERRORLOG signals, list only |
 | `sql_exporter-p2-performance.rules.yml` | P2 | Sessions, parallelism, plan cache, waits, … |

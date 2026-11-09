@@ -1,4 +1,9 @@
-# Service alerts fire at 3m. SQL unavailable fires at 1m. NTP delay fires at 5m.
+# Service alerts fire at 1m after the measured downtime reaches 60s.
+# At 6m the last running or last-up sample is 2m earlier, so the summary shows 2m 0s.
+# SQL unavailable with no mssql_up == 1 in the 24h lookback fires at 1m and the
+# summary is 1d 0h 0m 0s. Last success at 0m: OK-DBA fires at 7m, any other
+# owner at 12m, and FMR-DBA at 17m. Email and SMS follow that P0 alert.
+# NTP delay fires at 5m.
 rule_files:
   - ../../alert-rules/platform/platform-p0-sql.rules.yml
   - ../../alert-rules/platform/platform-p1-host.rules.yml
@@ -9,34 +14,66 @@ tests:
   - interval: 1m
     input_series:
       - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQLSERVER",state="running"}'
-        values: '0+0x8'
+        values: '1+0x4 0+0x4'
       - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQLFDLauncher",state="running"}'
-        values: '0+0x8'
+        values: '0+0x9'
       - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQLServerOLAPService",state="running"}'
-        values: '0+0x8'
+        values: '0+0x9'
       - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="MSSQL$INST",state="running"}'
-        values: '0+0x8'
+        values: '1+0x4 0+0x4'
       - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="SQLSERVERAGENT",state="running"}'
-        values: '0+0x8'
+        values: '1+0x4 0+0x4'
       - series: 'windows_service_state{instance="sql01",job="windows_exporter",owner="OK-DBA",name="SQLAgent$INST",state="running"}'
-        values: '0+0x8'
+        values: '1+0x4 0+0x4'
       - series: 'windows_service_state{instance="sql-up",job="windows_exporter",owner="OK-DBA",name="MSSQLSERVER",state="running"}'
-        values: '1+0x8'
+        values: '1+0x9'
+      - series: 'up{instance="sql-up",job="windows_exporter",owner="OK-DBA"}'
+        values: '1+0x9'
+
+      - series: 'windows_service_state{instance="sql-reboot",job="windows_exporter",owner="OK-DBA",name="MSSQLSERVER",state="running"}'
+        values: '1+0x9'
+      - series: 'windows_service_state{instance="sql-reboot",job="windows_exporter",owner="OK-DBA",name="SQLSERVERAGENT",state="running"}'
+        values: '1+0x9'
+      - series: 'up{instance="sql-reboot",job="windows_exporter",owner="OK-DBA"}'
+        values: '1+0x4 0+0x4'
+
+      - series: 'windows_service_state{instance="pbi01",job="windows_exporter",owner="OK-BI-Develop",name="PowerBIReportServer",state="running"}'
+        values: '1+0x4 0+0x4'
+      - series: 'windows_service_state{instance="pbi-up",job="windows_exporter",owner="OK-BI-Develop",name="PowerBIReportServer",state="running"}'
+        values: '1+0x9'
+      - series: 'up{instance="pbi-up",job="windows_exporter",owner="OK-BI-Develop"}'
+        values: '1+0x9'
+      - series: 'windows_service_state{instance="pbi-reboot",job="windows_exporter",owner="OK-BI-Develop",name="PowerBIReportServer",state="running"}'
+        values: '1+0x9'
+      - series: 'up{instance="pbi-reboot",job="windows_exporter",owner="OK-BI-Develop"}'
+        values: '1+0x4 0+0x4'
 
       - series: 'up{instance="sql01",job="sql_exporter",owner="OK-DBA"}'
-        values: '1+0x8'
+        values: '1+0x17'
       - series: 'mssql_up{instance="sql01",job="sql_exporter",owner="OK-DBA"}'
-        values: '0+0x8'
+        values: '0+0x17'
       - series: 'up{instance="sql-ok",job="sql_exporter",owner="FMR-DBA"}'
-        values: '1+0x8'
+        values: '1+0x17'
       - series: 'mssql_up{instance="sql-ok",job="sql_exporter",owner="FMR-DBA"}'
-        values: '1+0x8'
+        values: '1+0x17'
       - series: 'up{instance="sql-ok",job="sql_exporter_managed",owner="FMR-DBA"}'
-        values: '1+0x8'
+        values: '1+0x17'
       - series: 'up{instance="sql-miss",job="sql_exporter",owner="OK-DBA"}'
-        values: '1+0x8'
+        values: '1+0x17'
+      - series: 'up{instance="sql-long",job="sql_exporter",owner="OK-DBA"}'
+        values: '1+0x17'
+      - series: 'mssql_up{instance="sql-long",job="sql_exporter",owner="OK-DBA"}'
+        values: '1 0+0x17'
+      - series: 'up{instance="sql-fmr",job="sql_exporter",owner="FMR-DBA"}'
+        values: '1+0x17'
+      - series: 'mssql_up{instance="sql-fmr",job="sql_exporter",owner="FMR-DBA"}'
+        values: '1 0+0x17'
+      - series: 'up{instance="sql-other",job="sql_exporter",owner="FMR-BI-Develop"}'
+        values: '1+0x17'
+      - series: 'mssql_up{instance="sql-other",job="sql_exporter",owner="FMR-BI-Develop"}'
+        values: '1 0+0x17'
       - series: 'up{instance="sql-scrape-down",job="sql_exporter",owner="OK-DBA"}'
-        values: '0+0x8'
+        values: '0+0x17'
 
       - series: 'windows_time_ntp_round_trip_delay_seconds{instance="ntp-slow",job="windows_exporter",owner="OK-DBA"}'
         values: '1.5+0x8'
@@ -44,10 +81,10 @@ tests:
         values: '0.2+0x8'
 
     alert_rule_test:
-      - eval_time: 2m
+      - eval_time: 5m
         alertname: SqlServerDown
         exp_alerts: []
-      - eval_time: 3m
+      - eval_time: 6m
         alertname: SqlServerDown
         exp_alerts:
           - exp_labels:
@@ -61,10 +98,10 @@ tests:
               name: MSSQL$INST
               state: running
             exp_annotations:
-              summary: "SQL Server service MSSQL$INST down on sql01 for 3m"
-              summary_fa: "سرویس SQL Server MSSQL$INST روی sql01 برای 3 دقیقه قطع است"
-              description: "Service MSSQL$INST on sql01 has not been running for 3 minutes."
-              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+              summary: "SQL Server service MSSQL$INST down on sql01 for 2m 0s"
+              summary_fa: "سرویس SQL Server MSSQL$INST روی sql01 به مدت 2m 0s قطع است"
+              description: "Service MSSQL$INST on sql01 has been down for 2m 0s."
+              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. A host reboot is included because the service metric does not flip to stopped while the exporter is down. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
           - exp_labels:
               alertname: SqlServerDown
               severity: critical
@@ -76,12 +113,27 @@ tests:
               name: MSSQLSERVER
               state: running
             exp_annotations:
-              summary: "SQL Server service MSSQLSERVER down on sql01 for 3m"
-              summary_fa: "سرویس SQL Server MSSQLSERVER روی sql01 برای 3 دقیقه قطع است"
-              description: "Service MSSQLSERVER on sql01 has not been running for 3 minutes."
-              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+              summary: "SQL Server service MSSQLSERVER down on sql01 for 2m 0s"
+              summary_fa: "سرویس SQL Server MSSQLSERVER روی sql01 به مدت 2m 0s قطع است"
+              description: "Service MSSQLSERVER on sql01 has been down for 2m 0s."
+              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. A host reboot is included because the service metric does not flip to stopped while the exporter is down. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: SqlServerDown
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-reboot
+              job: windows_exporter
+              owner: OK-DBA
+              name: MSSQLSERVER
+              state: running
+            exp_annotations:
+              summary: "SQL Server service MSSQLSERVER down on sql-reboot for 2m 0s"
+              summary_fa: "سرویس SQL Server MSSQLSERVER روی sql-reboot به مدت 2m 0s قطع است"
+              description: "Service MSSQLSERVER on sql-reboot has been down for 2m 0s."
+              runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. A host reboot is included because the service metric does not flip to stopped while the exporter is down. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
 
-      - eval_time: 3m
+      - eval_time: 6m
         alertname: SqlServerAgentDown
         exp_alerts:
           - exp_labels:
@@ -95,10 +147,10 @@ tests:
               name: SQLAgent$INST
               state: running
             exp_annotations:
-              summary: "SQL Server Agent service SQLAgent$INST down on sql01 for 3m"
-              summary_fa: "سرویس SQL Server Agent SQLAgent$INST روی sql01 برای 3 دقیقه قطع است"
-              description: "Service SQLAgent$INST on sql01 has not been running for 3 minutes."
-              runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
+              summary: "SQL Server Agent service SQLAgent$INST down on sql01 for 2m 0s"
+              summary_fa: "سرویس SQL Server Agent SQLAgent$INST روی sql01 به مدت 2m 0s قطع است"
+              description: "Service SQLAgent$INST on sql01 has been down for 2m 0s."
+              runbook: "Check SQL Server Agent and SQL Server Agent jobs. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
           - exp_labels:
               alertname: SqlServerAgentDown
               severity: critical
@@ -110,40 +162,346 @@ tests:
               name: SQLSERVERAGENT
               state: running
             exp_annotations:
-              summary: "SQL Server Agent service SQLSERVERAGENT down on sql01 for 3m"
-              summary_fa: "سرویس SQL Server Agent SQLSERVERAGENT روی sql01 برای 3 دقیقه قطع است"
-              description: "Service SQLSERVERAGENT on sql01 has not been running for 3 minutes."
-              runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
+              summary: "SQL Server Agent service SQLSERVERAGENT down on sql01 for 2m 0s"
+              summary_fa: "سرویس SQL Server Agent SQLSERVERAGENT روی sql01 به مدت 2m 0s قطع است"
+              description: "Service SQLSERVERAGENT on sql01 has been down for 2m 0s."
+              runbook: "Check SQL Server Agent and SQL Server Agent jobs. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: SqlServerAgentDown
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-reboot
+              job: windows_exporter
+              owner: OK-DBA
+              name: SQLSERVERAGENT
+              state: running
+            exp_annotations:
+              summary: "SQL Server Agent service SQLSERVERAGENT down on sql-reboot for 2m 0s"
+              summary_fa: "سرویس SQL Server Agent SQLSERVERAGENT روی sql-reboot به مدت 2m 0s قطع است"
+              description: "Service SQLSERVERAGENT on sql-reboot has been down for 2m 0s."
+              runbook: "Check SQL Server Agent and SQL Server Agent jobs. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
+
+      - eval_time: 5m
+        alertname: PowerBIDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PowerBIDown
+        exp_alerts:
+          - exp_labels:
+              alertname: PowerBIDown
+              severity: critical
+              priority: P0
+              alert_profile: data-platform
+              instance: pbi01
+              job: windows_exporter
+              owner: OK-BI-Develop
+              name: PowerBIReportServer
+              state: running
+            exp_annotations:
+              summary: "Power BI service PowerBIReportServer down on pbi01 for 2m 0s"
+              summary_fa: "سرویس Power BI PowerBIReportServer روی pbi01 به مدت 2m 0s قطع است"
+              description: "Service PowerBIReportServer on pbi01 has been down for 2m 0s."
+              runbook: "Check Power BI Report Server or SSRS. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
+          - exp_labels:
+              alertname: PowerBIDown
+              severity: critical
+              priority: P0
+              alert_profile: data-platform
+              instance: pbi-reboot
+              job: windows_exporter
+              owner: OK-BI-Develop
+              name: PowerBIReportServer
+              state: running
+            exp_annotations:
+              summary: "Power BI service PowerBIReportServer down on pbi-reboot for 2m 0s"
+              summary_fa: "سرویس Power BI PowerBIReportServer روی pbi-reboot به مدت 2m 0s قطع است"
+              description: "Service PowerBIReportServer on pbi-reboot has been down for 2m 0s."
+              runbook: "Check Power BI Report Server or SSRS. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
 
       - eval_time: 1m
         alertname: SqlServerUnavailable
         exp_alerts:
           - exp_labels:
               alertname: SqlServerUnavailable
-              severity: info
-              priority: P3
+              severity: critical
+              priority: P0
               alert_profile: mssql
               instance: sql-miss
               job: sql_exporter
               owner: OK-DBA
             exp_annotations:
-              summary: "SQL query up missing on sql-miss for 1m"
-              summary_fa: "متریک mssql_up روی sql-miss برای 1 دقیقه نیست"
-              description: "sql_exporter on sql-miss is up, and no mssql_up == 1 series exists for this instance."
-              runbook: "Confirm whether SELECT 1 failed or the mssql_standard collector is absent. A failed scrape of the exporter itself stays on SqlExporterDown. Priority P3 is listed only and sends no SMS or email."
+              summary: "Cannot get a SQL Server session on sql-miss for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-miss به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql-miss is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
           - exp_labels:
               alertname: SqlServerUnavailable
-              severity: info
-              priority: P3
+              severity: critical
+              priority: P0
               alert_profile: mssql
               instance: sql01
               job: sql_exporter
               owner: OK-DBA
             exp_annotations:
-              summary: "SQL query up missing on sql01 for 1m"
-              summary_fa: "متریک mssql_up روی sql01 برای 1 دقیقه نیست"
-              description: "sql_exporter on sql01 is up, and no mssql_up == 1 series exists for this instance."
-              runbook: "Confirm whether SELECT 1 failed or the mssql_standard collector is absent. A failed scrape of the exporter itself stays on SqlExporterDown. Priority P3 is listed only and sends no SMS or email."
+              summary: "Cannot get a SQL Server session on sql01 for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql01 به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql01 is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+
+      - eval_time: 5m
+        alertname: SqlServerUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-miss
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-miss for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-miss به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql-miss is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql01 for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql01 به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql01 is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+
+      - eval_time: 7m
+        alertname: SqlServerUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-long
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-long for 7m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-long به مدت 7m 0s ممکن نیست"
+              description: "sql_exporter on sql-long is up, but SQL Server has not provided a session for 7m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-miss
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-miss for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-miss به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql-miss is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql01 for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql01 به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql01 is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+
+      - eval_time: 12m
+        alertname: SqlServerUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-long
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-long for 12m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-long به مدت 12m 0s ممکن نیست"
+              description: "sql_exporter on sql-long is up, but SQL Server has not provided a session for 12m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-miss
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-miss for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-miss به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql-miss is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-other
+              job: sql_exporter
+              owner: FMR-BI-Develop
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-other for 12m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-other به مدت 12m 0s ممکن نیست"
+              description: "sql_exporter on sql-other is up, but SQL Server has not provided a session for 12m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql01 for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql01 به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql01 is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+
+      - eval_time: 15m
+        alertname: SqlServerUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-long
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-long for 15m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-long به مدت 15m 0s ممکن نیست"
+              description: "sql_exporter on sql-long is up, but SQL Server has not provided a session for 15m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-miss
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-miss for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-miss به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql-miss is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-other
+              job: sql_exporter
+              owner: FMR-BI-Develop
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-other for 15m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-other به مدت 15m 0s ممکن نیست"
+              description: "sql_exporter on sql-other is up, but SQL Server has not provided a session for 15m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql01 for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql01 به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql01 is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+
+      - eval_time: 17m
+        alertname: SqlServerUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-fmr
+              job: sql_exporter
+              owner: FMR-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-fmr for 17m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-fmr به مدت 17m 0s ممکن نیست"
+              description: "sql_exporter on sql-fmr is up, but SQL Server has not provided a session for 17m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-long
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-long for 17m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-long به مدت 17m 0s ممکن نیست"
+              description: "sql_exporter on sql-long is up, but SQL Server has not provided a session for 17m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-miss
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-miss for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-miss به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql-miss is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql-other
+              job: sql_exporter
+              owner: FMR-BI-Develop
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql-other for 17m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql-other به مدت 17m 0s ممکن نیست"
+              description: "sql_exporter on sql-other is up, but SQL Server has not provided a session for 17m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
+          - exp_labels:
+              alertname: SqlServerUnavailable
+              severity: critical
+              priority: P0
+              alert_profile: mssql
+              instance: sql01
+              job: sql_exporter
+              owner: OK-DBA
+            exp_annotations:
+              summary: "Cannot get a SQL Server session on sql01 for 1d 0h 0m 0s"
+              summary_fa: "دریافت session از SQL Server روی sql01 به مدت 1d 0h 0m 0s ممکن نیست"
+              description: "sql_exporter on sql01 is up, but SQL Server has not provided a session for 1d 0h 0m 0s."
+              runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."
 
       - eval_time: 4m
         alertname: NTPClientDelay

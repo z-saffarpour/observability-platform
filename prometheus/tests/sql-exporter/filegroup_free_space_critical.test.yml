@@ -1,0 +1,206 @@
+# SqlFilegroupFreeSpaceCritical pages only when runway is under 3 days, growth
+# is above 64 MB/day, and the filegroup cannot grow. One data file that can
+# take its next autogrowth step on its own volume suppresses the page.
+# The for window is 30m. Samples cover that pending window at a 1m interval.
+rule_files:
+  - ../../recording-rules/sql-exporter/sql_exporter-recording-filegroup.rules.yml
+  - ../../alert-rules/sql-exporter/sql_exporter-p1-space.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Size equals max_size. Disk free space does not clear the page.
+  # tempdb matches the same numbers and stays silent.
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '10000+1x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '2160x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '12160x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '12160x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '0x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '10737418240x45'
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="tempdb",file_id="1",logical_name="tempdev",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '10000+1x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="tempdb",file_id="1",logical_name="tempdev",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '2160x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="tempdb",file_id="1",logical_name="tempdev",type_desc="ROWS",physical_name="E:\\TempdbData01\\tempdb.mdf"}'
+        values: '12160x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="tempdb",file_id="1",logical_name="tempdev",type_desc="ROWS",physical_name="E:\\TempdbData01\\tempdb.mdf"}'
+        values: '12160x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="tempdb",file_id="1",logical_name="tempdev",type_desc="ROWS",physical_name="E:\\TempdbData01\\tempdb.mdf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="tempdb",file_id="1",logical_name="tempdev",type_desc="ROWS",physical_name="E:\\TempdbData01\\tempdb.mdf"}'
+        values: '0x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\TempdbData01"}'
+        values: '10737418240x45'
+    promql_expr_test:
+      - expr: mssql:filegroup_free_days{db="App"}
+        eval_time: 31m
+        exp_samples:
+          - labels: '{__name__="mssql:filegroup_free_days",instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",filegroup="PRIMARY",is_read_only="0"}'
+            value: 1.5
+      - expr: mssql:filegroup_growable_files{db="App"}
+        eval_time: 31m
+        exp_samples: []
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: SqlFilegroupFreeSpaceCritical
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: SqlFilegroupFreeSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              priority: P0
+              alert_profile: space
+              collector: mssql_database_space
+              instance: srv1
+              job: sql_exporter
+              owner: OK-DBA
+              db: App
+              filegroup: PRIMARY
+              is_read_only: "0"
+            exp_annotations:
+              summary: "App PRIMARY: 2.11 GiB free of 11.91 GiB (1.5d left)"
+              summary_fa: "App PRIMARY: 2.11 GiB آزاد از 11.91 GiB (1.5 روز مانده)"
+              description: "Filegroup PRIMARY in App on srv1 has 1.5 days of free space left at its 7-day growth rate, and no data file can autogrow onto its volume. Writes can fail with error 1105."
+              runbook: "Treat as capacity emergency for this database and filegroup. This page means the filegroup cannot grow: size is at max_size, autogrowth is off, or the file volume cannot take the next step. A filegroup that can still grow does not page. Raise max_size, turn autogrowth on, free space on the data-file volume, or add a file on a volume with free space. SMS follows priority P0."
+
+  # Size is below max_size and the file volume can take the 64 MB step.
+  # Runway is under 3 days. No page.
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '10000+1x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '2160x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '12160x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '50000x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '0x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '134217728x45'
+    promql_expr_test:
+      - expr: mssql:filegroup_growable_files
+        eval_time: 31m
+        exp_samples:
+          - labels: '{__name__="mssql:filegroup_growable_files",instance="srv1",db="App",filegroup="PRIMARY",is_read_only="0"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: SqlFilegroupFreeSpaceCritical
+        exp_alerts: []
+
+  # Size is below max_size, but the file volume cannot hold the 64 MB step.
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '10000+1x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '2160x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '12160x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '50000x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '0x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '1048576x45'
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: SqlFilegroupFreeSpaceCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              priority: P0
+              alert_profile: space
+              collector: mssql_database_space
+              instance: srv1
+              job: sql_exporter
+              owner: OK-DBA
+              db: App
+              filegroup: PRIMARY
+              is_read_only: "0"
+            exp_annotations:
+              summary: "App PRIMARY: 2.11 GiB free of 11.91 GiB (1.5d left)"
+              summary_fa: "App PRIMARY: 2.11 GiB آزاد از 11.91 GiB (1.5 روز مانده)"
+              description: "Filegroup PRIMARY in App on srv1 has 1.5 days of free space left at its 7-day growth rate, and no data file can autogrow onto its volume. Writes can fail with error 1105."
+              runbook: "Treat as capacity emergency for this database and filegroup. This page means the filegroup cannot grow: size is at max_size, autogrowth is off, or the file volume cannot take the next step. A filegroup that can still grow does not page. Raise max_size, turn autogrowth on, free space on the data-file volume, or add a file on a volume with free space. SMS follows priority P0."
+
+  # One file's volume is full. The other file can grow. No page.
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '5000+1x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '1080x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '6080x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '6080x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '0x45'
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="3",logical_name="App_data2",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '5000+0x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="3",logical_name="App_data2",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '1080x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="3",logical_name="App_data2",type_desc="ROWS",physical_name="E:\\Data02\\App2.ndf"}'
+        values: '6080x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="3",logical_name="App_data2",type_desc="ROWS",physical_name="E:\\Data02\\App2.ndf"}'
+        values: '50000x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="3",logical_name="App_data2",type_desc="ROWS",physical_name="E:\\Data02\\App2.ndf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="3",logical_name="App_data2",type_desc="ROWS",physical_name="E:\\Data02\\App2.ndf"}'
+        values: '0x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '1048576x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\Data02"}'
+        values: '134217728x45'
+    promql_expr_test:
+      - expr: mssql:filegroup_growable_files
+        eval_time: 31m
+        exp_samples:
+          - labels: '{__name__="mssql:filegroup_growable_files",instance="srv1",db="App",filegroup="PRIMARY",is_read_only="0"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: SqlFilegroupFreeSpaceCritical
+        exp_alerts: []
+
+  # Used space is flat, so growth stays under the 64 MB/day floor. No page.
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_space_used_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '10000x45'
+      - series: 'mssql_database_space_free_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",filegroup="PRIMARY",is_read_only="0"}'
+        values: '100x45'
+      - series: 'mssql_database_space_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '10100x45'
+      - series: 'mssql_database_space_max_size_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '10100x45'
+      - series: 'mssql_database_space_growth_mb{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '64x45'
+      - series: 'mssql_database_space_growth_percent{instance="srv1",job="sql_exporter",owner="OK-DBA",db="App",file_id="1",logical_name="App_data",type_desc="ROWS",physical_name="E:\\Data01\\App.mdf"}'
+        values: '0x45'
+      - series: 'windows_logical_disk_free_bytes{instance="srv1",job="windows_exporter",owner="OK-DBA",volume="E:\\Data01"}'
+        values: '1048576x45'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: SqlFilegroupFreeSpaceCritical
+        exp_alerts: []

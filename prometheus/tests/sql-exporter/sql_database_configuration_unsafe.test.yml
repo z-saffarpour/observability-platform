@@ -1,0 +1,101 @@
+# SqlDatabaseConfigurationUnsafe ignores databases with mssql_database_is_read_only=1.
+# AUTO_SHRINK, AUTO_CLOSE, and PAGE_VERIFY all stay suppressed for that database.
+# A missing is_read_only series does not suppress the alert.
+rule_files:
+  - ../../alert-rules/sql-exporter/sql_exporter-p2-config.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'mssql_database_auto_shrink_enabled{instance="sql01",job="sql_exporter",db="App"}'
+        values: '1+0x12'
+      - series: 'mssql_database_auto_close_enabled{instance="sql01",job="sql_exporter",db="App"}'
+        values: '0+0x12'
+      - series: 'mssql_database_page_verify_option{instance="sql01",job="sql_exporter",db="App"}'
+        values: '2+0x12'
+      - series: 'mssql_database_is_read_only{instance="sql01",job="sql_exporter",db="App"}'
+        values: '0+0x12'
+
+      - series: 'mssql_database_auto_shrink_enabled{instance="sql01",job="sql_exporter",db="Archive"}'
+        values: '1+0x12'
+      - series: 'mssql_database_auto_close_enabled{instance="sql01",job="sql_exporter",db="Archive"}'
+        values: '1+0x12'
+      - series: 'mssql_database_page_verify_option{instance="sql01",job="sql_exporter",db="Archive"}'
+        values: '0+0x12'
+      - series: 'mssql_database_is_read_only{instance="sql01",job="sql_exporter",db="Archive"}'
+        values: '1+0x12'
+
+      - series: 'mssql_database_auto_shrink_enabled{instance="sql01",job="sql_exporter",db="Legacy"}'
+        values: '0+0x12'
+      - series: 'mssql_database_auto_close_enabled{instance="sql01",job="sql_exporter",db="Legacy"}'
+        values: '0+0x12'
+      - series: 'mssql_database_page_verify_option{instance="sql01",job="sql_exporter",db="Legacy"}'
+        values: '1+0x12'
+      - series: 'mssql_database_is_read_only{instance="sql01",job="sql_exporter",db="Legacy"}'
+        values: '0+0x12'
+
+      - series: 'mssql_database_auto_shrink_enabled{instance="sql01",job="sql_exporter",db="Clean"}'
+        values: '0+0x12'
+      - series: 'mssql_database_auto_close_enabled{instance="sql01",job="sql_exporter",db="Clean"}'
+        values: '0+0x12'
+      - series: 'mssql_database_page_verify_option{instance="sql01",job="sql_exporter",db="Clean"}'
+        values: '2+0x12'
+      - series: 'mssql_database_is_read_only{instance="sql01",job="sql_exporter",db="Clean"}'
+        values: '0+0x12'
+
+      - series: 'mssql_database_page_verify_option{instance="sql01",job="sql_exporter",db="tempdb"}'
+        values: '0+0x12'
+      - series: 'mssql_database_is_read_only{instance="sql01",job="sql_exporter",db="tempdb"}'
+        values: '0+0x12'
+
+      - series: 'mssql_database_auto_shrink_enabled{instance="sql01",job="sql_exporter",db="UnknownState"}'
+        values: '1+0x12'
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: SqlDatabaseConfigurationUnsafe
+        exp_alerts:
+          - exp_labels:
+              alertname: SqlDatabaseConfigurationUnsafe
+              severity: warning
+              priority: P2
+              alert_profile: config
+              collector: mssql_database_configuration
+              instance: sql01
+              job: sql_exporter
+              db: App
+            exp_annotations:
+              summary: "Unsafe configuration detected for database App"
+              summary_fa: "پیکربندی ناامن برای دیتابیس App شناسایی شد"
+              description: "Database App has AUTO_SHRINK/AUTO_CLOSE enabled or PAGE_VERIFY is not CHECKSUM. Read-only databases are excluded."
+              runbook: "Disable AUTO_SHRINK/AUTO_CLOSE and set PAGE_VERIFY=CHECKSUM where appropriate. Read-only databases are excluded until they are read-write."
+          - exp_labels:
+              alertname: SqlDatabaseConfigurationUnsafe
+              severity: warning
+              priority: P2
+              alert_profile: config
+              collector: mssql_database_configuration
+              instance: sql01
+              job: sql_exporter
+              db: Legacy
+            exp_annotations:
+              summary: "Unsafe configuration detected for database Legacy"
+              summary_fa: "پیکربندی ناامن برای دیتابیس Legacy شناسایی شد"
+              description: "Database Legacy has AUTO_SHRINK/AUTO_CLOSE enabled or PAGE_VERIFY is not CHECKSUM. Read-only databases are excluded."
+              runbook: "Disable AUTO_SHRINK/AUTO_CLOSE and set PAGE_VERIFY=CHECKSUM where appropriate. Read-only databases are excluded until they are read-write."
+          - exp_labels:
+              alertname: SqlDatabaseConfigurationUnsafe
+              severity: warning
+              priority: P2
+              alert_profile: config
+              collector: mssql_database_configuration
+              instance: sql01
+              job: sql_exporter
+              db: UnknownState
+            exp_annotations:
+              summary: "Unsafe configuration detected for database UnknownState"
+              summary_fa: "پیکربندی ناامن برای دیتابیس UnknownState شناسایی شد"
+              description: "Database UnknownState has AUTO_SHRINK/AUTO_CLOSE enabled or PAGE_VERIFY is not CHECKSUM. Read-only databases are excluded."
+              runbook: "Disable AUTO_SHRINK/AUTO_CLOSE and set PAGE_VERIFY=CHECKSUM where appropriate. Read-only databases are excluded until they are read-write."

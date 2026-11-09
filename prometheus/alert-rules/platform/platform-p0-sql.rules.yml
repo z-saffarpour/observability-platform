@@ -1,65 +1,270 @@
 # P0 — SQL Server engine service, SQL Server Agent service, and SQL query up.
 # Service names are matched case-insensitively. windows_exporter publishes `name`.
-# DataPlatformServiceNotRunning still covers SSAS, PBIRS, and the cluster service.
+# DataPlatformServiceNotRunning still covers SSAS and the cluster service.
+# PowerBIDown is the PBIRS page. Alertmanager inhibits the duplicate.
 groups:
   - name: platform.p0.sql
     rules:
+      # $value is seconds since the service was last running, or since
+      # windows_exporter was last up during a reboot. humanizeDuration prints
+      # that downtime. A service down for the whole 24h lookback reports 24h.
+      # FDLauncher and OLAP stay out. for: 1m avoids a single scrape blip.
       - alert: SqlServerDown
         expr: |
           (
-            windows_service_state{state="running", name=~"(?i)^mssql.+"} == 0
+            (
+              (
+                time()
+                -
+                max_over_time(
+                  timestamp(
+                    windows_service_state{state="running", name=~"(?i)^mssql.+"} == 1
+                  )[24h:1m]
+                )
+              )
+              or
+              (
+                (windows_service_state{state="running", name=~"(?i)^mssql.+"} == 0) + 86400
+              )
+            )
+            >= 60
             unless
             windows_service_state{state="running", name=~"(?i).*fdlaunch.*"}
             unless
             windows_service_state{state="running", name=~"(?i).*olap.*"}
           )
-        for: 3m
-        labels:
-          severity: critical
-          priority: P0
-          alert_profile: mssql
-        annotations:
-          summary: "SQL Server service {{ $labels.name }} down on {{ $labels.instance }} for 3m"
-          summary_fa: "سرویس SQL Server {{ $labels.name }} روی {{ $labels.instance }} برای 3 دقیقه قطع است"
-          description: "Service {{ $labels.name }} on {{ $labels.instance }} has not been running for 3 minutes."
-          runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
-
-      - alert: SqlServerAgentDown
-        expr: |
-          windows_service_state{
-            state="running",
-            name=~"(?i)^sql(serveragent|agent\\x24.+)"
-          } == 0
-        for: 3m
-        labels:
-          severity: critical
-          priority: P0
-          alert_profile: mssql
-        annotations:
-          summary: "SQL Server Agent service {{ $labels.name }} down on {{ $labels.instance }} for 3m"
-          summary_fa: "سرویس SQL Server Agent {{ $labels.name }} روی {{ $labels.instance }} برای 3 دقیقه قطع است"
-          description: "Service {{ $labels.name }} on {{ $labels.instance }} has not been running for 3 minutes."
-          runbook: "Check SQL Server Agent and SQL Server Agent jobs. Email and SMS follow priority P0."
-
-      # mssql_up is 1 when SELECT 1 succeeds. A failed SQL connection usually
-      # omits the series instead of publishing 0. Match on instance only so a
-      # second sql job for the same host does not page when another job already
-      # has mssql_up == 1. Priority P3 keeps the row in the alert list. A missing
-      # mssql_up series can also mean the standard collector is not scraped.
-      - alert: SqlServerUnavailable
-        expr: |
+          or
           (
-            up{job=~"sql.*"} == 1
-            unless on (instance)
-            (max by (instance) (mssql_up == 1))
+            (
+              (
+                (
+                  max_over_time(windows_service_state{state="running", name=~"(?i)^mssql.+"}[30m]) == 1
+                  unless
+                  max_over_time(windows_service_state{state="running", name=~"(?i).*fdlaunch.*"}[30m])
+                  unless
+                  max_over_time(windows_service_state{state="running", name=~"(?i).*olap.*"}[30m])
+                )
+                * on (instance, job) group_left()
+                (
+                  max by (instance, job) (
+                    time()
+                    -
+                    max_over_time(timestamp(up{job=~"windows.*"} == 1)[24h:1m])
+                  )
+                )
+              )
+              and on (instance, job)
+              (max by (instance, job) (up{job=~"windows.*"}) == 0)
+            )
+            >= 60
           )
         for: 1m
         labels:
-          severity: info
-          priority: P3
+          severity: critical
+          priority: P0
           alert_profile: mssql
         annotations:
-          summary: "SQL query up missing on {{ $labels.instance }} for 1m"
-          summary_fa: "متریک mssql_up روی {{ $labels.instance }} برای 1 دقیقه نیست"
-          description: "sql_exporter on {{ $labels.instance }} is up, and no mssql_up == 1 series exists for this instance."
-          runbook: "Confirm whether SELECT 1 failed or the mssql_standard collector is absent. A failed scrape of the exporter itself stays on SqlExporterDown. Priority P3 is listed only and sends no SMS or email."
+          summary: "SQL Server service {{ $labels.name }} down on {{ $labels.instance }} for {{ $value | humanizeDuration }}"
+          summary_fa: "سرویس SQL Server {{ $labels.name }} روی {{ $labels.instance }} به مدت {{ $value | humanizeDuration }} قطع است"
+          description: "Service {{ $labels.name }} on {{ $labels.instance }} has been down for {{ $value | humanizeDuration }}."
+          runbook: "Check the SQL Server service, cluster ownership, and ERRORLOG. A host reboot is included because the service metric does not flip to stopped while the exporter is down. FDLauncher and OLAP services are excluded. Email and SMS follow priority P0."
+
+      - alert: SqlServerAgentDown
+        expr: |
+          (
+            (
+              (
+                time()
+                -
+                max_over_time(
+                  timestamp(
+                    windows_service_state{state="running", name=~"(?i)^sql(serveragent|agent\\x24.+)"} == 1
+                  )[24h:1m]
+                )
+              )
+              or
+              (
+                (windows_service_state{state="running", name=~"(?i)^sql(serveragent|agent\\x24.+)"} == 0) + 86400
+              )
+            )
+            >= 60
+          )
+          or
+          (
+            (
+              (
+                (
+                  max_over_time(windows_service_state{state="running", name=~"(?i)^sql(serveragent|agent\\x24.+)"}[30m]) == 1
+                )
+                * on (instance, job) group_left()
+                (
+                  max by (instance, job) (
+                    time()
+                    -
+                    max_over_time(timestamp(up{job=~"windows.*"} == 1)[24h:1m])
+                  )
+                )
+              )
+              and on (instance, job)
+              (max by (instance, job) (up{job=~"windows.*"}) == 0)
+            )
+            >= 60
+          )
+        for: 1m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "SQL Server Agent service {{ $labels.name }} down on {{ $labels.instance }} for {{ $value | humanizeDuration }}"
+          summary_fa: "سرویس SQL Server Agent {{ $labels.name }} روی {{ $labels.instance }} به مدت {{ $value | humanizeDuration }} قطع است"
+          description: "Service {{ $labels.name }} on {{ $labels.instance }} has been down for {{ $value | humanizeDuration }}."
+          runbook: "Check SQL Server Agent and SQL Server Agent jobs. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
+
+      # Same downtime value as SqlServerDown. Names match the PBIRS exporter profile.
+      - alert: PowerBIDown
+        expr: |
+          (
+            (
+              (
+                time()
+                -
+                max_over_time(
+                  timestamp(
+                    windows_service_state{state="running", name=~"(?i)^(PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*)$"} == 1
+                  )[24h:1m]
+                )
+              )
+              or
+              (
+                (windows_service_state{state="running", name=~"(?i)^(PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*)$"} == 0) + 86400
+              )
+            )
+            >= 60
+          )
+          or
+          (
+            (
+              (
+                (
+                  max_over_time(windows_service_state{state="running", name=~"(?i)^(PowerBIReportServer|PBIRS.*|SQLServerReportingServices|ReportServer.*)$"}[30m]) == 1
+                )
+                * on (instance, job) group_left()
+                (
+                  max by (instance, job) (
+                    time()
+                    -
+                    max_over_time(timestamp(up{job=~"windows.*"} == 1)[24h:1m])
+                  )
+                )
+              )
+              and on (instance, job)
+              (max by (instance, job) (up{job=~"windows.*"}) == 0)
+            )
+            >= 60
+          )
+        for: 1m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: data-platform
+        annotations:
+          summary: "Power BI service {{ $labels.name }} down on {{ $labels.instance }} for {{ $value | humanizeDuration }}"
+          summary_fa: "سرویس Power BI {{ $labels.name }} روی {{ $labels.instance }} به مدت {{ $value | humanizeDuration }} قطع است"
+          description: "Service {{ $labels.name }} on {{ $labels.instance }} has been down for {{ $value | humanizeDuration }}."
+          runbook: "Check Power BI Report Server or SSRS. A host reboot is included because the service metric does not flip to stopped while the exporter is down. Email and SMS follow priority P0."
+
+      # $value is seconds since mssql_up was last 1. humanizeDuration prints
+      # that gap. No successful sample in the 24h lookback reports 24h, which
+      # is already past every owner threshold. P0 email and SMS start after
+      # more than 5m for OK-DBA, 15m for FMR-DBA, and 10m for any other owner.
+      # for: 1m avoids one evaluation blip once that threshold is crossed.
+      # A failed SQL connection usually omits the series instead of publishing
+      # 0. Match on instance only so a second sql job does not page when
+      # another job already has mssql_up == 1. A missing series can also mean
+      # mssql_standard is absent.
+      - alert: SqlServerUnavailable
+        expr: |
+          (
+            (
+              (
+                (up{job=~"sql.*", owner="OK-DBA"} == 1)
+                unless on (instance)
+                (max by (instance) (mssql_up == 1))
+              )
+              * on (instance) group_left()
+              (
+                min by (instance) (
+                  time()
+                  -
+                  max_over_time(timestamp(mssql_up == 1)[24h:1m])
+                )
+              )
+            )
+            > 300
+          )
+          or
+          (
+            (
+              (
+                (up{job=~"sql.*", owner="FMR-DBA"} == 1)
+                unless on (instance)
+                (max by (instance) (mssql_up == 1))
+              )
+              * on (instance) group_left()
+              (
+                min by (instance) (
+                  time()
+                  -
+                  max_over_time(timestamp(mssql_up == 1)[24h:1m])
+                )
+              )
+            )
+            > 900
+          )
+          or
+          (
+            (
+              (
+                (up{job=~"sql.*", owner!~"OK-DBA|FMR-DBA"} == 1)
+                unless on (instance)
+                (max by (instance) (mssql_up == 1))
+              )
+              * on (instance) group_left()
+              (
+                min by (instance) (
+                  time()
+                  -
+                  max_over_time(timestamp(mssql_up == 1)[24h:1m])
+                )
+              )
+            )
+            > 600
+          )
+          or
+          (
+            (
+              (
+                (up{job=~"sql.*"} == 1)
+                unless on (instance)
+                (max by (instance) (mssql_up == 1))
+                unless on (instance)
+                (
+                  max by (instance) (
+                    max_over_time(timestamp(mssql_up == 1)[24h:1m])
+                  )
+                )
+              ) * 0
+            )
+            + 86400
+          )
+        for: 1m
+        labels:
+          severity: critical
+          priority: P0
+          alert_profile: mssql
+        annotations:
+          summary: "Cannot get a SQL Server session on {{ $labels.instance }} for {{ $value | humanizeDuration }}"
+          summary_fa: "دریافت session از SQL Server روی {{ $labels.instance }} به مدت {{ $value | humanizeDuration }} ممکن نیست"
+          description: "sql_exporter on {{ $labels.instance }} is up, but SQL Server has not provided a session for {{ $value | humanizeDuration }}."
+          runbook: "SQL Server did not provide a session. Check the login, port, listener, and ERRORLOG. A missing mssql_standard collector can cause the same alert. A failed scrape of the exporter itself stays on SqlExporterDown. Email and SMS follow priority P0 after the gap is more than 5 minutes for OK-DBA, 15 minutes for FMR-DBA, and 10 minutes for any other owner."

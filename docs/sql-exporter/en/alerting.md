@@ -36,23 +36,22 @@ Every alert carries these labels:
 | Alert | File | Summary condition | for |
 |---|---|---|---|
 | `SqlExporterDown` | p0-availability | `up{job=~"sql.*"} == 0` | 5m |
-| `SqlDatabaseNotOnline` | p0-availability | `mssql_database_state != 0` | 5m |
-| `SqlRestoreSecondaryBehindRpo` | p0-availability | restore gap > 30m | 10m |
+| `SqlDatabaseNotOnline` | p0-availability | state is not ONLINE and not RESTORING | 5m |
 | `SqlAlwaysOnReplicaUnhealthy` | p0-hadr | sync health == 0 | 2m |
 | `SqlHadrClusterQuorumNotNormal` | p0-hadr | quorum_state != 1 | 2m |
 | `SqlHadrClusterMemberDown` | p0-hadr | member_state != 1 | 2m |
 | `SqlHadrListenerIpNotOnline` | p0-hadr | listener IP != ONLINE | 2m |
 | `SqlHadrFciNodeNotUp` | p0-hadr | FCI node not up | 2m |
-| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` for `update_site`, `MasterData_V02_*`, or `ERPTransfer_MasterData_*` | 2m |
+| `SqlAgentJobFailed` | p0-jobs | `mssql_job_failed_current > 0` until a successful run; `update_site`, `MasterData_V02_*`, or `ERPTransfer_MasterData_*`; no message when the next run starts, resolve only after success | 2m |
 | `SqlAgentJobRunningTooLong` | p0-maintenance | `update_site` or `ERP_MRP` running longer than its own 7-day average | 10m |
-| `SqlFilegroupFreeSpaceCritical` | p1-space | filegroup free runway < 3 days of its own 7-day growth | 30m |
+| `SqlFilegroupFreeSpaceCritical` | p1-space | filegroup free runway < 3 days of its own 7-day growth, and no data file can autogrow onto its volume | 30m |
 | `SqlDatabaseLogGrowthCritical` | p1-performance | 24h log growth > 25% of that database log, and > 64 MB | 15m |
 
 ## P1 — High
 
 | Alert | File | Summary condition | for |
 |---|---|---|---|
-| `SqlServerCpuHigh` | p1-performance | CPU > 80% | 10m |
+| `SqlRestoreDifferenceHigh` | p0-availability | Difference Restore > 4h during 06:00–09:00 Asia/Tehran; message states the current Tehran hour; email and SMS while firing inside that window | 15m |
 | `SqlFileIoLatencyHigh` | p1-performance | latency > 20ms | 10m |
 | `SqlTransactionLogUsageHigh` | p1-performance | user-db log used > 80% | 10m |
 | `SqlSystemDbTransactionLogUsageHigh` | p1-performance | tempdb/msdb log used > 80% | 10m |
@@ -76,6 +75,7 @@ Every alert carries these labels:
 
 | Alert | File | Summary condition | for |
 |---|---|---|---|
+| `SqlDatabaseRestoring` | p0-availability | state is RESTORING; email only, repeats every 12h | 15m |
 | `SqlConnectionCountHigh` | p2-performance | sessions > 500 | 10m |
 | `SqlParallelismQueueHigh` | p2-performance | waiting tasks > 10 | 10m |
 | `SqlPlanCacheSingleUseRatioHigh` | p2-performance | single-use ratio > 50% | 15m |
@@ -89,7 +89,7 @@ Every alert carries these labels:
 | `SqlMissingIndexHighImpact` | p2-maintenance | score > 1M | 30m |
 | `SqlStatisticsStale` | p2-maintenance | stale stats > 20 | 30m |
 | `SqlQueryStoreDisabled` | p2-maintenance | Query Store off | 30m |
-| `SqlDatabaseConfigurationUnsafe` | p2-config | AUTO_SHRINK/CLOSE or PAGE_VERIFY | 10m |
+| `SqlDatabaseConfigurationUnsafe` | p2-config | AUTO_SHRINK/CLOSE or PAGE_VERIFY; read-only databases excluded | 10m |
 | `SqlDatabaseGrowingRapidly` | p2-config | growth > 10 GiB / 24h | 15m |
 
 ## Role packs

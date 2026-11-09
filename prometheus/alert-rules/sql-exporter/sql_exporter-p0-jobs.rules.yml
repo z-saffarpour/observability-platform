@@ -1,15 +1,22 @@
 # P0 — Critical SQL Agent job failure.
 # Pages only the SMS allowlist. Prometheus anchors the regex, so update_site is
 # exact and the other two alternatives are prefixes.
+# last_run_outcome stays Failed while the next execution is running. Keep one
+# alert open until that series disappears, which is a successful run. Drop
+# run_date and run_time so a later failed attempt does not resolve and re-page.
+# Alertmanager sends resolve only when this alert clears. Its repeat is 12h, so
+# a retry does not send another failure SMS.
 groups:
   - name: sql_exporter.p0.jobs
     interval: 30s
     rules:
       - alert: SqlAgentJobFailed
         expr: |
-          mssql_job_failed_current{
-            job_name=~"update_site|MasterData_V02_.*|ERPTransfer_MasterData_.*"
-          } > 0
+          max by (instance, job, owner, job_name) (
+            mssql_job_failed_current{
+              job_name=~"update_site|MasterData_V02_.*|ERPTransfer_MasterData_.*"
+            } > 0
+          )
         for: 2m
         labels:
           severity: critical
@@ -18,6 +25,6 @@ groups:
           collector: mssql_job_failed
         annotations:
           summary: "SQL Agent job {{ $labels.job_name }} failed"
-          summary_fa: "جاب {{ $labels.job_name }} در SQL Agent خطا دارد"
-          description: "Job {{ $labels.job_name }} is currently reported as failed."
-          runbook: "Open job history, fix the failing step, and re-run if safe. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
+          summary_fa: "آخرین اجرای جاب {{ $labels.job_name }} خطا دارد"
+          description: "The last completed run of job {{ $labels.job_name }} failed. This alert stays open until a later run succeeds."
+          runbook: "Open job history, fix the failing step, and re-run if safe. Starting the job again does not send a resolve message. Resolve is sent after a successful run. A run longer than the 7-day average is paged by SqlAgentJobRunningTooLong. SMS is limited to update_site, MasterData_V02_*, and ERPTransfer_MasterData_*."
